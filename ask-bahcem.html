@@ -2809,20 +2809,24 @@ document.addEventListener('visibilitychange',()=>{
 ═══════════════════════════════════════ */
 let lastSigTs=0;
 let callPeerId=null;
+const seenSigDocs=new Set();
 let pendingIce=[];
 let currentCallSessionId=null;
 function listenCallSignal(){
   if(!fb||!activeRoom)return;
   const {db,doc,onSnapshot}=fb;
-  unsubCallSig=onSnapshot(doc(db,'callsig',activeRoom),async snap=>{
+  // Her kullanıcı kendi inbox dokümanını dinler: callsig/{room}_to_{myId}
+  const inboxDoc=doc(db,'callsig',`${activeRoom}_to_${myId}`);
+  unsubCallSig=onSnapshot(inboxDoc,async snap=>{
     if(!snap.exists())return;
     const d=snap.data();
-    // Aynı sinyal dokümanı tekrar tetiklenirse (metadata/cache) veya eski/bayat bir
-    // sinyal ise yok say — donma ve çift-işlemin bir nedeni buydu.
-    if(!d.ts||d.ts===lastSigTs)return;
+    if(!d.ts)return;
     if(Date.now()-d.ts>25000)return;
-    lastSigTs=d.ts;
-    if(d.type==='offer'&&d.to===myId){
+    // Aynı ts tekrar işlenmesin
+    const sigKey=d.type+'_'+d.ts;
+    if(seenSigDocs.has(sigKey))return;
+    seenSigDocs.add(sigKey);
+    if(d.type==='offer'){
       if(peerConn){endCallCleanup()}
       pendingIce=[];
       currentCallSessionId=d.sessionId||null;
@@ -2836,24 +2840,24 @@ function listenCallSignal(){
       clearTimeout(missedCallTmr);
       missedCallTmr=setTimeout(missCall,30000);
     }
-    if(d.type==='answer'&&d.to===myId&&peerConn){
+    if(d.type==='answer'&&peerConn){
       await peerConn.setRemoteDescription(new RTCSessionDescription(d.answer));
-      setCallConnectedUI();
       flushPendingIce();
+      setCallConnectedUI();
     }
-    if(d.type==='end'&&d.to===myId){
+    if(d.type==='end'){
       if(peerConn)showToast('Görüşme sona erdi','info');
       endCallCleanup();
     }
-    if(d.type==='cancel'&&d.to===myId){
+    if(d.type==='cancel'){
       showToast('Arama iptal edildi','warn');
       endCallCleanup();
     }
-    if(d.type==='reject'&&d.to===myId){
+    if(d.type==='reject'){
       showToast('Aramayı reddetti','warn');
       endCallCleanup();
     }
-    if(d.type==='missed'&&d.to===myId){
+    if(d.type==='missed'){
       showToast('Cevapsız arama','warn');
       endCallCleanup();
     }
@@ -2874,18 +2878,18 @@ function listenCallIce(){
   if(!fb||!activeRoom)return;
   if(unsubCallIce)unsubCallIce();
   const {db,collection,query,orderBy,onSnapshot}=fb;
-  const q=query(collection(db,`callsig/${activeRoom}/ice`),orderBy('ts','asc'));
+  // Kendi inbox ICE koleksiyonu: callsig/{room}_to_{myId}/ice
+  const icePath=`callsig/${activeRoom}_to_${myId}/ice`;
+  const q=query(collection(db,icePath),orderBy('ts','asc'));
   unsubCallIce=onSnapshot(q,snap=>{
     snap.docChanges().forEach(async ch=>{
       if(ch.type!=='added')return;
       const d=ch.doc.data();
-      if(d.to!==myId)return;
       if(currentCallSessionId&&d.sessionId&&d.sessionId!==currentCallSessionId)return;
       if(!peerConn)return;
       if(peerConn.remoteDescription&&peerConn.remoteDescription.type){
         try{await peerConn.addIceCandidate(new RTCIceCandidate(d.candidate))}catch(e){}
       }else{
-        // Uzak tanım henüz kurulmadıysa ICE adayını kuyruğa al, kaybetme.
         pendingIce.push(d.candidate);
       }
     });
@@ -3224,6 +3228,7 @@ function endCallCleanup(){
   callConnected=false;
   callPeerId=null;
   pendingIce=[];
+  seenSigDocs.clear();
   clearTimeout(missedCallTmr);
   stopRingtone();
   document.getElementById('callOverlay').classList.remove('open');
@@ -3247,15 +3252,17 @@ function endCallCleanup(){
 }
 async function sigSend(payload){
   if(!fb||!activeRoom)return;
+  const sid=currentCallSessionId||'global';
+  const {db,collection,addDoc,doc,setDoc}=fb;
   if(payload.type==='ice'){
-    // ICE adayları addDoc ile eklenir — hiçbiri bir öncekinin üstüne yazılıp
-    // kaybolmaz (bkz. listenCallIce üstündeki not).
-    const {db,collection,addDoc}=fb;
-    try{await addDoc(collection(db,`callsig/${activeRoom}/ice`),{...payload,ts:Date.now()})}catch(e){}
+    // ICE adayları: callsig/{room}_to_{hedef}/ice alt koleksiyonu
+    try{await addDoc(collection(db,`callsig/${activeRoom}_to_${payload.to}/ice`),{...payload,sessionId:sid,ts:Date.now()})}catch(e){}
     return;
   }
-  const {db,doc,setDoc}=fb;
-  await setDoc(doc(db,'callsig',activeRoom),{...payload,ts:Date.now()});
+  // Diğer sinyaller: callsig/{room}_to_{hedef} dokümanı — tip bazlı slot
+  // offer/answer/end birbirini ezmez çünkü farklı to hedefleri var
+  const docKey=`${activeRoom}_to_${payload.to}`;
+  await setDoc(doc(db,'callsig',docKey),{...payload,sessionId:sid,ts:Date.now()});
 }
 function toggleMic(){
   micOn=!micOn;
