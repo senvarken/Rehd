@@ -934,7 +934,7 @@ let activePartner=null;
 let unsubMsg=null;
 let unsubPresence=null;
 let typingTmr=null;
-let peerConn=null, localStream=null;
+let peerConn=null, localStream=null, iAmCaller=null;
 let callSec=0, callTmr=null;
 let micOn=true, camOn=true;
 let currentCallData=null;
@@ -3105,6 +3105,7 @@ async function startCall(){
   applySavedSelfVidPos();
   currentCallSessionId='s_'+Date.now()+'_'+Math.random().toString(36).slice(2);
   callPeerId=activePartner.id;
+  iAmCaller=true;
   peerConn=createPC();
   const offer=await peerConn.createOffer();
   await peerConn.setLocalDescription(offer);
@@ -3129,6 +3130,7 @@ async function acceptCall(){
   applySavedSelfVidPos();
   currentCallSessionId=currentCallData.sessionId||('s_'+Date.now());
   callPeerId=currentCallData.from;
+  iAmCaller=false;
   peerConn=createPC();
   await peerConn.setRemoteDescription(new RTCSessionDescription(currentCallData.offer));
   flushPendingIce();
@@ -3153,6 +3155,56 @@ async function flushPendingIce(){
   const q=pendingIce;pendingIce=[];
   for(const c of q){try{await peerConn.addIceCandidate(new RTCIceCandidate(c))}catch(e){}}
 }
+/* Bağlantı "connected" olsa bile (ses aksın) video hiç kare çözülmeden
+   siyah/donmuş kalabiliyor — özellikle farklı telefon markaları arasında
+   kod çözücü/ağ kaynaklı. Bunu sessizce siyah bırakmak yerine birkaç
+   saniye sonra tespit edip hem kullanıcıyı bilgilendiriyoruz hem de
+   ICE'i yeniden başlatarak (yeni bir keyframe/negotiation tetikler)
+   kendiliğinden düzelme ihtimalini deniyoruz. */
+let videoHealthTmr=null;
+function startVideoHealthCheck(pc){
+  clearTimeout(videoHealthTmr);
+  let triedRestart=false;
+  const check=async()=>{
+    if(!peerConn||peerConn!==pc)return;
+    try{
+      const stats=await pc.getStats();
+      let inbound=null,outbound=null,candPair=null;
+      stats.forEach(r=>{
+        if(r.type==='inbound-rtp'&&r.kind==='video')inbound=r;
+        if(r.type==='outbound-rtp'&&r.kind==='video')outbound=r;
+        if(r.type==='candidate-pair'&&r.state==='succeeded')candPair=r;
+      });
+      const vid=document.getElementById('remoteVid');
+      const track=vid.srcObject?.getVideoTracks()[0];
+      // Konsola otomatik yazdır — kullanıcı hiçbir şey yazmadan sadece
+      // Console sekmesini ekran görüntüsü alarak bu bilgiyi paylaşabilsin.
+      console.log('[VIDEO-TANI]',JSON.stringify({
+        role:iAmCaller?'ARAYAN(caller)':'ARANAN(callee)',
+        trackExists:!!track,trackMuted:track?.muted,trackReadyState:track?.readyState,trackEnabled:track?.enabled,
+        videoWidth:vid.videoWidth,videoHeight:vid.videoHeight,
+        framesDecoded:inbound?.framesDecoded,framesReceived:inbound?.framesReceived,
+        packetsReceived:inbound?.packetsReceived,bytesReceived:inbound?.bytesReceived,
+        packetsLost:inbound?.packetsLost,
+        outFramesSent:outbound?.framesSent,outBytesSent:outbound?.bytesSent,
+        localCandType:candPair?.localCandidateId,remoteCandType:candPair?.remoteCandidateId,
+        currentRTT:candPair?.currentRoundTripTime
+      }));
+      const hasFrames=(inbound&&inbound.framesDecoded>0)||(vid&&vid.videoWidth>0);
+      if(!hasFrames){
+        if(!triedRestart){
+          triedRestart=true;
+          showToast('Görüntü gelmiyor, yeniden bağlanılıyor…','warn');
+          try{pc.restartIce&&pc.restartIce()}catch(e){}
+          videoHealthTmr=setTimeout(check,6000);
+        }else{
+          showToast(`Görüntü yok — frames:${inbound?.framesDecoded??0} bytes:${inbound?.bytesReceived??0} lost:${inbound?.packetsLost??0}`,'warn',6000);
+        }
+      }
+    }catch(e){console.error('[VIDEO-TANI] stats error',e)}
+  };
+  videoHealthTmr=setTimeout(check,6000);
+}
 function createPC(){
   // bundlePolicy/rtcpMuxPolicy tek bir bağlantı üzerinden ses+görüntü akışını
   // birleştirir (daha az negotiation, daha hızlı/az donan bağlantı kurulumu).
@@ -3163,6 +3215,25 @@ function createPC(){
     const sender=pc.addTrack(t,localStream);
     if(t.kind==='video')capVideoBitrate(sender);
   });
+  // DÜZELTME: Farklı Android telefon markalarının donanım H264 kod çözücüleri
+  // birbiriyle uyumsuz olabiliyor — biri video gönderiyor, ses (Opus evrensel
+  // olduğu için) sorunsuz akıyor, ama karşı taraf o H264 profilini çözemediği
+  // için ekranda hep siyah/boş kalıyor (audio çalışır, video donmuş/siyah
+  // görünür — tam bu bildirilen belirti). Her cihazda yazılımsal olarak
+  // çalışan VP8'i codec önceliğinde en üste alarak bu donanım uyumsuzluğunu
+  // baştan devre dışı bırakıyoruz. Bu, SDP üretilmeden (createOffer/
+  // createAnswer'dan ÖNCE) yapılmalı.
+  try{
+    const videoTransceiver=pc.getTransceivers().find(tr=>tr.sender&&tr.sender.track&&tr.sender.track.kind==='video');
+    if(videoTransceiver&&videoTransceiver.setCodecPreferences&&window.RTCRtpSender&&RTCRtpSender.getCapabilities){
+      const caps=RTCRtpSender.getCapabilities('video');
+      if(caps&&caps.codecs&&caps.codecs.length){
+        const vp8=caps.codecs.filter(c=>/VP8/i.test(c.mimeType));
+        const rest=caps.codecs.filter(c=>!/VP8/i.test(c.mimeType));
+        if(vp8.length)videoTransceiver.setCodecPreferences([...vp8,...rest]);
+      }
+    }
+  }catch(e){console.error('codec preference error',e)}
   pc.ontrack=e=>{
     const vid=document.getElementById('remoteVid');
     if(e.streams&&e.streams[0]){
@@ -3186,6 +3257,7 @@ function createPC(){
     if(st==='connected'||st==='completed'){
       clearTimeout(pc._dcTmr);
       setCallConnectedUI();
+      startVideoHealthCheck(pc);
     }
     if(st==='failed'){
       try{pc.restartIce&&pc.restartIce()}catch(e){}
@@ -3250,9 +3322,11 @@ async function logCallMsg(text,callKind){
 function endCallCleanup(){
   callConnected=false;
   callPeerId=null;
+  iAmCaller=null;
   pendingIce=[];
   seenSigDocs.clear();
   clearTimeout(missedCallTmr);
+  clearTimeout(videoHealthTmr);
   stopRingtone();
   document.getElementById('callOverlay').classList.remove('open');
   document.getElementById('callOverlay').classList.remove('minimized');
