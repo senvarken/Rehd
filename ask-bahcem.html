@@ -2703,19 +2703,35 @@ function playNotifSound(){
   }catch(e){}
 }
 
-/* Telefona bildirim gönder (tarayıcı sekmesi arka planda/kapalıysa OS bildirimi olarak düşer) */
+/* Telefona bildirim gönder (tarayıcı sekmesi arka planda/kapalıysa OS bildirimi olarak düşer)
+   DÜZELTME: Android Chrome/WebView'de `new Notification(...)` artık
+   desteklenmiyor ve "Illegal constructor. Use ServiceWorkerRegistration.
+   showNotification() instead." hatası fırlatıyor (konsolda görülen hata
+   buydu). Service worker kayıtlıysa onun üzerinden showNotification()
+   çağrılır; kayıtlı değilse (örn. masaüstü) eski yönteme geri düşülür. */
 function showSystemNotification(title,body,tag){
   if(!('Notification' in window)||Notification.permission!=='granted')return;
-  try{
-    const n=new Notification(title,{
-      body,
-      tag:tag||'askbahcem',
-      renotify:true,
-      icon:'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23c0395a"%3E%3Cpath d="M12 21s-7-4.6-9.6-9C.6 8.6 2 5 5.5 5c2 0 3.5 1.2 4.5 2.6C11 6.2 12.5 5 14.5 5 18 5 19.4 8.6 21.6 12c-2.6 4.4-9.6 9-9.6 9z"/%3E%3C/svg%3E'
-    });
-    n.onclick=()=>{window.focus();n.close()};
-    setTimeout(()=>n.close(),6000);
-  }catch(e){console.error('Notification error',e)}
+  const icon='data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23c0395a"%3E%3Cpath d="M12 21s-7-4.6-9.6-9C.6 8.6 2 5 5.5 5c2 0 3.5 1.2 4.5 2.6C11 6.2 12.5 5 14.5 5 18 5 19.4 8.6 21.6 12c-2.6 4.4-9.6 9-9.6 9z"/%3E%3C/svg%3E';
+  const opts={body,tag:tag||'askbahcem',renotify:true,icon};
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.getRegistration().then(reg=>{
+      if(reg&&reg.showNotification){
+        reg.showNotification(title,opts).catch(()=>{});
+      }else{
+        try{
+          const n=new Notification(title,opts);
+          n.onclick=()=>{window.focus();n.close()};
+          setTimeout(()=>n.close(),6000);
+        }catch(e){console.error('Notification error',e)}
+      }
+    }).catch(()=>{});
+  }else{
+    try{
+      const n=new Notification(title,opts);
+      n.onclick=()=>{window.focus();n.close()};
+      setTimeout(()=>n.close(),6000);
+    }catch(e){console.error('Notification error',e)}
+  }
 }
 
 function notifyIncomingMessage(msg){
@@ -2886,8 +2902,15 @@ function listenCallIce(){
       if(ch.type!=='added')return;
       const d=ch.doc.data();
       if(currentCallSessionId&&d.sessionId&&d.sessionId!==currentCallSessionId)return;
-      if(!peerConn)return;
-      if(peerConn.remoteDescription&&peerConn.remoteDescription.type){
+      // DÜZELTME: eskiden peerConn henüz oluşmadıysa (karşı taraf daha
+      // "Kabul Et"e basmadan/çalarken) gelen ICE adayları burada tamamen
+      // ATILIYORDU. Çalma süresi boyunca üretilen adayların çoğu bu yüzden
+      // kayboluyor, bağlantı eksik kalıyor ya da hiç kurulamıyordu — asıl
+      // "karşılıklı görüntülü konuşma olmuyor" sebebi buydu. Artık peerConn
+      // henüz yoksa da aday pendingIce kuyruğuna alınır; acceptCall()
+      // peerConn'u kurup remoteDescription'ı ayarladıktan hemen sonra
+      // flushPendingIce() ile bunlar işlenir.
+      if(peerConn&&peerConn.remoteDescription&&peerConn.remoteDescription.type){
         try{await peerConn.addIceCandidate(new RTCIceCandidate(d.candidate))}catch(e){}
       }else{
         pendingIce.push(d.candidate);
