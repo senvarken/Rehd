@@ -3116,7 +3116,11 @@ async function startCall(){
   document.getElementById('callPhName').textContent=nm;
   document.getElementById('callPhStatusText').textContent='Aranıyor';
   document.getElementById('remotePlaceholder').classList.remove('hide');
-  document.getElementById('callOverlay').classList.add('open');
+  const ovStart=document.getElementById('callOverlay');
+  ovStart.classList.remove('minimized','dragging');
+  ovStart.style.left='';ovStart.style.top='';ovStart.style.right='';ovStart.style.bottom='';ovStart.style.transition='';
+  pipJustDragged=false;
+  ovStart.classList.add('open');
   document.getElementById('callInfo').textContent=nm;
   startCallTimer();
 }
@@ -3143,7 +3147,17 @@ async function acceptCall(){
   document.getElementById('callPhName').textContent=nm;
   document.getElementById('callPhStatusText').textContent='Bağlandı';
   document.getElementById('remotePlaceholder').classList.remove('hide');
-  document.getElementById('callOverlay').classList.add('open');
+  // DÜZELTME: önceki bir görüşme "arka plana al" (minimized) durumunda kalıp
+  // düzgün kapanmamışsa, o küçük kutu hâli ve sürükleme sırasında eklenen
+  // inline left/top/right/bottom stilleri bir sonraki görüşmeye taşınıyor —
+  // bu da "kabul edince tam ekran değil küçük bozuk bir kutu açılıyor,
+  // dokununca hiçbir şey olmuyor" belirtisine sebep oluyordu. Her kabul/arama
+  // başlangıcında bunları zorla temizliyoruz.
+  const ovAccept=document.getElementById('callOverlay');
+  ovAccept.classList.remove('minimized','dragging');
+  ovAccept.style.left='';ovAccept.style.top='';ovAccept.style.right='';ovAccept.style.bottom='';ovAccept.style.transition='';
+  pipJustDragged=false;
+  ovAccept.classList.add('open');
   document.getElementById('callInfo').textContent=nm;
   callConnected=true;
   clearTimeout(missedCallTmr);
@@ -3311,6 +3325,13 @@ function endCallCleanup(){
   stopRingtone();
   document.getElementById('callOverlay').classList.remove('open');
   document.getElementById('callOverlay').classList.remove('minimized');
+  document.getElementById('callOverlay').classList.remove('dragging');
+  document.getElementById('callOverlay').style.left='';
+  document.getElementById('callOverlay').style.top='';
+  document.getElementById('callOverlay').style.right='';
+  document.getElementById('callOverlay').style.bottom='';
+  document.getElementById('callOverlay').style.transition='';
+  pipJustDragged=false;
   document.getElementById('incomingCall').classList.remove('open');
   document.getElementById('remotePlaceholder').classList.remove('hide');
   document.getElementById('callChatPanel').classList.remove('open');
