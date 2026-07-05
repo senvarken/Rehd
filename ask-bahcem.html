@@ -383,11 +383,9 @@ svg#loveArrow{width:26px!important;height:14px!important;display:block!important
 .live-loc-bubble .llb-head .llb-livedot{width:7px;height:7px;border-radius:50%;background:#ff4d67;animation:callPulse 1.2s ease infinite}
 .live-loc-bubble .llb-ended-label{font-size:.72rem;color:rgba(255,255,255,.5);margin-top:4px}
 
-.hd-passive-loc{font-size:.7rem;color:rgba(255,255,255,.55);cursor:default;margin-top:2px;line-height:1.4}
-.hd-passive-loc .hpl-text{white-space:normal}
+.hd-passive-loc{font-size:.7rem;color:rgba(255,255,255,.55);cursor:default;margin-top:1px;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;display:block}
 .hd-passive-loc b{color:rgba(255,255,255,.85);font-weight:600}
-.hd-passive-loc .hpl-links{display:inline;margin-left:6px;white-space:nowrap}
-.hd-passive-loc .hpl-links a{color:var(--rose,#e8577e);font-weight:700;cursor:pointer;text-decoration:underline;margin-right:8px}
+.hd-passive-loc a{color:var(--rose,#e8577e);font-weight:700;cursor:pointer;text-decoration:underline}
 .sm-btn:hover{background:rgba(192,57,90,.3)}
 #msgInput{flex:1;max-height:90px;min-height:38px;background:rgba(255,255,255,.06);border:1.5px solid rgba(242,196,206,.14);border-radius:19px;padding:9px 14px;color:#fff;font-size:.92rem;font-family:var(--font-body);font-weight:500;resize:none;outline:none;line-height:1.4;overflow-y:auto;transition:border-color .2s}
 #msgInput::placeholder{color:rgba(255,255,255,.28)}
@@ -2688,15 +2686,11 @@ function listenPartnerPassiveLocation(uid){
       addrText=passiveLocAddrCache.addr;
     }else{
       addrText='konum çözülüyor…';
-      bar.innerHTML=`📍 <span class="hpl-text">${ageTxt} · ${esc(addrText)}</span>`;
+      bar.innerHTML=`📍 ${ageTxt} · ${esc(addrText)}`;
       addrText=await reverseGeocode(d.lat,d.lng);
       passiveLocAddrCache={key:cacheKey,addr:addrText};
     }
-    bar.innerHTML=`📍 <span class="hpl-text">${ageTxt} · <b>${esc(addrText)}</b></span>
-      <span class="hpl-links">
-        <a onclick="event.stopPropagation();openInGoogleMaps(${d.lat},${d.lng})">Google Maps</a>
-        <a onclick="event.stopPropagation();openInYandexMaps(${d.lat},${d.lng})">Yandex</a>
-      </span>`;
+    bar.innerHTML=`📍 ${ageTxt} · <b>${esc(addrText)}</b> · <a onclick="event.stopPropagation();openInGoogleMaps(${d.lat},${d.lng})">Google Maps</a> · <a onclick="event.stopPropagation();openInYandexMaps(${d.lat},${d.lng})">Yandex</a>`;
   });
 }
 
