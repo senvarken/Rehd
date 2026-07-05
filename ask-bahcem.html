@@ -3401,6 +3401,7 @@ function createPC(){
     const st=pc.iceConnectionState;
     if(st==='connected'||st==='completed'){
       clearTimeout(pc._dcTmr);
+      clearInterval(pc._dcRetryInt);
       hideReconnectBanner();
       setCallConnectedUI();
       startVideoHealthCheck(pc);
@@ -3413,14 +3414,31 @@ function createPC(){
       showReconnectBanner();
       try{pc.restartIce&&pc.restartIce()}catch(e){}
       clearTimeout(pc._dcTmr);
+      clearInterval(pc._dcRetryInt);
+      // Tek seferlik restartIce her zaman ilk denemede tutmuyor (özellikle
+      // mobil veri↔wifi geçişinde yeni arayüz hemen hazır olmuyor). Bağlantı
+      // kopuk kaldığı sürece birkaç saniyede bir tekrar deniyoruz — böylece
+      // toparlanma şansı artıyor ve görüşme gereksiz yere kapanmıyor.
+      pc._dcRetryInt=setInterval(()=>{
+        if(!peerConn||peerConn!==pc)return clearInterval(pc._dcRetryInt);
+        if(pc.iceConnectionState==='disconnected'||pc.iceConnectionState==='failed'){
+          try{pc.restartIce&&pc.restartIce()}catch(e){}
+          if(!iAmCaller&&callPeerId){
+            sigSend({type:'renegotiate-request',to:callPeerId,from:myId,sessionId:currentCallSessionId}).catch(()=>{});
+          }
+        }
+      },5000);
+      // Süre 18sn'den 30sn'ye çıkarıldı — periyodik yeniden deneme ile
+      // birlikte ağ geçişinin toparlanması için daha fazla şans veriyor.
       pc._dcTmr=setTimeout(()=>{
+        clearInterval(pc._dcRetryInt);
         if(pc.iceConnectionState==='disconnected'||pc.iceConnectionState==='failed'){
           showToast('Bağlantı koptu','warn');
           endCallCleanup();
         }
-      },18000);
+      },30000);
     }
-    if(st==='closed'){clearTimeout(pc._dcTmr)}
+    if(st==='closed'){clearTimeout(pc._dcTmr);clearInterval(pc._dcRetryInt)}
   };
   // Bazı Android WebView'lerde iceConnectionState güncellenmesi gecikebiliyor;
   // connectionState'i de aynı mantıkla takip etmek "donmuş gibi görünen" ama
@@ -3483,6 +3501,13 @@ window.addEventListener('offline',()=>{if(peerConn&&callPeerId)showReconnectBann
 if(navigator.connection&&navigator.connection.addEventListener){
   navigator.connection.addEventListener('change',handleNetworkChange);
 }
+// Mobil veri↔wifi geçişleri çoğu zaman ekran kilitlenip açıldığında ya da
+// uygulama arka plana alınıp öne geldiğinde yaşanır; sekme/ekran tekrar
+// görünür olduğunda da bağlantıyı canlandırmayı deniyoruz.
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible')handleNetworkChange();
+});
+window.addEventListener('pageshow',handleNetworkChange);
 
 async function rejectCall(){
   clearTimeout(missedCallTmr);
