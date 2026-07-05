@@ -3215,25 +3215,6 @@ function createPC(){
     const sender=pc.addTrack(t,localStream);
     if(t.kind==='video')capVideoBitrate(sender);
   });
-  // DÜZELTME: Farklı Android telefon markalarının donanım H264 kod çözücüleri
-  // birbiriyle uyumsuz olabiliyor — biri video gönderiyor, ses (Opus evrensel
-  // olduğu için) sorunsuz akıyor, ama karşı taraf o H264 profilini çözemediği
-  // için ekranda hep siyah/boş kalıyor (audio çalışır, video donmuş/siyah
-  // görünür — tam bu bildirilen belirti). Her cihazda yazılımsal olarak
-  // çalışan VP8'i codec önceliğinde en üste alarak bu donanım uyumsuzluğunu
-  // baştan devre dışı bırakıyoruz. Bu, SDP üretilmeden (createOffer/
-  // createAnswer'dan ÖNCE) yapılmalı.
-  try{
-    const videoTransceiver=pc.getTransceivers().find(tr=>tr.sender&&tr.sender.track&&tr.sender.track.kind==='video');
-    if(videoTransceiver&&videoTransceiver.setCodecPreferences&&window.RTCRtpSender&&RTCRtpSender.getCapabilities){
-      const caps=RTCRtpSender.getCapabilities('video');
-      if(caps&&caps.codecs&&caps.codecs.length){
-        const vp8=caps.codecs.filter(c=>/VP8/i.test(c.mimeType));
-        const rest=caps.codecs.filter(c=>!/VP8/i.test(c.mimeType));
-        if(vp8.length)videoTransceiver.setCodecPreferences([...vp8,...rest]);
-      }
-    }
-  }catch(e){console.error('codec preference error',e)}
   pc.ontrack=e=>{
     const vid=document.getElementById('remoteVid');
     if(e.streams&&e.streams[0]){
