@@ -813,7 +813,7 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
     <button class="call-min-end" onclick="endCall()">✕</button>
   </div>
   <div class="call-remote-stage">
-    <video id="remoteVid" autoplay playsinline onclick="swapVideos()"></video>
+    <video id="remoteVid" autoplay playsinline></video>
     <div class="call-remote-placeholder" id="remotePlaceholder">
       <div class="call-ph-avatar" id="callPhAvatar">A</div>
       <div class="call-ph-name" id="callPhName">Sevgilim</div>
@@ -851,6 +851,7 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
     <button class="cc-btn" id="chatToggleBtn" onclick="toggleCallChat()"><svg class="icon"><use href="#i-chat"/></svg></button>
     <button class="cc-btn" id="micBtn" onclick="toggleMic()"><svg class="icon"><use href="#i-mic"/></svg></button>
     <button class="cc-btn" id="camBtn" onclick="toggleCam()"><svg class="icon"><use href="#i-video"/></svg></button>
+    <button class="cc-btn" id="flipCamBtn" onclick="switchCamera()" title="Ön/Arka kamera"><svg class="icon"><use href="#i-flip-cam"/></svg></button>
     <button class="cc-btn end" onclick="endCall()"><svg class="icon-lg" style="color:#fff"><use href="#i-phone-end"/></svg></button>
   </div>
 </div>
@@ -3700,6 +3701,47 @@ function toggleCam(){
   btn.innerHTML=camOn?'<svg class="icon"><use href="#i-video"/></svg>':'<svg class="icon"><use href="#i-video-off"/></svg>';
   btn.classList.toggle('off',!camOn);
   document.getElementById('localVid').classList.toggle('cam-off',!camOn);
+}
+
+/* ── Ön/Arka kamera değiştir ──
+   Mevcut video track'i durdurup facingMode'u ters çevirerek yeni bir kamera
+   akışı alınır, sonra hem RTCPeerConnection'daki gönderici (sender) hem de
+   yerel MediaStream üzerindeki track değiştirilir — görüşme kesilmeden
+   kamera anlık olarak değişir. */
+let currentFacingMode='user';
+let camSwitching=false;
+async function switchCamera(){
+  if(!localStream||camSwitching)return;
+  const oldTrack=localStream.getVideoTracks()[0];
+  if(!oldTrack)return;
+  camSwitching=true;
+  const nextFacing=currentFacingMode==='user'?'environment':'user';
+  try{
+    const newStream=await navigator.mediaDevices.getUserMedia({
+      video:{...CALL_MEDIA_CONSTRAINTS.video,facingMode:{exact:nextFacing}},
+      audio:false
+    });
+    const newTrack=newStream.getVideoTracks()[0];
+    if(!newTrack){camSwitching=false;return}
+    currentFacingMode=nextFacing;
+    newTrack.enabled=camOn;
+    if(peerConn){
+      const sender=peerConn.getSenders().find(s=>s.track&&s.track.kind==='video');
+      if(sender){await sender.replaceTrack(newTrack);capVideoBitrate(sender)}
+    }
+    localStream.removeTrack(oldTrack);
+    localStream.addTrack(newTrack);
+    oldTrack.stop();
+    // Video elementi hangi stream'i gösteriyorsa (swap yapılmış olsa bile)
+    // onu tazeleyip yeni track'in görünmesini sağla.
+    [document.getElementById('localVid'),document.getElementById('remoteVid')].forEach(el=>{
+      if(el&&el.srcObject===localStream){el.srcObject=null;el.srcObject=localStream;el.play&&el.play().catch(()=>{})}
+    });
+  }catch(e){
+    showToast('Kamera değiştirilemedi','error');
+  }finally{
+    camSwitching=false;
+  }
 }
 function startCallTimer(){callSec=0;callTmr=setInterval(()=>{callSec++;const m=String(Math.floor(callSec/60)).padStart(2,'0');const s=String(callSec%60).padStart(2,'0');document.getElementById('callTimerEl').textContent=m+':'+s},1000)}
 function stopCallTimer(){clearInterval(callTmr);callTmr=null;callSec=0}
