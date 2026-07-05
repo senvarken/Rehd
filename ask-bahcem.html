@@ -1599,10 +1599,10 @@ function buildHdMoreMenu(role){
   menu.innerHTML=`<button onclick="toggleHdMore();confirmClearAll()"><svg class="icon icon-sm"><use href="#i-trash"/></svg><span>Sohbeti Temizle</span></button>
     <button id="soundToggleBtn" onclick="toggleHdMore();toggleSound()"><svg class="icon icon-sm"><use href="#i-bell"/></svg><span>Bildirim Sesi</span></button>
     <button id="pushToggleBtn" onclick="toggleHdMore();togglePush()"><svg class="icon icon-sm"><use href="#i-bell"/></svg><span>Kapalıyken Bildirim</span></button>
-    <button id="passiveLocToggleBtn" onclick="toggleHdMore();togglePassiveLocationSharing()"><span style="font-size:1.05em;width:18px;text-align:center;flex-shrink:0">📍</span><span id="passiveLocToggleLabel">Konum Paylaşımı: Kapalı</span></button>
     <button onclick="toggleHdMore();manualInstall()"><svg class="icon icon-sm"><use href="#i-download"/></svg><span>Uygulama Olarak Ekle</span></button>`;
   if(role==='admin'){
-    menu.innerHTML+=`<button onclick="toggleHdMore();openAdminSettings()"><svg class="icon icon-sm"><use href="#i-gear"/></svg><span>Ayarlar</span></button>`;
+    menu.innerHTML+=`<button id="passiveLocToggleBtn" onclick="toggleHdMore();togglePassiveLocationSharing()"><span style="font-size:1.05em;width:18px;text-align:center;flex-shrink:0">📍</span><span id="passiveLocToggleLabel">Konum Paylaşımı: Kapalı</span></button>
+    <button onclick="toggleHdMore();openAdminSettings()"><svg class="icon icon-sm"><use href="#i-gear"/></svg><span>Ayarlar</span></button>`;
   }
   refreshPassiveLocToggleLabel();
 }
