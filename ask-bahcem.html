@@ -3183,39 +3183,23 @@ function startVideoHealthCheck(pc){
     if(!peerConn||peerConn!==pc)return;
     try{
       const stats=await pc.getStats();
-      let inbound=null,outbound=null,candPair=null;
+      let inbound=null,outbound=null;
       stats.forEach(r=>{
         if(r.type==='inbound-rtp'&&r.kind==='video')inbound=r;
         if(r.type==='outbound-rtp'&&r.kind==='video')outbound=r;
-        if(r.type==='candidate-pair'&&r.state==='succeeded')candPair=r;
       });
       const vid=document.getElementById('remoteVid');
-      const track=vid.srcObject?.getVideoTracks()[0];
       const ph=document.getElementById('remotePlaceholder');
-      const lv=document.getElementById('localVid');
-      const ov=document.getElementById('callOverlay');
-      const phCs=getComputedStyle(ph),lvCs=getComputedStyle(lv),vidCs=getComputedStyle(vid);
-      const phR=ph.getBoundingClientRect(),lvR=lv.getBoundingClientRect(),vidR=vid.getBoundingClientRect();
-      // Konsola otomatik yazdır — kullanıcı hiçbir şey yazmadan sadece
-      // Console sekmesini ekran görüntüsü alarak bu bilgiyi paylaşabilsin.
-      console.log('[VIDEO-TANI]',JSON.stringify({
-        role:iAmCaller?'ARAYAN(caller)':'ARANAN(callee)',
-        trackExists:!!track,trackMuted:track?.muted,trackReadyState:track?.readyState,trackEnabled:track?.enabled,
-        videoWidth:vid.videoWidth,videoHeight:vid.videoHeight,
-        framesDecoded:inbound?.framesDecoded,framesReceived:inbound?.framesReceived,
-        packetsReceived:inbound?.packetsReceived,bytesReceived:inbound?.bytesReceived,
-        packetsLost:inbound?.packetsLost,
-        outFramesSent:outbound?.framesSent,outBytesSent:outbound?.bytesSent,
-        overlayClasses:ov.className,
-        vidRect:{w:Math.round(vidR.width),h:Math.round(vidR.height),top:Math.round(vidR.top),left:Math.round(vidR.left)},
-        vidCss:{display:vidCs.display,opacity:vidCs.opacity,zIndex:vidCs.zIndex,visibility:vidCs.visibility},
-        placeholderClasses:ph.className,
-        placeholderCss:{display:phCs.display,opacity:phCs.opacity,zIndex:phCs.zIndex},
-        placeholderRect:{w:Math.round(phR.width),h:Math.round(phR.height)},
-        localVidRect:{w:Math.round(lvR.width),h:Math.round(lvR.height),top:Math.round(lvR.top),left:Math.round(lvR.left)},
-        localVidCss:{display:lvCs.display,opacity:lvCs.opacity,zIndex:lvCs.zIndex}
-      }));
       const hasFrames=(inbound&&inbound.framesDecoded>0)||(vid&&vid.videoWidth>0);
+      // GÜVENLİK AĞI: video gerçekten akıyorsa (frame geliyorsa), sebebi ne
+      // olursa olsun placeholder'ı zorla gizle. Normalde bunu ontrack yapar,
+      // ama nadir bir durumda (ör. arka planda bir DOM/state güncellemesi
+      // 'hide' sınıfını geri alırsa) burada tekrar düzeltiyoruz — böylece
+      // video sağlıklı akarken ekranda koyu kaplama görünmesi imkansız hale
+      // geliyor.
+      if(hasFrames&&ph&&!ph.classList.contains('hide')){
+        ph.classList.add('hide');
+      }
       if(!hasFrames){
         if(!triedRestart){
           triedRestart=true;
@@ -3223,12 +3207,23 @@ function startVideoHealthCheck(pc){
           try{pc.restartIce&&pc.restartIce()}catch(e){}
           videoHealthTmr=setTimeout(check,6000);
         }else{
-          showToast(`Görüntü yok — frames:${inbound?.framesDecoded??0} bytes:${inbound?.bytesReceived??0} lost:${inbound?.packetsLost??0}`,'warn',6000);
+          showToast(`Görüntü yok — frames:${inbound?.framesDecoded??0} bytes:${inbound?.bytesReceived??0}`,'warn',6000);
+          videoHealthTmr=setTimeout(check,6000);
         }
+      }else{
+        // Sağlıklı akıyor — birkaç saniyede bir kontrol etmeye devam et, hem
+        // erken bir aksaklık olursa yakalamak hem de placeholder'ın tekrar
+        // takılı kalmadığından emin olmak için.
+        videoHealthTmr=setTimeout(check,4000);
       }
+      console.log('[VIDEO-TANI]',JSON.stringify({
+        role:iAmCaller?'ARAYAN(caller)':'ARANAN(callee)',
+        hasFrames,framesDecoded:inbound?.framesDecoded,bytesReceived:inbound?.bytesReceived,
+        placeholderHiddenNow:ph?.classList.contains('hide')
+      }));
     }catch(e){console.error('[VIDEO-TANI] stats error',e)}
   };
-  videoHealthTmr=setTimeout(check,6000);
+  videoHealthTmr=setTimeout(check,2000);
 }
 function createPC(){
   // bundlePolicy/rtcpMuxPolicy tek bir bağlantı üzerinden ses+görüntü akışını
@@ -3249,6 +3244,11 @@ function createPC(){
       vid.srcObject.addTrack(e.track);
     }
     document.getElementById('remotePlaceholder').classList.add('hide');
+    // Ekstra güvence: bir sonraki tick'te ve kısa bir gecikmeyle tekrar
+    // gizlemeyi dene — herhangi bir DOM/state güncellemesi 'hide' sınıfını
+    // bu ilk çağrıdan hemen sonra geri almış olsa bile son sözü bu söylesin.
+    setTimeout(()=>{document.getElementById('remotePlaceholder')?.classList.add('hide')},50);
+    setTimeout(()=>{document.getElementById('remotePlaceholder')?.classList.add('hide')},500);
   };
   pc.onicecandidate=async e=>{
     if(e.candidate)await sigSend({type:'ice',to:callPeerId,from:myId,candidate:e.candidate.toJSON(),sessionId:currentCallSessionId});
