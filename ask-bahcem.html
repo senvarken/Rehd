@@ -3093,15 +3093,14 @@ function swapVideos(){
   vidSwapped=!vidSwapped;
   const localVid=document.getElementById('localVid');
   const remoteVid=document.getElementById('remoteVid');
-  // srcObject'leri yer değiştir
   const tmp=localVid.srcObject;
   localVid.srcObject=remoteVid.srcObject;
   remoteVid.srcObject=tmp;
-  // Ses kontrolü: kendi stream'imiz (localStream) her zaman muted olmalı
-  // hangi video elementinde olursa olsun
+  // Ses: localStream olan element her zaman muted, diğeri unmuted+play
   localVid.muted=(localVid.srcObject===localStream);
   remoteVid.muted=(remoteVid.srcObject===localStream);
-  // İpucu göster
+  if(!remoteVid.muted){remoteVid.volume=1.0;remoteVid.play().catch(()=>{})}
+  if(!localVid.muted){localVid.volume=1.0;localVid.play().catch(()=>{})}
   const hint=document.getElementById('swapHint');
   if(hint){hint.style.opacity='1';clearTimeout(hint._t);hint._t=setTimeout(()=>{hint.style.opacity='0'},1200)}
 }
@@ -3274,10 +3273,11 @@ function createPC(){
       if(!vid.srcObject||!(vid.srcObject instanceof MediaStream)){vid.srcObject=new MediaStream()}
       vid.srcObject.addTrack(e.track);
     }
+    // Mobil autoplay policy: ses için muted=false + explicit play() şart
+    vid.muted=false;
+    vid.volume=1.0;
+    vid.play().catch(()=>{});
     document.getElementById('remotePlaceholder').classList.add('hide');
-    // Ekstra güvence: bir sonraki tick'te ve kısa bir gecikmeyle tekrar
-    // gizlemeyi dene — herhangi bir DOM/state güncellemesi 'hide' sınıfını
-    // bu ilk çağrıdan hemen sonra geri almış olsa bile son sözü bu söylesin.
     setTimeout(()=>{document.getElementById('remotePlaceholder')?.classList.add('hide')},50);
     setTimeout(()=>{document.getElementById('remotePlaceholder')?.classList.add('hide')},500);
   };
