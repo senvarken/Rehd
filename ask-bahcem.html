@@ -2638,10 +2638,16 @@ function updatePassiveLocationOnce(){
       lat:pos.coords.latitude,lng:pos.coords.longitude,ts:Date.now()
     }).catch(e=>console.error(e));
   },err=>{
-    console.error(err);
+    console.error('Passive location error:',err);
     // İzin kalıcı olarak reddedildiyse tekrar tekrar sormaya çalışmayalım.
-    if(err.code===1){passiveLocEnabled=false;localStorage.setItem(passiveLocStorageKey(),'0');stopPassiveLocationLoop();refreshPassiveLocToggleLabel()}
-  },{enableHighAccuracy:false,maximumAge:60000,timeout:20000});
+    if(err.code===1){
+      passiveLocEnabled=false;localStorage.setItem(passiveLocStorageKey(),'0');
+      stopPassiveLocationLoop();refreshPassiveLocToggleLabel();
+      showToast('Konum izni reddedildi, konum paylaşımı kapatıldı','error');
+    }else if(err.code===3){
+      showToast('Konum alınamadı (zaman aşımı) — GPS/konum servisi açık mı?','warn');
+    }
+  },{enableHighAccuracy:true,maximumAge:60000,timeout:30000});
 }
 
 /* Partnerin son bilinen (pasif) konumunu header altında gösterir. */
