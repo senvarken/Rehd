@@ -383,8 +383,10 @@ svg#loveArrow{width:26px!important;height:14px!important;display:block!important
 .live-loc-bubble .llb-head .llb-livedot{width:7px;height:7px;border-radius:50%;background:#ff4d67;animation:callPulse 1.2s ease infinite}
 .live-loc-bubble .llb-ended-label{font-size:.72rem;color:rgba(255,255,255,.5);margin-top:4px}
 
-.hd-passive-loc{font-size:.7rem;color:rgba(255,255,255,.55);display:flex;align-items:center;gap:4px;cursor:pointer;margin-top:1px}
-.hd-passive-loc:active{opacity:.7}
+.hd-passive-loc{font-size:.7rem;color:rgba(255,255,255,.55);display:flex;flex-direction:column;gap:2px;cursor:default;margin-top:2px;line-height:1.35}
+.hd-passive-loc b{color:rgba(255,255,255,.85);font-weight:600}
+.hd-passive-loc .hpl-links{display:flex;gap:10px;margin-top:1px}
+.hd-passive-loc .hpl-links a{color:var(--rose,#e8577e);font-weight:700;cursor:pointer;text-decoration:underline}
 .sm-btn:hover{background:rgba(192,57,90,.3)}
 #msgInput{flex:1;max-height:90px;min-height:38px;background:rgba(255,255,255,.06);border:1.5px solid rgba(242,196,206,.14);border-radius:19px;padding:9px 14px;color:#fff;font-size:.92rem;font-family:var(--font-body);font-weight:500;resize:none;outline:none;line-height:1.4;overflow-y:auto;transition:border-color .2s}
 #msgInput::placeholder{color:rgba(255,255,255,.28)}
@@ -2644,13 +2646,14 @@ function updatePassiveLocationOnce(){
 
 /* Partnerin son bilinen (pasif) konumunu header altında gösterir. */
 let unsubPassiveLoc=null;
+let passiveLocAddrCache={key:null,addr:null};
 function listenPartnerPassiveLocation(uid){
   if(unsubPassiveLoc){unsubPassiveLoc();unsubPassiveLoc=null}
   const {rtdb,dbRef,onValue}=fb;
-  unsubPassiveLoc=onValue(dbRef(rtdb,`passiveLocation/${uid}`),snap=>{
+  unsubPassiveLoc=onValue(dbRef(rtdb,`passiveLocation/${uid}`),async snap=>{
     const d=snap.val();
     const el=document.getElementById('hPassiveLoc');
-    if(!d||!d.ts){if(el)el.remove();return}
+    if(!d||!d.ts){if(el)el.remove();passiveLocAddrCache={key:null,addr:null};return}
     const ageMin=Math.floor((Date.now()-d.ts)/60000);
     const ageTxt=ageMin<1?'az önce':(ageMin<60?ageMin+' dk önce':Math.floor(ageMin/60)+' sa önce');
     let bar=el;
@@ -2661,8 +2664,24 @@ function listenPartnerPassiveLocation(uid){
       const statusRow=document.querySelector('.hd-status');
       if(statusRow&&statusRow.parentElement)statusRow.parentElement.appendChild(bar);
     }
-    bar.innerHTML=`📍 <span>${ageTxt} burada gördü</span>`;
-    bar.onclick=()=>openInGoogleMaps(d.lat,d.lng);
+    // Koordinat için adres yaklaşık 4 ondalık basamağa (~11m) yuvarlanarak
+    // cache anahtarı yapılır — aynı yerdeyken her 3dk'lık güncellemede
+    // Nominatim'e tekrar tekrar istek atılmasın.
+    const cacheKey=d.lat.toFixed(4)+','+d.lng.toFixed(4);
+    let addrText;
+    if(passiveLocAddrCache.key===cacheKey&&passiveLocAddrCache.addr){
+      addrText=passiveLocAddrCache.addr;
+    }else{
+      addrText='konum çözülüyor…';
+      bar.innerHTML=`📍 <span>${ageTxt} · ${esc(addrText)}</span>`;
+      addrText=await reverseGeocode(d.lat,d.lng);
+      passiveLocAddrCache={key:cacheKey,addr:addrText};
+    }
+    bar.innerHTML=`📍 <span>${ageTxt} · <b>${esc(addrText)}</b></span>
+      <span class="hpl-links">
+        <a onclick="event.stopPropagation();openInGoogleMaps(${d.lat},${d.lng})">Google Maps</a>
+        <a onclick="event.stopPropagation();openInYandexMaps(${d.lat},${d.lng})">Yandex</a>
+      </span>`;
   });
 }
 
