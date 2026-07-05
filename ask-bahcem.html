@@ -479,12 +479,17 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
 /* küçük ekrandaki "swap" dokunma ipucu rozeti */
 #swapHint{position:absolute;top:88px;right:8px;z-index:10;background:rgba(0,0,0,.52);color:#fff;font-size:.6rem;font-weight:700;padding:2px 6px;border-radius:8px;pointer-events:none;opacity:0;transition:opacity .3s;letter-spacing:.3px}
 
-.call-bottom-bar{position:absolute;bottom:0;left:0;right:0;padding:22px 20px;padding-bottom:max(28px,env(safe-area-inset-bottom));display:flex;align-items:center;justify-content:center;gap:18px;z-index:5;background:linear-gradient(to top,rgba(0,0,0,.6),transparent);opacity:1;transition:opacity .25s ease;pointer-events:auto}
-.cc-btn{width:56px;height:56px;border-radius:50%;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .15s,background .15s;background:rgba(255,255,255,.14);color:#fff;backdrop-filter:blur(10px)}
+.call-bottom-bar{position:absolute;bottom:0;left:0;right:0;padding:22px 14px;padding-bottom:max(28px,env(safe-area-inset-bottom));display:flex;align-items:center;justify-content:center;gap:10px;z-index:5;background:linear-gradient(to top,rgba(0,0,0,.6),transparent);opacity:1;transition:opacity .25s ease;pointer-events:auto;flex-wrap:nowrap}
+.cc-btn{width:50px;height:50px;border-radius:50%;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .15s,background .15s;background:rgba(255,255,255,.14);color:#fff;backdrop-filter:blur(10px);flex-shrink:0}
 .cc-btn:active{transform:scale(.9)}
-.cc-btn.end{background:#e53950;width:64px;height:64px}
+.cc-btn.end{background:#e53950;width:58px;height:58px}
 .cc-btn.muted{background:rgba(255,255,255,.28);color:#fff}
 .cc-btn.off{background:rgba(255,255,255,.28)}
+@media (max-width:360px){
+  .call-bottom-bar{gap:6px;padding-left:8px;padding-right:8px}
+  .cc-btn{width:44px;height:44px}
+  .cc-btn.end{width:52px;height:52px}
+}
 
 /* Görüşme sırasında butonlar — 5sn hareketsizlikte kendiliğinden gizlenir,
    ekrana dokununca tekrar açılır/kapanır. Sürüklenebilir küçük (minimized/pip)
@@ -813,7 +818,7 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
     <button class="call-min-end" onclick="endCall()">✕</button>
   </div>
   <div class="call-remote-stage">
-    <video id="remoteVid" autoplay playsinline></video>
+    <video id="remoteVid" autoplay playsinline ontouchend="handleStageTap(event)" onclick="handleStageTap(event)"></video>
     <div class="call-remote-placeholder" id="remotePlaceholder">
       <div class="call-ph-avatar" id="callPhAvatar">A</div>
       <div class="call-ph-name" id="callPhName">Sevgilim</div>
@@ -3254,6 +3259,19 @@ function selfVidPointerUp(){
   } else {
     // Sürükleme yoksa tıklama sayılır — video swap tetikle
     swapVideos();
+  }
+}
+let lastStageTapTs=0;
+function handleStageTap(e){
+  // Mobilde touchend + senkron click ikisi de tetiklenmesin diye touchend'de
+  // varsayılan davranış engellenir (click'in tekrar tetiklenmesini önler).
+  if(e&&e.type==='touchend'&&e.cancelable)e.preventDefault();
+  const now=Date.now();
+  if(now-lastStageTapTs<350){
+    lastStageTapTs=0;
+    switchCamera();
+  }else{
+    lastStageTapTs=now;
   }
 }
 let vidSwapped=false;
