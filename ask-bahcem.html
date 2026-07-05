@@ -10,6 +10,8 @@
 <link rel="icon" id="appFavicon" href="https://i.hizliresim.com/ogv19bg.png"/>
 <link rel="apple-touch-icon" id="appTouchIcon" href="https://i.hizliresim.com/ogv19bg.png"/>
 <title>Regl Sayaç — Döngü Takibi</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 // Bu cihaz daha önce ADMİN olarak giriş yaptıysa gerçek ikon/başlık hemen,
 // sayfa daha yüklenmeden önce uygulanır (favicon rozeti kodu bunu daha
@@ -361,6 +363,28 @@ svg#loveArrow{width:26px!important;height:14px!important;display:block!important
 /* ── INPUT BAR ── */
 #inputBar{flex-shrink:0;background:rgba(23,8,16,.9);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-top:1px solid rgba(242,196,206,.09);padding:10px 11px;padding-bottom:max(10px,env(safe-area-inset-bottom));display:none;align-items:flex-end;gap:7px;z-index:10;position:relative}
 .sm-btn{width:38px;height:38px;border-radius:50%;border:none;cursor:pointer;background:rgba(255,255,255,.06);color:var(--blush);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .18s}
+
+/* ── Canlı Konum ── */
+#liveLocMenu{display:none;position:absolute;bottom:64px;left:11px;background:rgba(30,10,18,.97);border:1px solid rgba(242,196,206,.15);border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.4);overflow:hidden;z-index:20;backdrop-filter:blur(14px)}
+#liveLocMenu.open{display:flex;flex-direction:column}
+#liveLocMenu button{display:flex;align-items:center;gap:10px;padding:12px 16px;background:none;border:none;color:#fff;font-size:.86rem;text-align:left;cursor:pointer;white-space:nowrap}
+#liveLocMenu button:active{background:rgba(255,255,255,.08)}
+.llm-ico{font-size:1.05rem}
+
+#liveLocBar{display:none;align-items:center;gap:8px;padding:8px 14px;background:linear-gradient(90deg,rgba(229,57,80,.16),rgba(229,57,80,.05));border-bottom:1px solid rgba(229,57,80,.22);font-size:.8rem;color:#ffd9df;flex-shrink:0}
+#liveLocBar.open{display:flex}
+#liveLocBar .llb-dot{width:8px;height:8px;border-radius:50%;background:#ff4d67;animation:callPulse 1.2s ease infinite;flex-shrink:0}
+#liveLocBar button{margin-left:auto;background:rgba(255,255,255,.12);border:none;color:#fff;font-size:.74rem;padding:5px 11px;border-radius:20px;cursor:pointer}
+
+.live-loc-bubble{width:min(260px,72vw)}
+.live-loc-bubble .llb-map{width:100%;height:150px;border-radius:14px;overflow:hidden;position:relative;background:#1a0d12}
+.live-loc-bubble .llb-map.ended{filter:grayscale(1) brightness(.6)}
+.live-loc-bubble .llb-head{display:flex;align-items:center;gap:6px;font-size:.78rem;font-weight:700;color:#ffd9df;margin-bottom:6px}
+.live-loc-bubble .llb-head .llb-livedot{width:7px;height:7px;border-radius:50%;background:#ff4d67;animation:callPulse 1.2s ease infinite}
+.live-loc-bubble .llb-ended-label{font-size:.72rem;color:rgba(255,255,255,.5);margin-top:4px}
+
+.hd-passive-loc{font-size:.7rem;color:rgba(255,255,255,.55);display:flex;align-items:center;gap:4px;cursor:pointer;margin-top:1px}
+.hd-passive-loc:active{opacity:.7}
 .sm-btn:hover{background:rgba(192,57,90,.3)}
 #msgInput{flex:1;max-height:90px;min-height:38px;background:rgba(255,255,255,.06);border:1.5px solid rgba(242,196,206,.14);border-radius:19px;padding:9px 14px;color:#fff;font-size:.92rem;font-family:var(--font-body);font-weight:500;resize:none;outline:none;line-height:1.4;overflow-y:auto;transition:border-color .2s}
 #msgInput::placeholder{color:rgba(255,255,255,.28)}
@@ -732,6 +756,11 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
 
 <!-- ═══ CHAT AREA ═══ -->
 <div id="chatWrap">
+  <div id="liveLocBar">
+    <span class="llb-dot"></span>
+    <span id="liveLocBarText">Canlı konum paylaşıyorsun</span>
+    <button onclick="stopLiveLocation()">Durdur</button>
+  </div>
   <div id="loveArrowFx" aria-hidden="true">
     <svg id="loveArrow" width="26" height="14" viewBox="0 0 40 16" preserveAspectRatio="xMidYMid meet"><path d="M2 8h27M21 2l8 6-8 6" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
     <div id="loveHeart"><span id="loveHeartName"></span></div>
@@ -758,7 +787,13 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
   <button class="sm-btn" onclick="toggleEmoji()"><svg class="icon"><use href="#i-emoji"/></svg></button>
   <button class="sm-btn" onclick="document.getElementById('fileIn').click()"><svg class="icon"><use href="#i-paperclip"/></svg></button>
   <input type="file" id="fileIn" accept="image/*,video/*" style="display:none" onchange="sendMedia(this)"/>
-  <button class="sm-btn" onclick="sendLocation()" title="Konum Gönder" style="font-size:19px;line-height:1">📍</button>
+  <button class="sm-btn" id="locBtn" onclick="sendLocation()"
+    onpointerdown="locBtnPointerDown()" onpointerup="locBtnPointerUp()" onpointerleave="locBtnPointerUp()"
+    title="Konum Gönder (basılı tut: Canlı Konum)" style="font-size:19px;line-height:1">📍</button>
+  <div id="liveLocMenu">
+    <button onclick="sendLocation();closeLiveLocMenu()"><span class="llm-ico">📍</span>Tek seferlik konum gönder</button>
+    <button onclick="startLiveLocation();closeLiveLocMenu()"><span class="llm-ico">🔴</span>Canlı konum paylaş</button>
+  </div>
   <textarea id="msgInput" placeholder="Bir şeyler yaz tatlım…" rows="1"
     oninput="autoResize(this);onTyping()"
     onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMsg()}"></textarea>
@@ -1547,6 +1582,7 @@ function enterAppAsAdmin(){
   listenAllIncomingMessagesForAdmin();
   listenAllIncomingCallsForAdmin();
   addInstallBtn();
+  initPassiveLocationOnLoad();
 }
 
 /* ── Üst bar kalabalık olmasın diye az kullanılan aksiyonlar (temizle,
@@ -1562,10 +1598,12 @@ function buildHdMoreMenu(role){
   menu.innerHTML=`<button onclick="toggleHdMore();confirmClearAll()"><svg class="icon icon-sm"><use href="#i-trash"/></svg><span>Sohbeti Temizle</span></button>
     <button id="soundToggleBtn" onclick="toggleHdMore();toggleSound()"><svg class="icon icon-sm"><use href="#i-bell"/></svg><span>Bildirim Sesi</span></button>
     <button id="pushToggleBtn" onclick="toggleHdMore();togglePush()"><svg class="icon icon-sm"><use href="#i-bell"/></svg><span>Kapalıyken Bildirim</span></button>
+    <button id="passiveLocToggleBtn" onclick="toggleHdMore();togglePassiveLocationSharing()"><span style="font-size:1.05em;width:18px;text-align:center;flex-shrink:0">📍</span><span id="passiveLocToggleLabel">Konum Paylaşımı: Kapalı</span></button>
     <button onclick="toggleHdMore();manualInstall()"><svg class="icon icon-sm"><use href="#i-download"/></svg><span>Uygulama Olarak Ekle</span></button>`;
   if(role==='admin'){
     menu.innerHTML+=`<button onclick="toggleHdMore();openAdminSettings()"><svg class="icon icon-sm"><use href="#i-gear"/></svg><span>Ayarlar</span></button>`;
   }
+  refreshPassiveLocToggleLabel();
 }
 
 /* ═══════════════════════════════════════
@@ -1805,6 +1843,8 @@ function enterAppAsGuest(){
   listenPartnerTyping();
   addInstallBtn();
   initLoveArrowFx();
+  initPassiveLocationOnLoad();
+  listenPartnerPassiveLocation(ADMIN_ID);
 }
 
 /* ═══════════════════════════════════════
@@ -2032,6 +2072,7 @@ function selectUser(uid,name,emoji){
     if(d&&d.online){document.getElementById('hDot').className='dot-on';document.getElementById('hStatus').textContent='Çevrimiçi'}
     else{document.getElementById('hDot').className='dot-off';document.getElementById('hStatus').textContent=formatLastSeen(d&&d.lastSeen)}
   });
+  listenPartnerPassiveLocation(uid);
 
   listenNudge();
   closeSidebar();
@@ -2249,6 +2290,8 @@ function appendBubble(msg,doScroll=true){
         if(el)el.textContent=addr;
       });
     }
+  } else if(msg.type==='liveLocation'){
+    renderLiveLocationBubble(b,msg,msg.id);
   } else if(msg.type==='call'){
     b.classList.add('call-log');
     const iconId=msg.callKind==='missed'?'i-phone-missed':'i-phone-end';
@@ -2417,6 +2460,267 @@ function sendLocation(){
 }
 function openInGoogleMaps(lat,lng){window.open(`https://www.google.com/maps/search/?api=1&query=${lat},${lng}`,'_blank')}
 function openInYandexMaps(lat,lng){window.open(`https://yandex.com/maps/?pt=${lng},${lat}&z=16&l=map`,'_blank')}
+
+/* ═══════════════════════════════════════
+   CANLI KONUM — uygulama açıkken çalışan, harita üzerinde
+   hareket eden gerçek zamanlı konum paylaşımı.
+   ÖNEMLİ SINIR: Tarayıcılar sekme/uygulama kapalıyken veya kilit
+   ekranındayken konum takibini durdurur (işletim sistemi kısıtlaması).
+   Bu yüzden bu özellik sadece uygulama ön planda AÇIKKEN çalışır;
+   sekme kapanınca veya arka plana alınınca otomatik durur.
+═══════════════════════════════════════ */
+let liveLocWatchId=null;
+let liveLocMsgId=null; // bu cihazın başlattığı canlı konum mesajının id'si
+const LIVE_LOC_MAX_MS=4*60*60*1000; // güvenlik: 4 saat sonra otomatik dursun
+
+let locBtnPressTmr=null,locBtnLongPressed=false;
+function locBtnPointerDown(){
+  locBtnLongPressed=false;
+  locBtnPressTmr=setTimeout(()=>{
+    locBtnLongPressed=true;
+    document.getElementById('liveLocMenu').classList.add('open');
+  },480);
+}
+function locBtnPointerUp(){
+  clearTimeout(locBtnPressTmr);
+}
+function closeLiveLocMenu(){document.getElementById('liveLocMenu').classList.remove('open')}
+document.addEventListener('click',e=>{
+  const menu=document.getElementById('liveLocMenu');
+  if(menu&&menu.classList.contains('open')&&!menu.contains(e.target)&&e.target.id!=='locBtn')closeLiveLocMenu();
+});
+// locBtn'in normal onclick'i (tek seferlik konum) uzun basmadan sonraki
+// click'te tekrar tetiklenmesin diye engelliyoruz.
+document.addEventListener('DOMContentLoaded',()=>{
+  const btn=document.getElementById('locBtn');
+  if(btn)btn.addEventListener('click',e=>{if(locBtnLongPressed){e.stopImmediatePropagation();locBtnLongPressed=false}});
+});
+
+async function startLiveLocation(){
+  if(!fb||!activeRoom){showToast('Önce bir sohbet seç','warn');return}
+  if(!navigator.geolocation){showToast('Konum bu cihazda desteklenmiyor','error');return}
+  if(liveLocWatchId!==null){showToast('Zaten canlı konum paylaşıyorsun','info');return}
+  const {db,collection,addDoc,doc,setDoc,serverTimestamp}=fb;
+  // Sohbete "canlı konum başladı" mesajı düş — partner bu mesajın içinde haritayı görecek.
+  const msgRef=await addDoc(collection(db,`rooms/${activeRoom}/messages`),{
+    type:'liveLocation',senderId:myId,senderName:myName,senderEmoji:myEmoji,
+    ts:serverTimestamp(),read:false,liveActive:true,startedAt:Date.now()
+  });
+  liveLocMsgId=msgRef.id;
+  updateRoomMeta('🔴 Canlı konum paylaşıyor');
+  document.getElementById('liveLocBar').classList.add('open');
+  showToast('Canlı konum başladı','success');
+
+  const startTs=Date.now();
+  liveLocWatchId=navigator.geolocation.watchPosition(async pos=>{
+    if(Date.now()-startTs>LIVE_LOC_MAX_MS){stopLiveLocation();return}
+    const lat=pos.coords.latitude,lng=pos.coords.longitude;
+    try{
+      await setDoc(doc(db,`rooms/${activeRoom}/messages`,liveLocMsgId),{lat,lng,updatedAt:Date.now()},{merge:true});
+    }catch(e){console.error(e)}
+  },err=>{
+    console.error(err);
+    if(err.code===1){ // izin reddedildi
+      showToast('Konum izni verilmedi, canlı konum durduruldu','error');
+      stopLiveLocation();
+    }
+  },{enableHighAccuracy:true,maximumAge:5000,timeout:15000});
+
+  // Sekme arka plana alınırsa veya kapatılırsa canlı konumu otomatik durdur.
+  document.addEventListener('visibilitychange',autoStopOnHide);
+  window.addEventListener('beforeunload',stopLiveLocationSync);
+}
+
+function autoStopOnHide(){
+  if(document.hidden&&liveLocWatchId!==null){
+    stopLiveLocation();
+    showToast('Uygulama arka plana alındığı için canlı konum durduruldu','warn');
+  }
+}
+
+async function stopLiveLocation(){
+  if(liveLocWatchId===null)return;
+  navigator.geolocation.clearWatch(liveLocWatchId);
+  liveLocWatchId=null;
+  document.removeEventListener('visibilitychange',autoStopOnHide);
+  document.getElementById('liveLocBar').classList.remove('open');
+  if(fb&&activeRoom&&liveLocMsgId){
+    try{
+      const {db,doc,updateDoc}=fb;
+      await updateDoc(doc(db,`rooms/${activeRoom}/messages`,liveLocMsgId),{liveActive:false,endedAt:Date.now()});
+    }catch(e){console.error(e)}
+  }
+  liveLocMsgId=null;
+  showToast('Canlı konum durduruldu','info');
+}
+// beforeunload sırasında async/await beklenemez; en azından "liveActive:false"
+// göndermeyi dener (garantisi yok, tarayıcı sayfayı hemen kapatabilir).
+function stopLiveLocationSync(){
+  if(liveLocWatchId===null||!fb||!activeRoom||!liveLocMsgId)return;
+  try{
+    const {db,doc,updateDoc}=fb;
+    updateDoc(doc(db,`rooms/${activeRoom}/messages`,liveLocMsgId),{liveActive:false,endedAt:Date.now()});
+  }catch(e){}
+}
+
+/* ═══════════════════════════════════════
+   PASİF (ARAÇLI) KONUM PAYLAŞIMI
+   ─────────────────────────────────────
+   Gerçek arka plan konum takibi (uygulama tamamen kapalıyken/kilit ekranında
+   çalışan) tarayıcıda mümkün değil — bu işletim sisteminin bir kısıtlaması,
+   yalnızca native (Android/iOS) bir uygulama bunu yapabilir.
+   Bunun yerine "en iyi çabayla" bir orta yol sunuyoruz: kullanıcı bunu kendi
+   isteğiyle (varsayılan KAPALI) açtığında, konumu şu anlarda günceller:
+     1) Uygulama ilk açıldığında / giriş yapıldığında,
+     2) Sekme arka plandan tekrar öne geldiğinde (visibilitychange),
+     3) Uygulama önplanda AÇIK kaldığı sürece her 3 dakikada bir.
+   Bu "canlı" değildir ama telefonu elde tutmaya gerek bırakmaz: kişi
+   uygulamayı ara sıra açtıkça konum tazelenir, partner de en son ne zaman
+   nerede olduğunu ("X dk önce, şurada") görür.
+═══════════════════════════════════════ */
+const PASSIVE_LOC_INTERVAL_MS=3*60*1000;
+let passiveLocTimer=null;
+let passiveLocEnabled=false;
+
+function passiveLocStorageKey(){return 'askbahcem_passiveloc_'+myId}
+
+function initPassiveLocationOnLoad(){
+  passiveLocEnabled=localStorage.getItem(passiveLocStorageKey())==='1';
+  if(passiveLocEnabled)startPassiveLocationLoop();
+  refreshPassiveLocToggleLabel();
+}
+
+function togglePassiveLocationSharing(){
+  passiveLocEnabled=!passiveLocEnabled;
+  localStorage.setItem(passiveLocStorageKey(),passiveLocEnabled?'1':'0');
+  if(passiveLocEnabled){
+    startPassiveLocationLoop();
+    showToast('Konum paylaşımı açıldı — uygulamayı her açtığında konumun güncellenir','success');
+  }else{
+    stopPassiveLocationLoop();
+    // Kapatınca partnerin gördüğü son konumu da temizle (gizlilik).
+    if(fb&&myId){
+      const {rtdb,dbRef,remove}=fb;
+      remove(dbRef(rtdb,`passiveLocation/${myId}`)).catch(()=>{});
+    }
+    showToast('Konum paylaşımı kapatıldı','info');
+  }
+  refreshPassiveLocToggleLabel();
+}
+function refreshPassiveLocToggleLabel(){
+  const el=document.getElementById('passiveLocToggleLabel');
+  if(el)el.textContent='Konum Paylaşımı: '+(passiveLocEnabled?'Açık':'Kapalı');
+}
+
+function startPassiveLocationLoop(){
+  updatePassiveLocationOnce();
+  document.addEventListener('visibilitychange',onVisibilityForPassiveLoc);
+  clearInterval(passiveLocTimer);
+  passiveLocTimer=setInterval(()=>{
+    if(!document.hidden)updatePassiveLocationOnce();
+  },PASSIVE_LOC_INTERVAL_MS);
+}
+function stopPassiveLocationLoop(){
+  clearInterval(passiveLocTimer);
+  passiveLocTimer=null;
+  document.removeEventListener('visibilitychange',onVisibilityForPassiveLoc);
+}
+function onVisibilityForPassiveLoc(){
+  if(!document.hidden&&passiveLocEnabled)updatePassiveLocationOnce();
+}
+function updatePassiveLocationOnce(){
+  if(!passiveLocEnabled||!navigator.geolocation||!fb||!myId)return;
+  navigator.geolocation.getCurrentPosition(pos=>{
+    const {rtdb,dbRef,set}=fb;
+    set(dbRef(rtdb,`passiveLocation/${myId}`),{
+      lat:pos.coords.latitude,lng:pos.coords.longitude,ts:Date.now()
+    }).catch(e=>console.error(e));
+  },err=>{
+    console.error(err);
+    // İzin kalıcı olarak reddedildiyse tekrar tekrar sormaya çalışmayalım.
+    if(err.code===1){passiveLocEnabled=false;localStorage.setItem(passiveLocStorageKey(),'0');stopPassiveLocationLoop();refreshPassiveLocToggleLabel()}
+  },{enableHighAccuracy:false,maximumAge:60000,timeout:20000});
+}
+
+/* Partnerin son bilinen (pasif) konumunu header altında gösterir. */
+let unsubPassiveLoc=null;
+function listenPartnerPassiveLocation(uid){
+  if(unsubPassiveLoc){unsubPassiveLoc();unsubPassiveLoc=null}
+  const {rtdb,dbRef,onValue}=fb;
+  unsubPassiveLoc=onValue(dbRef(rtdb,`passiveLocation/${uid}`),snap=>{
+    const d=snap.val();
+    const el=document.getElementById('hPassiveLoc');
+    if(!d||!d.ts){if(el)el.remove();return}
+    const ageMin=Math.floor((Date.now()-d.ts)/60000);
+    const ageTxt=ageMin<1?'az önce':(ageMin<60?ageMin+' dk önce':Math.floor(ageMin/60)+' sa önce');
+    let bar=el;
+    if(!bar){
+      bar=document.createElement('div');
+      bar.id='hPassiveLoc';
+      bar.className='hd-passive-loc';
+      const statusRow=document.querySelector('.hd-status');
+      if(statusRow&&statusRow.parentElement)statusRow.parentElement.appendChild(bar);
+    }
+    bar.innerHTML=`📍 <span>${ageTxt} burada gördü</span>`;
+    bar.onclick=()=>openInGoogleMaps(d.lat,d.lng);
+  });
+}
+
+/* Mesaj balonu içindeki gömülü Leaflet haritasını oluşturur/günceller. */
+const liveLocMapInstances={}; // msgId -> {map,marker}
+const liveLocUnsubs={}; // msgId -> unsubscribe fn
+function renderLiveLocationBubble(b,msg,msgId){
+  b.classList.add('live-loc-bubble');
+  b.id='llbubble_'+msgId;
+  const mapId='llmap_'+msgId;
+  const isMine=msg.senderId===myId;
+  drawLiveLocationBubble(msgId,msg,isMine);
+  // Bu mesaj hâlâ aktifse (canlı konum devam ediyorsa), ana mesaj listesinin
+  // "sadece yeni mesajları ekle" optimizasyonunu atlayıp lat/lng güncellemelerini
+  // doğrudan bu balona akıtan kendi dinleyicisini kur. Mesaj pasife düşünce
+  // (liveActive:false) dinleyici kendini kapatır.
+  if(msg.liveActive&&!liveLocUnsubs[msgId]&&fb&&activeRoom){
+    const {db,doc,onSnapshot}=fb;
+    liveLocUnsubs[msgId]=onSnapshot(doc(db,`rooms/${activeRoom}/messages`,msgId),snap=>{
+      if(!snap.exists())return;
+      const data=snap.data();
+      const el=document.getElementById('llbubble_'+msgId);
+      if(!el)return; // balon DOM'dan kaldırılmış (oda değişmiş vs.)
+      drawLiveLocationBubble(msgId,data,isMine);
+      if(!data.liveActive){
+        liveLocUnsubs[msgId]();
+        delete liveLocUnsubs[msgId];
+      }
+    });
+  }
+}
+function drawLiveLocationBubble(msgId,msg,isMine){
+  const el=document.getElementById('llbubble_'+msgId);
+  if(!el)return;
+  const mapId='llmap_'+msgId;
+  const active=!!msg.liveActive;
+  el.innerHTML=`
+    <div class="llb-head">${active?'<span class="llb-livedot"></span>':''}${active?'Canlı konum':'Canlı konum sona erdi'}${isMine?' (sen)':''}</div>
+    <div class="llb-map${active?'':' ended'}" id="${mapId}"></div>
+    ${!active?'<div class="llb-ended-label">Paylaşım durduruldu</div>':''}
+  `;
+  if(msg.lat==null||msg.lng==null)return; // henüz ilk konum gelmedi
+  requestAnimationFrame(()=>{
+    const mapEl=document.getElementById(mapId);
+    if(!mapEl||typeof L==='undefined')return;
+    let inst=liveLocMapInstances[msgId];
+    if(!inst||!document.body.contains(inst.map.getContainer())){
+      const map=L.map(mapId,{zoomControl:false,attributionControl:false,dragging:active,scrollWheelZoom:false,doubleClickZoom:false}).setView([msg.lat,msg.lng],16);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
+      const marker=L.marker([msg.lat,msg.lng]).addTo(map);
+      inst=liveLocMapInstances[msgId]={map,marker};
+      map.on('click',()=>openInGoogleMaps(msg.lat,msg.lng));
+    }else{
+      inst.marker.setLatLng([msg.lat,msg.lng]);
+      if(active)inst.map.panTo([msg.lat,msg.lng]);
+    }
+  });
+}
 
 /* Koordinatı okunabilir adrese çevir (OpenStreetMap Nominatim, ücretsiz/anahtarsız).
    Ağ hatası olursa koordinatı yedek olarak gösteririz. */
@@ -2853,7 +3157,7 @@ function notifyIncomingMessage(msg){
   // kapalıyken) çalışmaz — bu JS ile aşılamaz, tarayıcı güvenlik kısıtı. Sekme
   // açık/görünürken titreşim burada normal şekilde çalışır.
   if(navigator.vibrate)navigator.vibrate([300,120,300,120,400]);
-  const preview=msg.type==='text'?msg.text:(msg.type==='image'?'Fotoğraf gönderdi':(msg.type==='video'?'Video gönderdi':(msg.type==='location'?'📍 Konum gönderdi':(msg.text||'Arama'))));
+  const preview=msg.type==='text'?msg.text:(msg.type==='image'?'Fotoğraf gönderdi':(msg.type==='video'?'Video gönderdi':(msg.type==='location'?'📍 Konum gönderdi':(msg.type==='liveLocation'?'🔴 Canlı konum':(msg.text||'Arama')))));
   const senderName=msg.senderName||'Mesaj';
   // Admin, mesajı atan kişinin panelinde olmasa bile toast'a tıklayınca
   // doğrudan o kişinin sohbetine geçsin.
