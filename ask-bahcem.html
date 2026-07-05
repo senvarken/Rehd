@@ -476,17 +476,8 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
 #localVid.dragging{cursor:grabbing;transition:none}
 #localVid.cam-off{opacity:0}
 
-/* ── Video swap (ekrana tıklayınca küçük/büyük yer değiştirir) ── */
-#callOverlay.vid-swapped #remoteVid{z-index:6;position:absolute;top:82px;right:16px;width:104px;height:150px;border-radius:16px;object-fit:cover;box-shadow:0 8px 24px rgba(0,0,0,.5);border:1.5px solid rgba(255,255,255,.14)}
-#callOverlay.vid-swapped .call-remote-stage{z-index:1}
-#callOverlay.vid-swapped #localVid{position:absolute;inset:0;width:100%;height:100%;border-radius:0;box-shadow:none;border:none;z-index:2;top:auto;right:auto;cursor:default}
-#callOverlay.vid-swapped .call-remote-placeholder{display:none!important}
-/* swap geçiş animasyonu */
-#localVid,#remoteVid{transition:opacity .18s}
 /* küçük ekrandaki "swap" dokunma ipucu rozeti */
 #swapHint{position:absolute;top:88px;right:8px;z-index:10;background:rgba(0,0,0,.52);color:#fff;font-size:.6rem;font-weight:700;padding:2px 6px;border-radius:8px;pointer-events:none;opacity:0;transition:opacity .3s;letter-spacing:.3px}
-#callOverlay:not(.vid-swapped) #swapHint{top:88px;right:8px}
-#callOverlay.vid-swapped #swapHint{top:88px;right:8px}
 
 .call-bottom-bar{position:absolute;bottom:0;left:0;right:0;padding:22px 20px;padding-bottom:max(28px,env(safe-area-inset-bottom));display:flex;align-items:center;justify-content:center;gap:18px;z-index:5;background:linear-gradient(to top,rgba(0,0,0,.6),transparent)}
 .cc-btn{width:56px;height:56px;border-radius:50%;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .15s,background .15s;background:rgba(255,255,255,.14);color:#fff;backdrop-filter:blur(10px)}
@@ -806,7 +797,7 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
     <button class="call-min-end" onclick="endCall()">✕</button>
   </div>
   <div class="call-remote-stage">
-    <video id="remoteVid" autoplay playsinline></video>
+    <video id="remoteVid" autoplay playsinline onclick="swapVideos()"></video>
     <div class="call-remote-placeholder" id="remotePlaceholder">
       <div class="call-ph-avatar" id="callPhAvatar">A</div>
       <div class="call-ph-name" id="callPhName">Sevgilim</div>
@@ -3054,8 +3045,6 @@ let selfVidDrag={active:false,moved:false,startX:0,startY:0,startLeft:0,startTop
 function selfVidPointerDown(e){
   const ov=document.getElementById('callOverlay');
   if(ov.classList.contains('minimized'))return;
-  // Swapped modda localVid tam ekran — sürükleme yok, sadece swap geri al
-  if(vidSwapped){e.stopPropagation();swapVideos();return}
   const vid=document.getElementById('localVid');
   const rect=vid.getBoundingClientRect();
   const parentRect=ov.getBoundingClientRect();
@@ -3102,16 +3091,21 @@ function swapVideos(){
   const ov=document.getElementById('callOverlay');
   if(ov.classList.contains('minimized'))return;
   vidSwapped=!vidSwapped;
-  ov.classList.toggle('vid-swapped',vidSwapped);
-  // Swapped modda remoteVid'e tıklayınca da geri swap yapılabilsin
-  const remVid=document.getElementById('remoteVid');
-  remVid.onclick=vidSwapped?swapVideos:null;
-  // Küçük ekrana kısa bir ipucu göster
+  const localVid=document.getElementById('localVid');
+  const remoteVid=document.getElementById('remoteVid');
+  // srcObject'leri yer değiştir
+  const tmp=localVid.srcObject;
+  localVid.srcObject=remoteVid.srcObject;
+  remoteVid.srcObject=tmp;
+  // Ses kontrolü: kendi stream'imiz (localStream) her zaman muted olmalı
+  // hangi video elementinde olursa olsun
+  localVid.muted=(localVid.srcObject===localStream);
+  remoteVid.muted=(remoteVid.srcObject===localStream);
+  // İpucu göster
   const hint=document.getElementById('swapHint');
   if(hint){hint.style.opacity='1';clearTimeout(hint._t);hint._t=setTimeout(()=>{hint.style.opacity='0'},1200)}
 }
 function showSwapHintOnConnect(){
-  // Görüşme bağlandığında kullanıcıya bir kez ipucu göster
   const hint=document.getElementById('swapHint');
   if(hint){hint.style.opacity='1';clearTimeout(hint._t);hint._t=setTimeout(()=>{hint.style.opacity='0'},2000)}
 }
@@ -3398,7 +3392,6 @@ function endCallCleanup(){
   document.getElementById('localVid').classList.remove('cam-off');
   // Swap durumunu sıfırla
   vidSwapped=false;
-  document.getElementById('callOverlay').classList.remove('vid-swapped');
   document.getElementById('remoteVid').onclick=null;
 }
 async function sigSend(payload){
