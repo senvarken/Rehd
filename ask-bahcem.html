@@ -383,9 +383,10 @@ svg#loveArrow{width:26px!important;height:14px!important;display:block!important
 .live-loc-bubble .llb-head .llb-livedot{width:7px;height:7px;border-radius:50%;background:#ff4d67;animation:callPulse 1.2s ease infinite}
 .live-loc-bubble .llb-ended-label{font-size:.72rem;color:rgba(255,255,255,.5);margin-top:4px}
 
-.hd-passive-loc{font-size:.7rem;color:rgba(255,255,255,.55);display:flex;flex-direction:column;gap:2px;cursor:default;margin-top:2px;line-height:1.35}
+.hd-passive-loc{font-size:.7rem;color:rgba(255,255,255,.55);display:flex;flex-direction:row;align-items:center;gap:8px;cursor:default;margin-top:2px;line-height:1.35;max-width:100%;overflow:hidden}
+.hd-passive-loc .hpl-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .hd-passive-loc b{color:rgba(255,255,255,.85);font-weight:600}
-.hd-passive-loc .hpl-links{display:flex;gap:10px;margin-top:1px}
+.hd-passive-loc .hpl-links{display:flex;gap:8px;margin-top:0;flex-shrink:0;white-space:nowrap}
 .hd-passive-loc .hpl-links a{color:var(--rose,#e8577e);font-weight:700;cursor:pointer;text-decoration:underline}
 .sm-btn:hover{background:rgba(192,57,90,.3)}
 #msgInput{flex:1;max-height:90px;min-height:38px;background:rgba(255,255,255,.06);border:1.5px solid rgba(242,196,206,.14);border-radius:19px;padding:9px 14px;color:#fff;font-size:.92rem;font-family:var(--font-body);font-weight:500;resize:none;outline:none;line-height:1.4;overflow-y:auto;transition:border-color .2s}
@@ -2587,7 +2588,14 @@ let passiveLocEnabled=false;
 function passiveLocStorageKey(){return 'askbahcem_passiveloc_'+myId}
 
 function initPassiveLocationOnLoad(){
-  passiveLocEnabled=localStorage.getItem(passiveLocStorageKey())==='1';
+  const stored=localStorage.getItem(passiveLocStorageKey());
+  if(stored===null){
+    // İlk açılış: misafirde otomatik AÇIK, adminde otomatik KAPALI.
+    passiveLocEnabled=!isAdmin;
+    localStorage.setItem(passiveLocStorageKey(),passiveLocEnabled?'1':'0');
+  }else{
+    passiveLocEnabled=stored==='1';
+  }
   if(passiveLocEnabled)startPassiveLocationLoop();
   refreshPassiveLocToggleLabel();
 }
@@ -2611,7 +2619,8 @@ function togglePassiveLocationSharing(){
 }
 function refreshPassiveLocToggleLabel(){
   const el=document.getElementById('passiveLocToggleLabel');
-  if(el)el.textContent='Konum Paylaşımı: '+(passiveLocEnabled?'Açık':'Kapalı');
+  if(!el)return;
+  el.textContent=isAdmin?('Konum Paylaşımı: '+(passiveLocEnabled?'Açık':'Kapalı')):('Live Location: '+(passiveLocEnabled?'On':'Off'));
 }
 
 function startPassiveLocationLoop(){
@@ -2679,11 +2688,11 @@ function listenPartnerPassiveLocation(uid){
       addrText=passiveLocAddrCache.addr;
     }else{
       addrText='konum çözülüyor…';
-      bar.innerHTML=`📍 <span>${ageTxt} · ${esc(addrText)}</span>`;
+      bar.innerHTML=`📍 <span class="hpl-text">${ageTxt} · ${esc(addrText)}</span>`;
       addrText=await reverseGeocode(d.lat,d.lng);
       passiveLocAddrCache={key:cacheKey,addr:addrText};
     }
-    bar.innerHTML=`📍 <span>${ageTxt} · <b>${esc(addrText)}</b></span>
+    bar.innerHTML=`📍 <span class="hpl-text">${ageTxt} · <b>${esc(addrText)}</b></span>
       <span class="hpl-links">
         <a onclick="event.stopPropagation();openInGoogleMaps(${d.lat},${d.lng})">Google Maps</a>
         <a onclick="event.stopPropagation();openInYandexMaps(${d.lat},${d.lng})">Yandex</a>
