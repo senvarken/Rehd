@@ -3262,12 +3262,23 @@ function selfVidPointerUp(){
   }
 }
 let lastStageTapTs=0;
+let lastStageTapHandledByTouch=false;
 function handleStageTap(e){
   // Mobilde touchend + senkron click ikisi de tetiklenmesin diye touchend'de
   // varsayılan davranış engellenir (click'in tekrar tetiklenmesini önler).
-  if(e&&e.type==='touchend'&&e.cancelable)e.preventDefault();
+  if(e){
+    e.stopPropagation(); // #callOverlay'in kendi click handler'ına (kontrol gizle/göster) sızmasın
+    if(e.type==='touchend'){
+      if(e.cancelable)e.preventDefault();
+      lastStageTapHandledByTouch=true;
+      setTimeout(()=>{lastStageTapHandledByTouch=false},400);
+    }else if(e.type==='click'&&lastStageTapHandledByTouch){
+      // Bu click, biraz önceki touchend'in senkron yankısı — yok say.
+      return;
+    }
+  }
   const now=Date.now();
-  if(now-lastStageTapTs<350){
+  if(now-lastStageTapTs<350&&now-lastStageTapTs>30){
     lastStageTapTs=0;
     switchCamera();
   }else{
