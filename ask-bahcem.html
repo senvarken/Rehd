@@ -2745,7 +2745,7 @@ function drawLiveLocationBubble(msgId,msg,isMine){
    Ağ hatası olursa koordinatı yedek olarak gösteririz. */
 async function reverseGeocode(lat,lng){
   try{
-    const res=await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=17&accept-language=tr`,{headers:{'Accept':'application/json'}});
+    const res=await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=17&accept-language=tr`);
     if(!res.ok)throw new Error('geocode fail');
     const data=await res.json();
     if(data&&data.address){
@@ -2756,6 +2756,7 @@ async function reverseGeocode(lat,lng){
     if(data&&data.display_name)return data.display_name;
     throw new Error('no address');
   }catch(e){
+    console.error('reverseGeocode failed:',e);
     return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
   }
 }
