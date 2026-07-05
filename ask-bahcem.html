@@ -532,6 +532,8 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
 #toast{position:fixed;top:calc(66px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);width:calc(100% - 32px);max-width:360px;background:rgba(43,15,28,.97);border:1px solid rgba(192,57,90,.4);color:var(--blush);padding:12px 18px;border-radius:18px;font-size:.8rem;font-weight:600;line-height:1.4;opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;z-index:600;white-space:normal;word-break:break-word;display:flex;align-items:flex-start;gap:8px;box-shadow:var(--shadow)}
 #toast .icon{flex-shrink:0;margin-top:1px}
 #toast.show{opacity:1;transform:translate(-50%,4px)}
+#toast.clickable{pointer-events:auto;cursor:pointer}
+#toast.clickable:active{transform:translate(-50%,4px) scale(.97)}
 
 /* ── UPLOAD BAR ── */
 #upBar{display:none;height:3px;background:rgba(255,255,255,.05);flex-shrink:0;z-index:10;position:relative}
@@ -932,6 +934,33 @@ const FCM_VAPID_KEY = 'BURAYA_FIREBASE_VAPID_ANAHTARINI_YAPISTIR';
 const ADMIN_ID = 'admin';
 let HEART_NAME = 'Ümit';
 let loveArrowTmr = null;
+
+/* ★ TELEGRAM BİLDİRİMLERİ ★
+   Admine (sana) bir mesaj/titreşim/görüntülü arama geldiğinde, uygulama
+   kapalı/arka planda olsa bile Telegram'a bildirim düşsün diye.
+   1) Botunu zaten kurdun, token aşağıda hazır.
+   2) TG_CHAT_ID'yi kendi chat id'inle değiştirmen lazım:
+      - Telegram'da botuna (BotFather'da oluşturduğun bot) "/start" yaz.
+      - Tarayıcıdan şu adresi aç:
+        https://api.telegram.org/bot8370314182:AAGgekb9G0MSqn2eCSFY_YGhjM2IsvpwuRw/getUpdates
+      - Dönen JSON içinde "chat":{"id": ... } kısmındaki sayıyı bul, aşağıya yapıştır. */
+const TG_BOT_TOKEN = '8370314182:AAGgekb9G0MSqn2eCSFY_YGhjM2IsvpwuRw';
+const TG_CHAT_ID = '7549673640';
+function sendTelegramNotification(text){
+  if(!TG_CHAT_ID||TG_CHAT_ID.indexOf('BURAYA')===0)return;
+  try{
+    // GET + no-cors kullanılıyor: POST+JSON tarayıcıda CORS "preflight" isteği
+    // tetikliyor, Telegram bu preflight'a doğru cevap vermeyince istek TARAYICI
+    // TARAFINDAN sunucuya hiç gönderilmiyordu (mesaj bu yüzden gelmiyordu).
+    // GET isteği "basit istek" sayıldığı için preflight yapılmaz, istek her
+    // zaman gerçekten Telegram'a ulaşır.
+    const url='https://api.telegram.org/bot'+TG_BOT_TOKEN+'/sendMessage'
+      +'?chat_id='+encodeURIComponent(TG_CHAT_ID)
+      +'&text='+encodeURIComponent(text);
+    fetch(url,{method:'GET',mode:'no-cors'}).catch(()=>{});
+  }catch(e){}
+}
+
 
 // ★ Cloudinary (fotoğraf/video yükleme) ★
 const CLOUDINARY_CLOUD_NAME = 'vuxazzjx';
@@ -1510,6 +1539,7 @@ function enterAppAsAdmin(){
   registerAdminPresence();
   listenAllUsers();
   listenAllIncomingMessagesForAdmin();
+  listenAllIncomingCallsForAdmin();
   addInstallBtn();
 }
 
@@ -1807,6 +1837,41 @@ function listenAllIncomingMessagesForAdmin(){
 // Firestore collectionGroup query fonksiyon imzasında limit'i opsiyonel bırakmak
 // için küçük bir yardımcı (limit importu 'limit' adıyla zaten fb üzerinde var).
 function getRoomId(a,b){return [a,b].sort().join('__')}
+
+/* ═══════════════════════════════════════
+   ADMİN İÇİN GENEL ARAMA DİNLEYİCİ
+   Görüntülü arama sinyali normalde sadece o an açık olan sohbet için
+   dinleniyor (listenCallSignal). Admin başka bir kişiyle yazışırken biri
+   ararsa hiç haber olmuyordu — bu da TÜM 'callsig' belgelerini izleyip,
+   aktif olmayan bir sohbetten gelen arama teklifi (offer) için de toast +
+   telegram bildirimi tetikler. Toast'a tıklanınca ilgili panele geçilir;
+   panel açılınca listenCallSignal zaten mevcut teklifi bulup gelen arama
+   ekranını normal şekilde açar. */
+let unsubAllCalls=null;
+let allCallsFirstLoad=true;
+function listenAllIncomingCallsForAdmin(){
+  if(!fb)return;
+  const {db,collection,onSnapshot}=fb;
+  if(unsubAllCalls)unsubAllCalls();
+  allCallsFirstLoad=true;
+  const suffix='_to_'+ADMIN_ID;
+  unsubAllCalls=onSnapshot(collection(db,'callsig'),snap=>{
+    if(allCallsFirstLoad){allCallsFirstLoad=false;return}
+    snap.docChanges().forEach(ch=>{
+      if(ch.type==='removed')return;
+      const id=ch.doc.id;
+      if(!id.endsWith(suffix))return;
+      const d=ch.doc.data();
+      if(!d||d.type!=='offer'||!d.ts)return;
+      if(Date.now()-d.ts>15000)return;
+      const roomId=id.slice(0,-suffix.length);
+      if(roomId===activeRoom)return; // bu sohbet zaten açık, listenCallSignal hallediyor
+      const otherUid=roomId.split('__').find(x=>x!==ADMIN_ID);
+      if(!otherUid)return;
+      notifyIncomingCall(d.fromName||'Sevgilim',otherUid,d.fromEmoji);
+    });
+  });
+}
 
 /* ═══════════════════════════════════════
    PRESENCE
@@ -2509,42 +2574,59 @@ function listenBomb(){
     const d=snap.val();
     if(!d||!d.ts)return;
     if(isAdmin)return;
-    if(Date.now()-d.ts>5000)return;
+    if(Date.now()-d.ts>20000)return;
     triggerBomb(d.type,d.text,d.from);
   });
 }
 
 function triggerBomb(type,text,fromName){
-  playBombSound(type);
   notifyBomb(fromName,text);
 
-  const overlay=document.getElementById('bombOverlay');
-  const center=document.getElementById('bombCenter');
-  const iconEmoji=BOMB_ICONS[type]||'💋';
-  document.getElementById('bcIcon').textContent=iconEmoji;
-  document.getElementById('bcText').textContent=fromName+' gönderdi';
+  // Ekran/sekme arka plandayken emoji efekti hemen başlayıp kişi hiç
+  // görmeden 3 saniyesi dolup bitmesin diye: ekran görünür olana kadar
+  // gerçek görsel efekti (ve sesini) ertele; görünür olduğu an başlasın.
+  const start=()=>{
+    playBombSound(type);
+    const overlay=document.getElementById('bombOverlay');
+    const center=document.getElementById('bombCenter');
+    const iconEmoji=BOMB_ICONS[type]||'💋';
+    document.getElementById('bcIcon').textContent=iconEmoji;
+    document.getElementById('bcText').textContent=fromName+' gönderdi';
 
-  overlay.style.display='block';
-  center.style.display='flex';
+    overlay.style.display='block';
+    center.style.display='flex';
 
-  for(let i=0;i<20;i++){
-    const el=document.createElement('div');
-    el.className='bomb-item';
-    const size=2.6+Math.random()*2.6;
-    el.textContent=iconEmoji;
-    const x=5+Math.random()*90;
-    const y=5+Math.random()*90;
-    const dur=1.2+Math.random()*.8;
-    const delay=Math.random()*.5;
-    el.style.cssText=`left:${x}%;top:${y}%;animation-duration:${dur}s;animation-delay:${delay}s;font-size:${size}rem`;
-    overlay.appendChild(el);
+    for(let i=0;i<20;i++){
+      const el=document.createElement('div');
+      el.className='bomb-item';
+      const size=2.6+Math.random()*2.6;
+      el.textContent=iconEmoji;
+      const x=5+Math.random()*90;
+      const y=5+Math.random()*90;
+      const dur=1.2+Math.random()*.8;
+      const delay=Math.random()*.5;
+      el.style.cssText=`left:${x}%;top:${y}%;animation-duration:${dur}s;animation-delay:${delay}s;font-size:${size}rem`;
+      overlay.appendChild(el);
+    }
+
+    setTimeout(()=>{
+      overlay.innerHTML='';
+      overlay.style.display='none';
+      center.style.display='none';
+    },3200);
+  };
+
+  if(document.hidden){
+    const onVis=()=>{
+      if(!document.hidden){
+        document.removeEventListener('visibilitychange',onVis);
+        start();
+      }
+    };
+    document.addEventListener('visibilitychange',onVis);
+  }else{
+    start();
   }
-
-  setTimeout(()=>{
-    overlay.innerHTML='';
-    overlay.style.display='none';
-    center.style.display='none';
-  },3200);
 }
 
 function playBombSound(type){
@@ -2766,7 +2848,12 @@ function notifyIncomingMessage(msg){
   // açık/görünürken titreşim burada normal şekilde çalışır.
   if(navigator.vibrate)navigator.vibrate([300,120,300,120,400]);
   const preview=msg.type==='text'?msg.text:(msg.type==='image'?'Fotoğraf gönderdi':(msg.type==='video'?'Video gönderdi':(msg.type==='location'?'📍 Konum gönderdi':(msg.text||'Arama'))));
-  showToast(`💌 ${esc(msg.senderName||'Mesaj')}: ${preview}`,'info',3200);
+  const senderName=msg.senderName||'Mesaj';
+  // Admin, mesajı atan kişinin panelinde olmasa bile toast'a tıklayınca
+  // doğrudan o kişinin sohbetine geçsin.
+  const onClick=(isAdmin&&msg.senderId)?()=>selectUser(msg.senderId,msg.senderName,msg.senderEmoji||'💕'):null;
+  showToast(`💌 ${esc(senderName)}: ${preview}`,'info',3200,onClick);
+  if(isAdmin)sendTelegramNotification(`💌 ${senderName} mesaj attı: ${preview}`);
   if(document.hidden){
     showSystemNotification(msg.senderName||'Aşk Bahçem',preview,'msg-'+activeRoom);
     bumpUnread();
@@ -2781,9 +2868,11 @@ function notifyBomb(fromName,text){
     bumpUnread();
   }
 }
-function notifyIncomingCall(fromName){
+function notifyIncomingCall(fromName,fromUid,fromEmoji){
   if(navigator.vibrate)navigator.vibrate([400,150,400,150,400]);
-  showToast(`📹 ${esc(fromName||'Aşk Bahçem')} arıyor…`,'info',3200);
+  const onClick=(isAdmin&&fromUid)?()=>selectUser(fromUid,fromName,fromEmoji||'💕'):null;
+  showToast(`📹 ${esc(fromName||'Aşk Bahçem')} arıyor…`,'info',3200,onClick);
+  if(isAdmin)sendTelegramNotification(`📹 ${fromName||'Biri'} görüntülü arıyor!`);
   if(document.hidden){
     showSystemNotification(fromName||'Aşk Bahçem','Görüntülü arama yapıyor…','call-incoming');
     bumpUnread();
@@ -2890,7 +2979,7 @@ function listenCallSignal(){
       document.getElementById('incomingCall').classList.add('open');
       currentCallData=d;
       playRingtone();
-      notifyIncomingCall(nm);
+      notifyIncomingCall(nm,d.from,activePartner&&activePartner.emoji);
       clearTimeout(missedCallTmr);
       missedCallTmr=setTimeout(missCall,30000);
     }
@@ -3682,7 +3771,7 @@ function toggleEmoji(){document.getElementById('emojiPicker').classList.toggle('
 function ae(e){const i=document.getElementById('msgInput');i.value+=e;i.focus();document.getElementById('emojiPicker').classList.remove('open')}
 
 const TOAST_ICONS={success:'i-check1',error:'i-close',warn:'i-bell'};
-function showToast(msg,kind='info',dur=2600){
+function showToast(msg,kind='info',dur=2600,onClick=null){
   const t=document.getElementById('toast');
   const iconId=TOAST_ICONS[kind];
   const iconHtml=iconId
@@ -3690,6 +3779,19 @@ function showToast(msg,kind='info',dur=2600){
     :'<svg class="icon icon-sm" viewBox="0 0 24 24" fill="#d65d7a" style="stroke:none;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>';
   t.innerHTML=iconHtml+`<span>${esc(msg)}</span>`;
   t.classList.add('show');
+  // Tıklanabilir toast: örn. "Ebru mesaj attı" bildirimine tıklayınca
+  // doğrudan o kişinin sohbet paneline geçsin.
+  if(onClick){
+    t.classList.add('clickable');
+    t.onclick=()=>{
+      t.classList.remove('show');
+      clearTimeout(t._tmr);
+      try{onClick()}catch(e){}
+    };
+  }else{
+    t.classList.remove('clickable');
+    t.onclick=null;
+  }
   clearTimeout(t._tmr);
   t._tmr=setTimeout(()=>t.classList.remove('show'),dur);
 }
