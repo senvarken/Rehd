@@ -3145,9 +3145,6 @@ function handleCallOverlayClick(e){
     if(!ov.classList.contains('controls-hidden'))scheduleControlsHide();
     return;
   }
-  // Çift dokunuşun ikinci vuruşu kamera değiştirmeyi tetiklediyse, kontrolleri
-  // aç/kapa yapma (yoksa çift tıkta ekran titremiş gibi görünür).
-  if(stageDoubleTapConsumed){stageDoubleTapConsumed=false;return}
   // Boş ekrana (video alanına) dokunma → butonları aç/kapat.
   if(ov.classList.contains('controls-hidden'))showCallControls();
   else hideCallControls();
@@ -3265,28 +3262,21 @@ function selfVidPointerUp(){
   }
 }
 let lastStageTapTs=0;
-let lastStageTapHandledByTouch=false;
-let stageDoubleTapConsumed=false;
+let lastStageClickWasTouch=false;
 function handleStageTap(e){
-  // Mobilde touchend + senkron click ikisi de tetiklenmesin diye touchend'de
-  // varsayılan davranış engellenir (click'in tekrar tetiklenmesini önler).
-  // NOT: propagation durdurulmuyor — tek dokunuşun #callOverlay'e ulaşıp
-  // kontrolleri aç/kapa yapması gerekiyor, sadece burada mükerrer sayımı
-  // (touchend + senkron click) engelliyoruz.
-  if(e){
-    if(e.type==='touchend'){
-      if(e.cancelable)e.preventDefault();
-      lastStageTapHandledByTouch=true;
-      setTimeout(()=>{lastStageTapHandledByTouch=false},400);
-    }else if(e.type==='click'&&lastStageTapHandledByTouch){
-      // Bu click, biraz önceki touchend'in senkron yankısı — yok say.
-      return;
-    }
+  if(!e)return;
+  // touchend'i mouse/click event'inin çift tetiklenmesini önlemek için işaretle,
+  // ama preventDefault ÇAĞIRMA — bunu yapmak sonraki senkron click'i (ve onunla
+  // birlikte #callOverlay'in kontrol aç/kapa mantığını) tamamen iptal ediyordu.
+  if(e.type==='touchend'){
+    lastStageClickWasTouch=true;
+    setTimeout(()=>{lastStageClickWasTouch=false},600);
+  }else if(e.type==='click'&&lastStageClickWasTouch){
+    return; // bu click, az önceki touchend'in senkron yankısı — tekrar sayma
   }
   const now=Date.now();
   if(now-lastStageTapTs<350&&now-lastStageTapTs>30){
     lastStageTapTs=0;
-    stageDoubleTapConsumed=true;
     switchCamera();
   }else{
     lastStageTapTs=now;
