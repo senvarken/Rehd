@@ -3191,6 +3191,11 @@ function startVideoHealthCheck(pc){
       });
       const vid=document.getElementById('remoteVid');
       const track=vid.srcObject?.getVideoTracks()[0];
+      const ph=document.getElementById('remotePlaceholder');
+      const lv=document.getElementById('localVid');
+      const ov=document.getElementById('callOverlay');
+      const phCs=getComputedStyle(ph),lvCs=getComputedStyle(lv),vidCs=getComputedStyle(vid);
+      const phR=ph.getBoundingClientRect(),lvR=lv.getBoundingClientRect(),vidR=vid.getBoundingClientRect();
       // Konsola otomatik yazdır — kullanıcı hiçbir şey yazmadan sadece
       // Console sekmesini ekran görüntüsü alarak bu bilgiyi paylaşabilsin.
       console.log('[VIDEO-TANI]',JSON.stringify({
@@ -3201,8 +3206,14 @@ function startVideoHealthCheck(pc){
         packetsReceived:inbound?.packetsReceived,bytesReceived:inbound?.bytesReceived,
         packetsLost:inbound?.packetsLost,
         outFramesSent:outbound?.framesSent,outBytesSent:outbound?.bytesSent,
-        localCandType:candPair?.localCandidateId,remoteCandType:candPair?.remoteCandidateId,
-        currentRTT:candPair?.currentRoundTripTime
+        overlayClasses:ov.className,
+        vidRect:{w:Math.round(vidR.width),h:Math.round(vidR.height),top:Math.round(vidR.top),left:Math.round(vidR.left)},
+        vidCss:{display:vidCs.display,opacity:vidCs.opacity,zIndex:vidCs.zIndex,visibility:vidCs.visibility},
+        placeholderClasses:ph.className,
+        placeholderCss:{display:phCs.display,opacity:phCs.opacity,zIndex:phCs.zIndex},
+        placeholderRect:{w:Math.round(phR.width),h:Math.round(phR.height)},
+        localVidRect:{w:Math.round(lvR.width),h:Math.round(lvR.height),top:Math.round(lvR.top),left:Math.round(lvR.left)},
+        localVidCss:{display:lvCs.display,opacity:lvCs.opacity,zIndex:lvCs.zIndex}
       }));
       const hasFrames=(inbound&&inbound.framesDecoded>0)||(vid&&vid.videoWidth>0);
       if(!hasFrames){
