@@ -387,9 +387,15 @@ svg#loveArrow{width:26px!important;height:14px!important;display:block!important
 .hd-passive-loc b{color:rgba(255,255,255,.85);font-weight:600}
 .hd-passive-loc a{color:var(--rose,#e8577e);font-weight:700;cursor:pointer;text-decoration:underline}
 .sm-btn:hover{background:rgba(192,57,90,.3)}
-#msgInput{flex:1;max-height:90px;min-height:38px;background:rgba(255,255,255,.06);border:1.5px solid rgba(242,196,206,.14);border-radius:19px;padding:9px 14px;color:#fff;font-size:.92rem;font-family:var(--font-body);font-weight:500;resize:none;outline:none;line-height:1.4;overflow-y:auto;transition:border-color .2s}
+#msgInputWrap{flex:1;position:relative;display:flex;align-items:center;min-width:0}
+#msgInput{width:100%;flex:1;max-height:90px;min-height:38px;background:rgba(255,255,255,.06);border:1.5px solid rgba(242,196,206,.14);border-radius:19px;padding:9px 74px 9px 14px;color:#fff;font-size:.92rem;font-family:var(--font-body);font-weight:500;resize:none;outline:none;line-height:1.4;overflow-y:auto;transition:border-color .2s}
 #msgInput::placeholder{color:rgba(255,255,255,.28)}
 #msgInput:focus{border-color:var(--bright)}
+.mi-btn{position:absolute;bottom:3px;width:32px;height:32px;border-radius:50%;border:none;cursor:pointer;background:rgba(255,255,255,.08);color:var(--blush);display:flex;align-items:center;justify-content:center;font-size:16px;line-height:1;flex-shrink:0}
+.mi-btn:active{background:rgba(255,255,255,.16)}
+.mi-btn .icon{width:16px;height:16px}
+#locBtn.mi-btn{right:40px}
+#dictateBtn.mi-btn{right:4px}
 .send-btn{width:42px;height:42px;border-radius:50%;border:none;cursor:pointer;background:linear-gradient(135deg,var(--bright),var(--mid));color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 4px 14px rgba(192,57,90,.45);transition:transform .15s}
 .send-btn:active{transform:scale(.9)}
 #sendBtn{display:none}
@@ -407,8 +413,9 @@ svg#loveArrow{width:26px!important;height:14px!important;display:block!important
 #voiceRecOverlay.cancel-zone .vr-hint{color:#ff8a9a}
 
 /* ── Dikte aktifken input çubuğu WhatsApp gibi tam genişlikte büyür ── */
-#inputBar.dictating .sm-btn,#inputBar.dictating #sendBtn,#inputBar.dictating #voiceMicBtn{display:none!important}
-#inputBar.dictating #msgInput{flex:1;max-height:150px}
+#inputBar.dictating>.sm-btn,#inputBar.dictating #sendBtn,#inputBar.dictating #voiceMicBtn{display:none!important}
+#inputBar.dictating #locBtn{display:none!important}
+#inputBar.dictating #msgInput{max-height:150px;padding-right:44px}
 
 /* ── DİKTE (KONUŞMA→METİN) ── */
 #dictateBtn.listening{background:rgba(255,71,87,.35);color:#ff8a9a;animation:micPulse 1.1s ease-in-out infinite}
@@ -859,18 +866,20 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
   <button class="sm-btn" onclick="toggleEmoji()"><svg class="icon"><use href="#i-emoji"/></svg></button>
   <button class="sm-btn" onclick="document.getElementById('fileIn').click()"><svg class="icon"><use href="#i-paperclip"/></svg></button>
   <input type="file" id="fileIn" accept="image/*,video/*" style="display:none" onchange="sendMedia(this)"/>
-  <button class="sm-btn" id="locBtn" onclick="sendLocation()"
-    onpointerdown="locBtnPointerDown()" onpointerup="locBtnPointerUp()" onpointerleave="locBtnPointerUp()"
-    title="Konum Gönder (basılı tut: Canlı Konum)" style="font-size:19px;line-height:1">📍</button>
+  <div id="msgInputWrap">
+    <textarea id="msgInput" placeholder="Bir şeyler yaz tatlım…" rows="1"
+      oninput="autoResize(this);onTyping();toggleSendMicBtn()"
+      onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMsg()}"></textarea>
+    <button class="mi-btn" id="locBtn" onclick="sendLocation()"
+      onpointerdown="locBtnPointerDown()" onpointerup="locBtnPointerUp()" onpointerleave="locBtnPointerUp()"
+      title="Konum Gönder (basılı tut: Canlı Konum)">📍</button>
+    <button class="mi-btn" id="dictateBtn" onclick="toggleDictation()"
+      title="Konuşarak yaz (metne çevir)"><svg class="icon"><use href="#i-dictate"/></svg></button>
+  </div>
   <div id="liveLocMenu">
     <button onclick="sendLocation();closeLiveLocMenu()"><span class="llm-ico">📍</span>Tek seferlik konum gönder</button>
     <button onclick="startLiveLocation();closeLiveLocMenu()"><span class="llm-ico">🔴</span>Canlı konum paylaş</button>
   </div>
-  <button class="sm-btn" id="dictateBtn" onclick="toggleDictation()"
-    title="Konuşarak yaz (metne çevir)"><svg class="icon"><use href="#i-dictate"/></svg></button>
-  <textarea id="msgInput" placeholder="Bir şeyler yaz tatlım…" rows="1"
-    oninput="autoResize(this);onTyping();toggleSendMicBtn()"
-    onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMsg()}"></textarea>
   <button class="send-btn" id="sendBtn" onclick="sendMsg()"><svg class="icon"><use href="#i-send"/></svg></button>
   <button class="send-btn" id="voiceMicBtn"
     onpointerdown="micPointerDown(event)" onpointerup="micPointerUp(event)" onpointerleave="micPointerCancel(event)" onpointercancel="micPointerCancel(event)"
