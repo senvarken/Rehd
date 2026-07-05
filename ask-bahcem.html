@@ -3145,6 +3145,9 @@ function handleCallOverlayClick(e){
     if(!ov.classList.contains('controls-hidden'))scheduleControlsHide();
     return;
   }
+  // Çift dokunuşun ikinci vuruşu kamera değiştirmeyi tetiklediyse, kontrolleri
+  // aç/kapa yapma (yoksa çift tıkta ekran titremiş gibi görünür).
+  if(stageDoubleTapConsumed){stageDoubleTapConsumed=false;return}
   // Boş ekrana (video alanına) dokunma → butonları aç/kapat.
   if(ov.classList.contains('controls-hidden'))showCallControls();
   else hideCallControls();
@@ -3263,11 +3266,14 @@ function selfVidPointerUp(){
 }
 let lastStageTapTs=0;
 let lastStageTapHandledByTouch=false;
+let stageDoubleTapConsumed=false;
 function handleStageTap(e){
   // Mobilde touchend + senkron click ikisi de tetiklenmesin diye touchend'de
   // varsayılan davranış engellenir (click'in tekrar tetiklenmesini önler).
+  // NOT: propagation durdurulmuyor — tek dokunuşun #callOverlay'e ulaşıp
+  // kontrolleri aç/kapa yapması gerekiyor, sadece burada mükerrer sayımı
+  // (touchend + senkron click) engelliyoruz.
   if(e){
-    e.stopPropagation(); // #callOverlay'in kendi click handler'ına (kontrol gizle/göster) sızmasın
     if(e.type==='touchend'){
       if(e.cancelable)e.preventDefault();
       lastStageTapHandledByTouch=true;
@@ -3280,6 +3286,7 @@ function handleStageTap(e){
   const now=Date.now();
   if(now-lastStageTapTs<350&&now-lastStageTapTs>30){
     lastStageTapTs=0;
+    stageDoubleTapConsumed=true;
     switchCamera();
   }else{
     lastStageTapTs=now;
