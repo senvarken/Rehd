@@ -466,7 +466,7 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
 .call-ph-pulse span:nth-child(2){animation-delay:.2s}.call-ph-pulse span:nth-child(3){animation-delay:.4s}
 @keyframes callPulse{0%,100%{opacity:.25;transform:scale(.8)}50%{opacity:1;transform:scale(1.15)}}
 
-.call-top-bar{position:absolute;top:0;left:0;right:0;padding:16px 18px;padding-top:max(16px,env(safe-area-inset-top));display:flex;align-items:center;justify-content:space-between;z-index:5;background:linear-gradient(to bottom,rgba(0,0,0,.55),transparent)}
+.call-top-bar{position:absolute;top:0;left:0;right:0;padding:16px 18px;padding-top:max(16px,env(safe-area-inset-top));display:flex;align-items:center;justify-content:space-between;z-index:5;background:linear-gradient(to bottom,rgba(0,0,0,.55),transparent);opacity:1;transition:opacity .25s ease;pointer-events:auto}
 .call-top-info{display:flex;flex-direction:column}
 .call-name{font-weight:700;font-size:.95rem;color:#fff}
 .call-timer{font-size:.78rem;color:rgba(255,255,255,.7);letter-spacing:.5px}
@@ -479,12 +479,26 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
 /* küçük ekrandaki "swap" dokunma ipucu rozeti */
 #swapHint{position:absolute;top:88px;right:8px;z-index:10;background:rgba(0,0,0,.52);color:#fff;font-size:.6rem;font-weight:700;padding:2px 6px;border-radius:8px;pointer-events:none;opacity:0;transition:opacity .3s;letter-spacing:.3px}
 
-.call-bottom-bar{position:absolute;bottom:0;left:0;right:0;padding:22px 20px;padding-bottom:max(28px,env(safe-area-inset-bottom));display:flex;align-items:center;justify-content:center;gap:18px;z-index:5;background:linear-gradient(to top,rgba(0,0,0,.6),transparent)}
+.call-bottom-bar{position:absolute;bottom:0;left:0;right:0;padding:22px 20px;padding-bottom:max(28px,env(safe-area-inset-bottom));display:flex;align-items:center;justify-content:center;gap:18px;z-index:5;background:linear-gradient(to top,rgba(0,0,0,.6),transparent);opacity:1;transition:opacity .25s ease;pointer-events:auto}
 .cc-btn{width:56px;height:56px;border-radius:50%;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .15s,background .15s;background:rgba(255,255,255,.14);color:#fff;backdrop-filter:blur(10px)}
 .cc-btn:active{transform:scale(.9)}
 .cc-btn.end{background:#e53950;width:64px;height:64px}
 .cc-btn.muted{background:rgba(255,255,255,.28);color:#fff}
 .cc-btn.off{background:rgba(255,255,255,.28)}
+
+/* Görüşme sırasında butonlar — 5sn hareketsizlikte kendiliğinden gizlenir,
+   ekrana dokununca tekrar açılır/kapanır. Sürüklenebilir küçük (minimized/pip)
+   halde bu mantık zaten devre dışı (ayrı kurallarla her zaman gizli). */
+#callOverlay.controls-hidden .call-top-bar,
+#callOverlay.controls-hidden .call-bottom-bar{opacity:0;pointer-events:none}
+#callOverlay.controls-hidden #swapHint{opacity:0!important}
+
+/* Yeniden bağlanma bandı — ağ değişimi/kopması sırasında görüntü akışı
+   kesilse bile kullanıcıyı bilgilendirir, görüşmeyi kapatmaz. */
+.call-reconnect-banner{position:absolute;top:0;left:0;right:0;display:flex;justify-content:center;padding-top:max(64px,calc(env(safe-area-inset-top) + 60px));z-index:7;pointer-events:none;opacity:0;transition:opacity .25s ease}
+.call-reconnect-banner.show{opacity:1}
+.call-reconnect-pill{display:flex;align-items:center;gap:8px;background:rgba(20,6,12,.72);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:#fff;font-size:.78rem;font-weight:600;padding:8px 16px;border-radius:20px;border:1px solid rgba(255,255,255,.14);box-shadow:0 6px 18px rgba(0,0,0,.35)}
+.call-reconnect-pill .call-ph-pulse span{background:var(--gold-soft)}
 
 /* ── INCOMING CALL ── */
 #incomingCall{display:none;position:fixed;inset:0;z-index:360;background:radial-gradient(ellipse at 50% 20%,#3d0a1e,#0a0507 80%);align-items:center;justify-content:center;flex-direction:column}
@@ -792,7 +806,7 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
 </div>
 
 <!-- VIDEO CALL — Instagram style -->
-<div id="callOverlay" onclick="handleCallOverlayClick()" onpointerdown="pipPointerDown(event)">
+<div id="callOverlay" onclick="handleCallOverlayClick(event)" onpointerdown="pipPointerDown(event)">
   <div class="call-min-bar" onclick="event.stopPropagation()">
     <button class="call-min-end" onclick="endCall()">✕</button>
   </div>
@@ -810,6 +824,12 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
       <div class="call-timer" id="callTimerEl">00:00</div>
     </div>
     <button class="call-minimize" onclick="event.stopPropagation();minimizeCall()" title="Arka plana al"><svg class="icon icon-sm"><use href="#i-chevron-down"/></svg></button>
+  </div>
+  <div class="call-reconnect-banner" id="callReconnectBanner">
+    <div class="call-reconnect-pill">
+      <span class="call-ph-pulse"><span></span><span></span><span></span></span>
+      <span id="callReconnectText">Yeniden bağlanıyor…</span>
+    </div>
   </div>
   <video id="localVid" autoplay playsinline muted onpointerdown="selfVidPointerDown(event)"></video>
   <div id="swapHint">↕ değiştir</div>
@@ -2847,6 +2867,20 @@ function listenCallSignal(){
     if(seenSigDocs.has(sigKey))return;
     seenSigDocs.add(sigKey);
     if(d.type==='offer'){
+      // Ağ geçişi/ICE yeniden başlatma sırasında karşı taraf (arayan) yeni bir
+      // "renegotiate" offer'ı gönderir — bu YENİ bir arama değildir, mevcut
+      // görüşmeyi kapatıp "gelen arama" ekranını açmak yerine sessizce yeni
+      // bir answer ile karşılık verilir; görüşme hiç kesintiye uğramaz.
+      if(d.renegotiate&&peerConn&&d.sessionId&&d.sessionId===currentCallSessionId){
+        try{
+          await peerConn.setRemoteDescription(new RTCSessionDescription(d.offer));
+          flushPendingIce();
+          const answer=await peerConn.createAnswer();
+          await peerConn.setLocalDescription(answer);
+          await sigSend({type:'answer',to:d.from,from:myId,answer:{type:answer.type,sdp:answer.sdp},sessionId:currentCallSessionId});
+        }catch(e){}
+        return;
+      }
       if(peerConn){endCallCleanup()}
       pendingIce=[];
       currentCallSessionId=d.sessionId||null;
@@ -2861,8 +2895,9 @@ function listenCallSignal(){
       missedCallTmr=setTimeout(missCall,30000);
     }
     if(d.type==='answer'&&peerConn){
-      await peerConn.setRemoteDescription(new RTCSessionDescription(d.answer));
+      try{await peerConn.setRemoteDescription(new RTCSessionDescription(d.answer))}catch(e){return}
       flushPendingIce();
+      hideReconnectBanner();
       setCallConnectedUI();
     }
     if(d.type==='end'){
@@ -2880,6 +2915,13 @@ function listenCallSignal(){
     if(d.type==='missed'){
       showToast('Cevapsız arama','warn');
       endCallCleanup();
+    }
+    if(d.type==='renegotiate-request'&&peerConn&&iAmCaller&&d.sessionId===currentCallSessionId){
+      // Karşı taraf (aranan) ağ değiştirdi, yeni offer/answer ile ICE'in
+      // yeniden kurulmasını istiyor — sadece arayan offer gönderebildiği için
+      // bu isteği burada karşılıyoruz.
+      showReconnectBanner();
+      try{peerConn.restartIce&&peerConn.restartIce()}catch(e){}
     }
   });
 }
@@ -2969,10 +3011,48 @@ function restoreCall(){
   const ov=document.getElementById('callOverlay');
   ov.classList.remove('minimized');
   ov.style.left='';ov.style.top='';ov.style.right='';ov.style.bottom='';
+  showCallControls();
 }
-function handleCallOverlayClick(){
+
+/* ═══════════════════════════════════════
+   GÖRÜŞME BUTONLARI — otomatik gizleme
+   Instagram/WhatsApp tarzı: görüşme sırasında üst/alt butonlar gizli kalır,
+   ekrana (video alanına) dokununca açılır/kapanır, 5 saniye hiçbir işlem
+   yapılmazsa kendiliğinden tekrar gizlenir. Butonların/panelin üzerine
+   dokunmak sadece görünme süresini uzatır, açık/kapalı durumunu değiştirmez.
+═══════════════════════════════════════ */
+let controlsHideTmr=null;
+function scheduleControlsHide(){
+  clearTimeout(controlsHideTmr);
+  controlsHideTmr=setTimeout(()=>{
+    document.getElementById('callOverlay').classList.add('controls-hidden');
+  },5000);
+}
+function showCallControls(){
   const ov=document.getElementById('callOverlay');
-  if(ov.classList.contains('minimized')&&!pipJustDragged)restoreCall();
+  if(ov.classList.contains('minimized'))return;
+  ov.classList.remove('controls-hidden');
+  scheduleControlsHide();
+}
+function hideCallControls(){
+  clearTimeout(controlsHideTmr);
+  document.getElementById('callOverlay').classList.add('controls-hidden');
+}
+function handleCallOverlayClick(e){
+  const ov=document.getElementById('callOverlay');
+  if(ov.classList.contains('minimized')){
+    if(!pipJustDragged)restoreCall();
+    return;
+  }
+  // Butonlara, üst bara, sohbet paneline dokunulduysa: sadece süreyi uzat,
+  // açık/kapalı durumunu değiştirme (buton kendi işlemini zaten yaptı).
+  if(e&&e.target&&e.target.closest&&e.target.closest('.cc-btn,.call-top-bar,#callChatPanel,.call-min-bar')){
+    if(!ov.classList.contains('controls-hidden'))scheduleControlsHide();
+    return;
+  }
+  // Boş ekrana (video alanına) dokunma → butonları aç/kapat.
+  if(ov.classList.contains('controls-hidden'))showCallControls();
+  else hideCallControls();
 }
 
 /* ── PiP (küçük görüşme balonu) sürükleyerek konumlandırma ── */
@@ -3153,6 +3233,7 @@ async function startCall(){
   ovStart.classList.add('open');
   document.getElementById('callInfo').textContent=nm;
   startCallTimer();
+  showCallControls();
 }
 
 async function acceptCall(){
@@ -3192,6 +3273,7 @@ async function acceptCall(){
   callConnected=true;
   clearTimeout(missedCallTmr);
   startCallTimer();
+  showCallControls();
 }
 
 async function flushPendingIce(){
@@ -3284,31 +3366,59 @@ function createPC(){
   pc.onicecandidate=async e=>{
     if(e.candidate)await sigSend({type:'ice',to:callPeerId,from:myId,candidate:e.candidate.toJSON(),sessionId:currentCallSessionId});
   };
+  // restartIce() tek başına yeni ICE adayları toplanmasını TETİKLER ama karşı
+  // tarafa yeni bir offer gönderilmezse bağlantı gerçekte yeniden kurulmaz.
+  // negotiationneeded olayı tam bunun için var: sadece arayan taraf (iAmCaller)
+  // yeni bir offer üretip gönderir, arananın cevabı normal 'answer' akışıyla
+  // işlenir. Böylece mobil veri ↔ wifi geçişlerinde görüşme koparmadan,
+  // arka planda kendini yeniden kurar.
+  pc._negotiating=false;
+  pc.onnegotiationneeded=async()=>{
+    if(!peerConn||peerConn!==pc||!iAmCaller||pc._negotiating)return;
+    // İlk offer/answer kurulumu henüz tamamlanmadıysa (currentLocalDescription
+    // yoksa) bu, startCall()'ın zaten kendi elle gönderdiği ilk offer'dır —
+    // burada tekrar göndermeye çalışmak çift offer/yarış durumuna sebep olur.
+    // Sadece gerçek bir yeniden-bağlanma (ör. ICE restart) söz konusu olduğunda,
+    // yani ilk el sıkışma zaten tamamlanmışken tetiklenir.
+    if(!pc.currentLocalDescription||!pc.currentRemoteDescription)return;
+    try{
+      pc._negotiating=true;
+      const offer=await pc.createOffer({iceRestart:true});
+      await pc.setLocalDescription(offer);
+      await sigSend({type:'offer',to:callPeerId,from:myId,fromName:myName,fromEmoji:myEmoji,offer:{type:offer.type,sdp:offer.sdp},sessionId:currentCallSessionId,renegotiate:true});
+    }catch(e){}
+    finally{pc._negotiating=false}
+  };
   // Bağlantı koptuğunda/donduğunda otomatik temizlik — karşı tarafın ekranı
   // sonsuza dek "bağlanıyor" durumunda takılı kalmasın. "disconnected" anında
-  // önce sessizce ICE yeniden başlatmayı dener (kasma/donma toparlansın),
-  // toparlanmazsa görüşmeyi düzgünce kapatır.
+  // önce sessizce ICE yeniden başlatmayı dener (kasma/donma ya da mobil veri↔
+  // wifi geçişi toparlansın), sadece uzun süre toparlanmazsa görüşmeyi kapatır.
+  // Süre kasıtlı olarak biraz uzun tutuldu (18sn) — ağ geçişlerinde yeni IP/ICE
+  // adaylarının toplanıp karşıya iletilmesi birkaç saniye sürebiliyor; kısa
+  // tutulursa geçiş sırasında görüşme gereksiz yere sonlanıyordu.
   pc.oniceconnectionstatechange=()=>{
     if(!peerConn)return;
     const st=pc.iceConnectionState;
     if(st==='connected'||st==='completed'){
       clearTimeout(pc._dcTmr);
+      hideReconnectBanner();
       setCallConnectedUI();
       startVideoHealthCheck(pc);
     }
     if(st==='failed'){
+      showReconnectBanner();
       try{pc.restartIce&&pc.restartIce()}catch(e){}
     }
     if(st==='disconnected'){
-      document.getElementById('callPhStatusText').textContent='Yeniden bağlanılıyor…';
+      showReconnectBanner();
       try{pc.restartIce&&pc.restartIce()}catch(e){}
       clearTimeout(pc._dcTmr);
       pc._dcTmr=setTimeout(()=>{
-        if(pc.iceConnectionState==='disconnected'){
+        if(pc.iceConnectionState==='disconnected'||pc.iceConnectionState==='failed'){
           showToast('Bağlantı koptu','warn');
           endCallCleanup();
         }
-      },8000);
+      },18000);
     }
     if(st==='closed'){clearTimeout(pc._dcTmr)}
   };
@@ -3317,11 +3427,61 @@ function createPC(){
   // aslında kopmuş görüşmeleri daha hızlı yakalar.
   pc.onconnectionstatechange=()=>{
     if(!peerConn)return;
+    if(pc.connectionState==='connected')hideReconnectBanner();
+    if(pc.connectionState==='disconnected')showReconnectBanner();
     if(pc.connectionState==='failed'){
+      showReconnectBanner();
       try{pc.restartIce&&pc.restartIce()}catch(e){}
     }
   };
   return pc;
+}
+function showReconnectBanner(){
+  document.getElementById('callPhStatusText').textContent='Yeniden bağlanılıyor…';
+  const b=document.getElementById('callReconnectBanner');
+  if(b)b.classList.add('show');
+}
+function hideReconnectBanner(){
+  const b=document.getElementById('callReconnectBanner');
+  if(b)b.classList.remove('show');
+}
+
+/* ═══════════════════════════════════════
+   AĞ DEĞİŞİMİ — mobil veri ↔ wifi geçişleri
+   Tarayıcı ağ arayüzünü değiştirdiğinde (örn. wifi'ye bağlanınca/kesilince)
+   WebRTC bağlantısı genelde kendiliğinden "disconnected"a düşer. Bunu pasif
+   şekilde beklemek yerine değişimi anında yakalayıp ICE'i proaktif olarak
+   yeniden başlatıyoruz — böylece görüşme kapanmaz, sadece kısa bir "yeniden
+   bağlanıyor" göstergesiyle akışına devam eder ve yayın (localStream) hiç
+   durdurulmaz.
+═══════════════════════════════════════ */
+let netRestartTmr=null;
+function handleNetworkChange(){
+  if(!peerConn||!callPeerId)return;
+  clearTimeout(netRestartTmr);
+  showReconnectBanner();
+  // Arayüz değişimi tamamlanıp yeni bağlantı stabilize olsun diye kısa bir
+  // gecikme sonrası ICE'i yeniden başlatıyoruz (anında denemek bazı
+  // cihazlarda henüz hazır olmayan arayüzde başarısız oluyor).
+  netRestartTmr=setTimeout(()=>{
+    if(!peerConn)return;
+    if(iAmCaller){
+      // Arayan taraf: kendi ICE'ini yeniden başlatması yeterli, onnegotiationneeded
+      // yeni offer'ı otomatik gönderir.
+      try{peerConn.restartIce&&peerConn.restartIce()}catch(e){}
+    }else{
+      // Aranan taraf: yeni ICE kimlik bilgileri ancak yeni bir offer/answer ile
+      // karşıya iletilebilir, ve offer'ı sadece arayan gönderebilir (çakışmayı
+      // önlemek için). O yüzden burada kendi ICE'imizi sessizce yeniden
+      // başlatmak yerine arayan taraftan yeniden bağlanmasını istiyoruz.
+      sigSend({type:'renegotiate-request',to:callPeerId,from:myId,sessionId:currentCallSessionId}).catch(()=>{});
+    }
+  },600);
+}
+window.addEventListener('online',handleNetworkChange);
+window.addEventListener('offline',()=>{if(peerConn&&callPeerId)showReconnectBanner()});
+if(navigator.connection&&navigator.connection.addEventListener){
+  navigator.connection.addEventListener('change',handleNetworkChange);
 }
 
 async function rejectCall(){
@@ -3368,6 +3528,10 @@ function endCallCleanup(){
   document.getElementById('callOverlay').classList.remove('open');
   document.getElementById('callOverlay').classList.remove('minimized');
   document.getElementById('callOverlay').classList.remove('dragging');
+  document.getElementById('callOverlay').classList.remove('controls-hidden');
+  clearTimeout(controlsHideTmr);
+  hideReconnectBanner();
+  clearTimeout(netRestartTmr);
   document.getElementById('callOverlay').style.left='';
   document.getElementById('callOverlay').style.top='';
   document.getElementById('callOverlay').style.right='';
