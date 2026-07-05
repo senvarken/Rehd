@@ -1593,13 +1593,39 @@ document.addEventListener('click',e=>{
   const menu=document.getElementById('hdMoreMenu');
   if(menu&&menu.classList.contains('open')&&!e.target.closest('.hd-more-wrap'))menu.classList.remove('open');
 });
+
+/* ── Verileri Temizle (Güncelle) ──
+   Eski cihazlarda service worker / tarayıcı önbelleği yüzünden güncellemeler
+   gecikebiliyor. Bu buton service worker kayıtlarını söker, Cache Storage'ı
+   tamamen temizler ve sayfayı önbellek atlayarak yeniden yükler.
+   Giriş bilgisi ve sohbet geçmişi SİLİNMEZ (localStorage/Firebase'e dokunulmaz). */
+async function clearAppDataAndReload(){
+  if(!confirm('Uygulama önbelleği temizlenip en güncel sürüm yeniden yüklenecek. Giriş bilgin ve sohbet geçmişin silinmez. Devam edilsin mi?'))return;
+  showToast('Veriler temizleniyor, güncelleniyor…','info');
+  try{
+    if('serviceWorker' in navigator){
+      const regs=await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r=>r.unregister()));
+    }
+  }catch(e){console.error('SW unregister error:',e);}
+  try{
+    if('caches' in window){
+      const keys=await caches.keys();
+      await Promise.all(keys.map(k=>caches.delete(k)));
+    }
+  }catch(e){console.error('Cache clear error:',e);}
+  setTimeout(()=>{
+    location.href=location.pathname+'?_r='+Date.now();
+  },400);
+}
 function buildHdMoreMenu(role){
   const menu=document.getElementById('hdMoreMenu');
   if(!menu)return;
   menu.innerHTML=`<button onclick="toggleHdMore();confirmClearAll()"><svg class="icon icon-sm"><use href="#i-trash"/></svg><span>Sohbeti Temizle</span></button>
     <button id="soundToggleBtn" onclick="toggleHdMore();toggleSound()"><svg class="icon icon-sm"><use href="#i-bell"/></svg><span>Bildirim Sesi</span></button>
     <button id="pushToggleBtn" onclick="toggleHdMore();togglePush()"><svg class="icon icon-sm"><use href="#i-bell"/></svg><span>Kapalıyken Bildirim</span></button>
-    <button onclick="toggleHdMore();manualInstall()"><svg class="icon icon-sm"><use href="#i-download"/></svg><span>Uygulama Olarak Ekle</span></button>`;
+    <button onclick="toggleHdMore();manualInstall()"><svg class="icon icon-sm"><use href="#i-download"/></svg><span>Uygulama Olarak Ekle</span></button>
+    <button onclick="toggleHdMore();clearAppDataAndReload()"><svg class="icon icon-sm"><use href="#i-refresh"/></svg><span>Verileri Temizle (Güncelle)</span></button>`;
   if(role==='admin'){
     menu.innerHTML+=`<button id="passiveLocToggleBtn" onclick="toggleHdMore();togglePassiveLocationSharing()"><span style="font-size:1.05em;width:18px;text-align:center;flex-shrink:0">📍</span><span id="passiveLocToggleLabel">Konum Paylaşımı: Kapalı</span></button>
     <button onclick="toggleHdMore();openAdminSettings()"><svg class="icon icon-sm"><use href="#i-gear"/></svg><span>Ayarlar</span></button>`;
