@@ -3731,7 +3731,11 @@ async function confirmDocumentSend(){
       ...(replyTo?{replyTo:{id:replyTo.id,text:replySnippet(replyTo),senderName:replyTo.senderName||'',senderId:replyTo.senderId||''}}:{})
     });
     updateRoomMeta(`📄 ${file.name}`);
-  }catch(e){console.error(e);showToast('Dosya yüklenemedi','error')}
+  }catch(e){
+    console.error(e);
+    const detail=(e&&e.message)?e.message:'bilinmeyen hata';
+    showToast(`Dosya yüklenemedi: ${detail}`,'error');
+  }
   removeUploadPlaceholder(placeholderRow);
   showUpload(false);
 }
@@ -3765,7 +3769,14 @@ function uploadRawToCloudinary(file,onProgress){
     xhr.onload=()=>{
       if(xhr.status>=200&&xhr.status<300){
         try{const data=JSON.parse(xhr.responseText);resolve(data.secure_url)}catch(e){reject(e)}
-      }else{reject(new Error('Cloudinary raw upload failed: '+xhr.status))}
+      }else{
+        let msg='Cloudinary raw upload failed: '+xhr.status;
+        try{
+          const errData=JSON.parse(xhr.responseText);
+          if(errData&&errData.error&&errData.error.message)msg+=' - '+errData.error.message;
+        }catch(_){}
+        reject(new Error(msg));
+      }
     };
     xhr.onerror=()=>reject(new Error('Network error'));
     xhr.send(fd);
