@@ -409,6 +409,10 @@ svg#loveArrow{width:26px!important;height:14px!important;display:block!important
 
 /* ── TYPING ── */
 #typing{display:none;padding:2px 16px 8px;color:var(--blush);font-size:.78rem;font-style:italic;font-family:var(--font-display);align-items:center;gap:4px}
+#newMsgPill{display:none;position:absolute;left:50%;bottom:78px;transform:translateX(-50%);z-index:40;align-items:center;gap:6px;padding:8px 16px;border-radius:20px;border:none;background:var(--bright);color:#fff;font-size:.78rem;font-weight:700;box-shadow:0 4px 14px rgba(0,0,0,.35);cursor:pointer;animation:newMsgPillIn .22s ease-out}
+#newMsgPill.show{display:flex}
+#newMsgPill .icon-sm{width:15px;height:15px}
+@keyframes newMsgPillIn{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
 .tdots{display:inline-flex;gap:3px;align-items:center;margin-left:2px}
 .tdots span{width:5px;height:5px;border-radius:50%;background:var(--bright);animation:db .9s infinite}
 .tdots span:nth-child(2){animation-delay:.15s}.tdots span:nth-child(3){animation-delay:.3s}
@@ -958,6 +962,10 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
       <div class="empty-chat-title">Mesaj bekleniyor…</div>
     </div>
   </div>
+  <button id="newMsgPill" onclick="scrollToBottomAndClearPill()">
+    <svg class="icon icon-sm"><use href="#i-chevron-down"/></svg>
+    <span id="newMsgPillText">Yeni mesaj</span>
+  </button>
   <div id="typing"><span id="typingName"></span>&nbsp;yazıyor<span class="tdots"><span></span><span></span><span></span></span></div>
 </div>
 
@@ -2471,6 +2479,7 @@ function openChatUI(){
   document.getElementById('chatWrap').style.display='flex';
   document.getElementById('inputBar').style.display='flex';
   if(isAdmin)document.getElementById('reactionBar').style.display='flex';
+  initChatScrollTracking();
 }
 
 /* ═══════════════════════════════════════
@@ -2523,6 +2532,7 @@ function listenMessages(){
   revealedDeleted=new Set();
   deletedStateMap=new Map();
   viewCountStateMap=new Map();
+  hideNewMsgPill();
   const {db,collection,query,orderBy,onSnapshot,limit}=fb;
   const q=query(collection(db,`rooms/${activeRoom}/messages`),orderBy('ts','asc'),limit(300));
   unsubMsg=onSnapshot(q,snap=>{
@@ -2586,15 +2596,26 @@ function listenMessages(){
       msgs.forEach(m=>renderedMsgIds.add(m.id));
     }else{
       const area=document.getElementById('chatArea');
+      const wasNearBottom=isChatNearBottom();
       let appended=false;
+      let newOnes=[];
       msgs.forEach(m=>{
         if(!renderedMsgIds.has(m.id)){
           renderedMsgIds.add(m.id);
           appendBubble(m,false);
           appended=true;
+          newOnes.push(m);
         }
       });
-      if(appended)scrollBtm();
+      if(appended){
+        const iSentOne=newOnes.some(m=>m.senderId===myId);
+        if(wasNearBottom||iSentOne){
+          scrollBtm();
+          hideNewMsgPill();
+        }else{
+          showNewMsgPill(pendingNewMsgCount+newOnes.length);
+        }
+      }
       if(!area.children.length&&!msgs.length){
         area.innerHTML=`<div class="empty-chat"><div class="icon-xl" style="font-size:44px;line-height:1;filter:none;color:initial">❤️</div><div class="empty-chat-title">İlk mesajı sen yaz…</div></div>`;
       }
@@ -2801,11 +2822,11 @@ function appendBubble(msg,doScroll=true){
     if(hasLimit){
       // WhatsApp'taki gibi: bombalı/limitli medya HEM gönderende HEM alıcıda
       // kilitli "aç" kartı olarak görünür — hiçbir zaman doğrudan resim/video
-      // olarak sohbet ekranında durmaz. Alıcı tarafında hak biterse kalıcı
-      // olarak "görüntülendi" kartına döner; gönderen tarafında ise hakkı
-      // (kaçının kaldığını) her zaman görebilir ve istediği an açabilir.
+      // olarak sohbet ekranında durmaz. Hak (viewLimit) tükendiğinde medya
+      // GÖNDEREN tarafında da kaybolur, sadece alıcıda değil — ikisi de aynı
+      // "görüntülendi" yer tutucusunu görür.
       const remaining=msg.viewLimit-(msg.viewCount||0);
-      const consumed=!isMe&&remaining<=0;
+      const consumed=remaining<=0;
       const card=document.createElement('div');
       card.className='burn-media-card'+(consumed?' consumed':'');
       if(consumed){
@@ -5616,6 +5637,43 @@ function buildCustomVideoPlayer(url){
    UTILS
 ═══════════════════════════════════════ */
 function scrollBtm(){const a=document.getElementById('chatArea');requestAnimationFrame(()=>{a.scrollTop=a.scrollHeight})}
+
+/* ── Sohbeti okurken yukarı kaydırma / "yeni mesaj" rozeti ───────────────
+   Kullanıcı geçmişi okumak için yukarı kaydırmışken yeni mesaj gelirse
+   ekranı zorla en alta indirmiyoruz — bunun yerine altta bir "yeni mesaj"
+   rozeti gösteriyoruz. Kullanıcı zaten en alttaysa (ya da mesajı kendisi
+   gönderdiyse) normal şekilde otomatik en alta kayıyor. */
+let pendingNewMsgCount=0;
+function isChatNearBottom(threshold=120){
+  const a=document.getElementById('chatArea');
+  if(!a)return true;
+  return (a.scrollHeight-a.scrollTop-a.clientHeight)<threshold;
+}
+function showNewMsgPill(count){
+  pendingNewMsgCount=count;
+  const pill=document.getElementById('newMsgPill');
+  const txt=document.getElementById('newMsgPillText');
+  if(!pill||!txt)return;
+  txt.textContent=count>1?`${count} yeni mesaj`:'Yeni mesaj';
+  pill.classList.add('show');
+}
+function hideNewMsgPill(){
+  pendingNewMsgCount=0;
+  const pill=document.getElementById('newMsgPill');
+  if(pill)pill.classList.remove('show');
+}
+function scrollToBottomAndClearPill(){
+  hideNewMsgPill();
+  scrollBtm();
+}
+function initChatScrollTracking(){
+  const a=document.getElementById('chatArea');
+  if(!a||a._scrollTrackingInit)return;
+  a._scrollTrackingInit=true;
+  a.addEventListener('scroll',()=>{
+    if(isChatNearBottom())hideNewMsgPill();
+  });
+}
 function autoResize(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,90)+'px'}
 function toggleEmoji(){document.getElementById('emojiPicker').classList.toggle('open')}
 function ae(e){const i=document.getElementById('msgInput');i.value+=e;i.focus();document.getElementById('emojiPicker').classList.remove('open')}
