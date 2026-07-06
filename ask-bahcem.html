@@ -305,7 +305,7 @@ svg#loveArrow{width:26px!important;height:14px!important;display:block!important
 .empty-chat-title{font-family:var(--font-display);font-size:1.05rem;font-style:italic;font-weight:500}
 
 /* ── BUBBLES ── */
-.msg-row{display:flex;align-items:flex-end;gap:8px;animation:mi .25s cubic-bezier(.16,1,.3,1);content-visibility:auto;contain-intrinsic-size:auto 64px;position:relative}
+.msg-row{display:flex;align-items:flex-end;gap:8px;animation:mi .25s cubic-bezier(.16,1,.3,1);position:relative;overflow:visible}
 .msg-row.me{flex-direction:row-reverse}
 @keyframes mi{from{opacity:0;transform:translateY(12px) scale(.98)}to{opacity:1;transform:none}}
 .av{width:auto;max-width:104px;height:22px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:4px;padding:0 10px;border-radius:11px;font-size:.64rem;font-weight:700;font-family:var(--font-body);letter-spacing:.15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.14);box-shadow:0 1px 5px rgba(0,0,0,.25);position:relative;transition:opacity .15s,margin .15s}
@@ -585,7 +585,8 @@ svg#loveArrow{width:26px!important;height:14px!important;display:block!important
 #emojiPicker span:hover{background:rgba(255,255,255,.1)}
 
 /* ── ADMIN REACTION TOOLBAR ── */
-#reactionBar{display:none;align-items:center;justify-content:center;gap:8px;padding:8px 10px;background:rgba(43,15,28,.7);border-top:1px solid rgba(242,196,206,.06);flex-shrink:0;z-index:10;overflow-x:auto}
+#reactionBar{display:none;align-items:center;justify-content:flex-start;gap:8px;padding:8px 10px;background:rgba(43,15,28,.7);border-top:1px solid rgba(242,196,206,.06);flex-shrink:0;z-index:10;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+#reactionBar::-webkit-scrollbar{display:none}
 .react-btn{border:none;cursor:pointer;background:rgba(255,255,255,.05);border-radius:13px;padding:8px 13px;color:#fff;display:flex;align-items:center;gap:6px;transition:transform .15s,background .15s;font-family:var(--font-body);flex-shrink:0}
 .react-btn:hover{background:rgba(192,57,90,.32);transform:scale(1.05)}
 .react-btn:active{transform:scale(.94)}
@@ -2252,7 +2253,22 @@ function listenAllIncomingMessagesForAdmin(){
   // okunmuyor.
   const q=query(collectionGroup(db,'messages'),orderBy('ts','desc'),limit(30));
   unsubAllMsgs=onSnapshot(q,snap=>{
-    if(allMsgsFirstLoad){allMsgsFirstLoad=false;return}
+    if(allMsgsFirstLoad){
+      allMsgsFirstLoad=false;
+      // İlk yüklemede bildirim/ses tetiklemeden, mevcut okunmamış mesajları
+      // sayıp sidebar rozetlerine yansıt (gerçek okunmamış sayısı gözüksün).
+      snap.docs.forEach(d=>{
+        const msg=d.data();
+        if(!msg||msg.senderId===myId||msg.read===true)return;
+        const roomId=d.ref.parent.parent.id;
+        const otherUid=roomId.split('__').find(id=>id!==myId);
+        if(!otherUid)return;
+        userUnreadMap[otherUid]=(userUnreadMap[otherUid]||0)+1;
+      });
+      renderSidebar(lastPresenceData||{});
+      refreshAppBadge();
+      return;
+    }
     snap.docChanges().forEach(ch=>{
       if(ch.type!=='added')return;
       const msg=ch.doc.data();
@@ -2608,23 +2624,32 @@ function listenMessages(){
     // id'si zaten renderedMsgIds içinde. Bu yüzden herhangi bir mesajın
     // deleted durumu değiştiyse tüm listeyi yeniden çiziyoruz.
     let deletedTransition=false;
+    const isFirstLoad=renderedMsgIds.size===0;
     msgs.forEach(m=>{
-      if(deletedStateMap.get(m.id)!==!!m.deleted)deletedTransition=true;
+      // İlk yüklemede deletedStateMap henüz boş olduğu için karşılaştırma
+      // (undefined !== false) her zaman true dönüp gereksiz yere
+      // deletedTransition'ı tetikliyordu — bu da renderAll(msgs,true) dalına
+      // düşülmesine sebep oluyor, ONA BAĞLI OLARAK bir sonraki mesaj
+      // eklemede de aynı yanlış karşılaştırma tekrar tetiklenip normalde
+      // scroll pozisyonunu koruyup "yeni mesaj" rozeti göstermesi gereken
+      // else dalına hiç girilememesine yol açabiliyordu. İlk yüklemede bu
+      // kontrolü tamamen atlıyoruz.
+      if(!isFirstLoad&&deletedStateMap.get(m.id)!==!!m.deleted)deletedTransition=true;
       // Bomba/limitli medyanın viewCount'u değiştiyse (karşı taraf açtı, hak
       // düştü ya da tükendi) bu mesaj zaten renderedMsgIds içinde olduğu için
       // aşağıdaki "sadece yeni id ekle" optimizasyonu bunu fark etmiyordu —
       // balon eski (tükenmemiş) haliyle ekranda kalıp sonsuz kez açılabiliyordu.
       // deletedTransition'ı burada da tetikleyerek tüm listeyi tazeliyoruz.
-      if(m.viewLimit){
+      if(!isFirstLoad&&m.viewLimit){
         const oldCount=viewCountStateMap.get(m.id);
         const newCount=m.viewCount||0;
-        if(oldCount!==newCount){
+        if(oldCount!==undefined&&oldCount!==newCount){
           deletedTransition=true;
           // Sadece bombayı ATAN kişiye bildirim gönder: karşı taraf medyayı
           // açtığında (viewCount arttığında) "Medya açıldı" / "Medya 2. kez
           // açıldı" gibi bir toast göster. İlk yüklemede (oldCount undefined)
           // ya da kendi mesajımızı biz açtığımızda (senderId!==myId) tetiklenmez.
-          if(oldCount!==undefined&&newCount>oldCount&&m.senderId===myId){
+          if(newCount>oldCount&&m.senderId===myId){
             const typeLabel=m.type==='video'?'Video':'Fotoğraf';
             const text=newCount===1?`👁️ ${typeLabel} açıldı`:`👁️ ${typeLabel} ${newCount}. kez açıldı`;
             showToast(text,'info',3000);
@@ -2674,9 +2699,12 @@ function listenMessages(){
     updateTickStates(msgs);
     updateReactionStates(msgs);
     lastRenderedMsgs=msgs;
-    // Bu sohbet açıkken ve sekme görünürken karşı taraftan gelen okunmamış
-    // mesajları "okundu" olarak işaretle (tikleri yeşile çevirir).
-    if(!document.hidden)markIncomingMessagesRead(msgs);
+    // Bu sohbet açıkken, sekme görünürken VE kullanıcı zaten sohbetin en
+    // altındayken karşı taraftan gelen okunmamış mesajları "okundu" olarak
+    // işaretle. Kullanıcı geçmişi okumak için yukarı kaydırmışken mesajları
+    // görmeden "okundu" yapmak hem yanlış bilgi verir hem de görmediği
+    // mesajın rozetini/sayacını gereksiz yere kapatabilir.
+    if(!document.hidden&&isChatNearBottom())markIncomingMessagesRead(msgs);
   });
 }
 
@@ -3082,8 +3110,14 @@ function openMsgMenu(msg,isMe){
   const menu=document.getElementById('msgActionMenu');
   const overlay=document.getElementById('msgActionOverlay');
   const myReaction=msg.reaction?normalizeReactionEmoji(msg.reaction[myId]):null;
+  // NOT: emoji karakterini doğrudan onclick="...('${e}')" içine gömmek HTML
+  // string kaçışını bozuyordu (bazı emojiler çift tırnak/özel karakterle
+  // JSON.stringify sonucu attribute'u erken kapatıyordu, bu yüzden emojiye
+  // dokununca hiçbir şey olmuyordu). Bunun yerine emoji data-e attribute'una
+  // konur ve tıklama olayı event delegation ile (msgMenuTarget üzerinden)
+  // yakalanır.
   let html=`<div class="msg-menu-react-row">`+REACTION_PICKER_EMOJIS.map(e=>
-    `<span class="${myReaction===e?'mine':''}" onclick="event.stopPropagation();setReaction('${msg.id}',${JSON.stringify(e)});closeMsgMenu()">${e}</span>`
+    `<span class="${myReaction===e?'mine':''}" data-e="${e}">${e}</span>`
   ).join('')+`</div>`;
   html+=`<button onclick="startReply('${msg.id}');closeMsgMenu()"><svg class="icon"><use href="#i-edit"/></svg>Cevapla</button>`;
   html+=`<button onclick="deleteForMe()"><svg class="icon"><use href="#i-trash"/></svg>Benden Sil</button>`;
@@ -3091,6 +3125,14 @@ function openMsgMenu(msg,isMe){
     html+=`<button class="danger" onclick="deleteForEveryone()"><svg class="icon"><use href="#i-trash"/></svg>Herkesten Sil</button>`;
   }
   menu.innerHTML=html;
+  menu.querySelectorAll('.msg-menu-react-row span').forEach(s=>{
+    s.addEventListener('click',ev=>{
+      ev.stopPropagation();
+      const targetId=msg.id;
+      setReaction(targetId,s.dataset.e);
+      closeMsgMenu();
+    });
+  });
   menu.style.left='50%';menu.style.top='50%';menu.style.transform='translate(-50%,-50%)';
   menu.classList.add('open');
   overlay.classList.add('open');
@@ -4273,7 +4315,7 @@ function triggerBomb(type,text,fromName){
     const center=document.getElementById('bombCenter');
     const iconEmoji=BOMB_ICONS[type]||'💋';
     document.getElementById('bcIcon').textContent=iconEmoji;
-    document.getElementById('bcText').textContent=fromName+' gönderdi';
+    document.getElementById('bcText').textContent=text||(fromName+' gönderdi');
 
     overlay.style.display='block';
     center.style.display='flex';
