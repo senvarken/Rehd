@@ -292,8 +292,8 @@ svg#loveArrow{width:26px!important;height:14px!important;display:block!important
 .divider-label::before,.divider-label::after{content:'';flex:1;height:1px;background:rgba(242,196,206,.12)}
 
 /* ── CHAT AREA ── */
-#chatWrap{flex:1;display:none;flex-direction:column;overflow:hidden;position:relative;z-index:1}
-#chatArea{flex:1;overflow-y:auto;padding:16px 12px;display:flex;flex-direction:column;gap:10px;scroll-behavior:smooth}
+#chatWrap{flex:1;display:none;flex-direction:column;overflow:hidden;position:relative;z-index:1;min-height:0}
+#chatArea{flex:1;overflow-y:auto;padding:16px 12px;display:flex;flex-direction:column;gap:10px;scroll-behavior:smooth;min-height:0}
 #chatArea::-webkit-scrollbar{width:3px}
 #chatArea::-webkit-scrollbar-thumb{background:rgba(192,57,90,.3);border-radius:2px}
 .date-div{text-align:center;font-size:.66rem;color:#8a5560;position:relative;margin:10px 0 4px;font-weight:600;letter-spacing:.3px}
@@ -411,10 +411,13 @@ svg#loveArrow{width:26px!important;height:14px!important;display:block!important
 
 /* ── TYPING ── */
 #typing{display:none;padding:2px 16px 8px;color:var(--blush);font-size:.78rem;font-style:italic;font-family:var(--font-display);align-items:center;gap:4px}
-#newMsgPill{display:none;position:absolute;left:50%;bottom:78px;transform:translateX(-50%);z-index:40;align-items:center;gap:6px;padding:8px 16px;border-radius:20px;border:none;background:var(--bright);color:#fff;font-size:.78rem;font-weight:700;box-shadow:0 4px 14px rgba(0,0,0,.35);cursor:pointer;animation:newMsgPillIn .22s ease-out}
+#newMsgPill{display:none;position:absolute;right:14px;left:auto;bottom:78px;transform:none;z-index:40;align-items:center;justify-content:center;width:44px;height:44px;padding:0;border-radius:50%;border:none;background:var(--bright);color:#fff;box-shadow:0 4px 14px rgba(0,0,0,.35);cursor:pointer;animation:newMsgPillIn .22s ease-out}
 #newMsgPill.show{display:flex}
-#newMsgPill .icon-sm{width:15px;height:15px}
-@keyframes newMsgPillIn{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+#newMsgPill .icon-sm{width:20px;height:20px}
+#newMsgPillText{display:none}
+#newMsgPillBadge{display:none;position:absolute;top:-6px;right:-6px;min-width:20px;height:20px;padding:0 5px;border-radius:10px;background:var(--blush,#3a9be8);color:#fff;font-size:.68rem;font-weight:700;align-items:center;justify-content:center;line-height:1;border:2px solid var(--bg,#1c1f26)}
+#newMsgPillBadge.show{display:flex}
+@keyframes newMsgPillIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 .tdots{display:inline-flex;gap:3px;align-items:center;margin-left:2px}
 .tdots span{width:5px;height:5px;border-radius:50%;background:var(--bright);animation:db .9s infinite}
 .tdots span:nth-child(2){animation-delay:.15s}.tdots span:nth-child(3){animation-delay:.3s}
@@ -768,6 +771,38 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
 #upBar{display:none;height:3px;background:rgba(255,255,255,.05);flex-shrink:0;z-index:10;position:relative}
 #upFill{height:100%;background:linear-gradient(90deg,var(--bright),var(--gold));width:0%;transition:width .15s}
 
+/* ── DOSYA (FILE) BALONU ── */
+.file-card{display:flex;align-items:center;gap:11px;min-width:200px;max-width:250px;cursor:pointer;padding:2px}
+.file-ico{width:42px;height:42px;border-radius:12px;background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:1.3rem}
+.file-ico.pdf{background:rgba(229,57,53,.28)}
+.file-ico.doc{background:rgba(66,133,244,.28)}
+.file-ico.sheet{background:rgba(52,168,83,.28)}
+.file-ico.slide{background:rgba(251,140,0,.28)}
+.file-ico.apk{background:rgba(124,179,66,.28)}
+.file-ico.zip{background:rgba(255,193,7,.28)}
+.file-ico.audio{background:rgba(171,71,188,.28)}
+.file-info{min-width:0;flex:1}
+.file-name{font-size:.82rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.file-sub{font-size:.7rem;opacity:.7;margin-top:2px;display:flex;align-items:center;gap:5px}
+.file-dl-btn{width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.14);border:none;color:inherit;display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer}
+.file-dl-btn.loading svg{animation:vSpin .8s linear infinite}
+.file-dl-btn .icon{width:15px;height:15px}
+
+/* ── EK (ATTACH) MENÜSÜ ── */
+#attachMenu{display:none;position:absolute;bottom:66px;left:44px;background:#2b0f1c;border:1px solid rgba(242,196,206,.16);border-radius:16px;padding:7px;z-index:60;flex-direction:column;gap:2px;min-width:190px;box-shadow:var(--shadow-lg)}
+#attachMenu.open{display:flex}
+#attachMenu button{display:flex;align-items:center;gap:10px;background:none;border:none;color:#fff;font-family:var(--font-body);font-size:.85rem;font-weight:600;padding:10px 11px;border-radius:11px;cursor:pointer;text-align:left}
+#attachMenu button:active{background:rgba(255,255,255,.1)}
+#attachMenu .llm-ico{font-size:1.15rem;width:22px;text-align:center}
+
+/* ── DOSYA GÖNDERME ONAY ÇUBUĞU ── */
+#fileConfirmBar{display:none;align-items:center;gap:10px;padding:10px 12px;background:rgba(255,255,255,.05);border-top:1px solid rgba(242,196,206,.14)}
+#fileConfirmBar.open{display:flex}
+#fileConfirmBar .file-card{flex:1;cursor:default}
+#fileConfirmBar .fcb-cancel,#fileConfirmBar .fcb-send{border:none;border-radius:50%;width:38px;height:38px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0}
+#fileConfirmBar .fcb-cancel{background:rgba(255,255,255,.1);color:var(--blush)}
+#fileConfirmBar .fcb-send{background:linear-gradient(135deg,var(--bright),var(--mid));color:#fff}
+
 /* ── ADMIN BADGE ── */
 .admin-crown{color:var(--gold);display:inline-flex;vertical-align:middle;margin-left:2px}
 
@@ -981,7 +1016,8 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
   </div>
   <button id="newMsgPill" onclick="scrollToBottomAndClearPill()">
     <svg class="icon icon-sm"><use href="#i-chevron-down"/></svg>
-    <span id="newMsgPillText">Yeni mesaj</span>
+    <span id="newMsgPillBadge"></span>
+    <span id="newMsgPillText" style="display:none"></span>
   </button>
   <div id="typing"><span id="typingName"></span>&nbsp;yazıyor<span class="tdots"><span></span><span></span><span></span></span></div>
 </div>
@@ -1009,6 +1045,13 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
   <button class="rb-close" onclick="clearReply()"><svg class="icon"><use href="#i-close"/></svg></button>
 </div>
 
+<!-- ═══ DOSYA GÖNDERME ONAY ÇUBUĞU ═══ -->
+<div id="fileConfirmBar">
+  <div class="file-card" id="fcbCard"></div>
+  <button class="fcb-cancel" onclick="cancelDocumentSend()"><svg class="icon"><use href="#i-close"/></svg></button>
+  <button class="fcb-send" onclick="confirmDocumentSend()"><svg class="icon"><use href="#i-send"/></svg></button>
+</div>
+
 <!-- ═══ SESLİ MESAJ KAYIT OVERLAY ═══ -->
 <div id="voiceRecOverlay">
   <div class="vr-dot"></div>
@@ -1022,8 +1065,13 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
 <!-- ═══ INPUT BAR ═══ -->
 <div id="inputBar">
   <button class="sm-btn" onclick="toggleEmoji()"><svg class="icon"><use href="#i-emoji"/></svg></button>
-  <button class="sm-btn" onclick="document.getElementById('fileIn').click()"><svg class="icon"><use href="#i-paperclip"/></svg></button>
+  <button class="sm-btn" id="attachBtn" onclick="event.stopPropagation();toggleAttachMenu()"><svg class="icon"><use href="#i-paperclip"/></svg></button>
   <input type="file" id="fileIn" accept="image/*,video/*" style="display:none" onchange="sendMedia(this)"/>
+  <input type="file" id="docIn" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.json,.zip,.rar,.7z,.apk,.mp3,.m4a,.wav,application/pdf,application/vnd.android.package-archive" style="display:none" onchange="sendDocument(this)"/>
+  <div id="attachMenu">
+    <button onclick="document.getElementById('fileIn').click();closeAttachMenu()"><span class="llm-ico">🖼️</span>Fotoğraf / Video</button>
+    <button onclick="document.getElementById('docIn').click();closeAttachMenu()"><span class="llm-ico">📄</span>Dosya (PDF, APK, vb.)</button>
+  </div>
   <button class="sm-btn" id="cameraBtn" onclick="event.stopPropagation();toggleCameraMenu()"><svg class="icon"><use href="#i-camera"/></svg></button>
   <input type="file" id="cameraPhotoIn" accept="image/*" capture="environment" style="display:none" onchange="sendCameraMedia(this,false)"/>
   <input type="file" id="cameraVideoIn" accept="video/*" capture="environment" style="display:none" onchange="sendCameraMedia(this,true)"/>
@@ -1736,7 +1784,7 @@ function manualInstall(){
    FIREBASE READY
 ═══════════════════════════════════════ */
 window.addEventListener('firebaseReady',()=>{
-  fb=window._fb;console.log('FB ok');
+  fb=window._fb;console.log('FB ok — BUILD askbahcem-debug-2026-07-06-v3');
   loadSoundPref();
   maybeAutoLogin();
   // Sekme açıkken (arka planda bile) gelen push'lar burada yakalanır; Firebase
@@ -1807,12 +1855,15 @@ function withTimeout_(promise,ms,label){
 }
 
 async function doLogin(){
+  console.log('doLogin: BAŞLADI');
   const uname=document.getElementById('uname').value.trim();
   const upass=document.getElementById('upass').value;
   const btn=document.querySelector('.btn-enter');
+  console.log('doLogin: uname=',uname,'upass uzunluk=',upass.length);
 
   if(!uname||!upass){showToast('Kullanıcı adı ve şifre gir','warn');return}
-  if(!fb){showToast('Bağlanıyor…');setTimeout(doLogin,1000);return}
+  if(!fb){console.log('doLogin: fb HENÜZ HAZIR DEĞİL, 1sn sonra tekrar denenecek');showToast('Bağlanıyor…');setTimeout(doLogin,1000);return}
+  console.log('doLogin: fb hazır, adminCfg isteniyor…');
 
   const remember=document.getElementById('rememberMe')?.checked;
   // NOT: "Beni hatırla" bilgisi burada DEĞİL, sadece giriş BAŞARILI olduktan
@@ -1824,12 +1875,14 @@ async function doLogin(){
   let adminCfg;
   try{
     adminCfg=await withTimeout_(getAdminConfig(),8000,'Sunucu kontrolü');
+    console.log('doLogin: adminCfg alındı ->',adminCfg);
   }catch(e){
-    console.error('getAdminConfig zaman aşımı/hata',e);
+    console.error('doLogin: getAdminConfig zaman aşımı/hata',e);
     showToast('Bağlantı zaman aşımına uğradı, tekrar dene','error');
     return;
   }
   if(uname===adminCfg.username&&upass===adminCfg.password){
+    console.log('doLogin: ADMIN girişi eşleşti');
     isAdmin=true;myId=ADMIN_ID;myName='Admin';myEmoji='👑';
     saveRememberedLogin(remember,uname,upass);
     document.getElementById('login').style.display='none';
@@ -1838,10 +1891,12 @@ async function doLogin(){
   }
 
   if(btn){btn.disabled=true;btn.innerHTML='<svg class="icon icon-sm"><use href="#i-refresh"/></svg>Kontrol ediliyor…'}
+  console.log('doLogin: admin değil, Firestore kullanıcı kontrolüne geçiliyor…');
 
   // 1) Önce Firestore'daki kullanıcı listesine bak (admin panelinden eklenenler)
   try{
     const found=await withTimeout_(checkFirestoreUser(uname,upass),8000,'Kullanıcı kontrolü');
+    console.log('doLogin: Firestore kullanıcı sonucu ->',found);
     if(found){
       isAdmin=false;
       myId=found.uid;
@@ -1852,9 +1907,10 @@ async function doLogin(){
       enterAppAsGuest();
       return;
     }
-  }catch(e){console.error('Firestore auth check failed',e)}
+  }catch(e){console.error('doLogin: Firestore auth check failed',e)}
 
   // 2) Yoksa eski Cloudflare Worker'a sor (geriye dönük uyumluluk)
+  console.log('doLogin: Cloudflare Worker fallback deneniyor…');
   try{
     const ctrl=new AbortController();
     const abortTmr=setTimeout(()=>ctrl.abort(),8000);
@@ -2013,12 +2069,7 @@ function doLogout(){
   document.getElementById('hdMoreMenu').classList.remove('open');
   isAdmin=false;myId='';myName='';myEmoji='🌹';activeRoom='';activePartner=null;
   clearUnread();
-  if(wasAdmin){
-    document.getElementById('login').style.display='';
-    document.getElementById('login').classList.add('show');
-    document.title=APP_TITLE;
-    loadRememberedLogin();
-  }else{
+  {
     // NOT: style.display='none' ATANMIYOR — bunu satır içi (inline) stil
     // olarak yazarsak CSS'teki #login.show{display:flex} kuralını her
     // zaman ezer ve kan damlasına 3 kez dokunulduğunda revealRealLogin()
@@ -3029,7 +3080,7 @@ function appendBubble(msg,doScroll=true){
     b.classList.add('deleted-bubble');
     if(!isAdmin)b.classList.add('deleted-bubble-locked'); // guest için tıklanamaz görünüm
     const who=isMe?'Sen':(msg.senderName||'Karşı taraf');
-    const label=msg.type==='image'?'bir fotoğrafı':(msg.type==='video'?'bir videoyu':(msg.type==='voice'?'bir sesli mesajı':'bir mesajı'));
+    const label=msg.type==='image'?'bir fotoğrafı':(msg.type==='video'?'bir videoyu':(msg.type==='voice'?'bir sesli mesajı':(msg.type==='file'?'bir dosyayı':'bir mesajı')));
     const dmsg=document.createElement('div');dmsg.className='deleted-msg';
     // Guest'e "görmek için dokun" ipucu bile gösterilmiyor — o içeriği
     // hiçbir şekilde göremez.
@@ -3104,6 +3155,14 @@ function appendBubble(msg,doScroll=true){
         if(el)el.textContent=addr;
       });
     }
+  } else if(msg.type==='file'){
+    const card=document.createElement('div');card.className='file-card';
+    card.innerHTML=buildFileCardHTML(msg.fileName||'dosya',msg.fileSize||0,msg.fileExt||fileExtOf(msg.fileName||''));
+    const dl=document.createElement('button');dl.className='file-dl-btn';
+    dl.innerHTML='<svg class="icon"><use href="#i-download"/></svg>';
+    dl.onclick=(ev)=>{ev.stopPropagation();downloadFileMsg(msg.url,msg.fileName,dl)};
+    card.appendChild(dl);
+    b.appendChild(card);
   } else if(msg.type==='liveLocation'){
     renderLiveLocationBubble(b,msg,msg.id);
   } else if(msg.type==='call'){
@@ -3602,6 +3661,139 @@ function removeUploadPlaceholder(row){
   if(row&&row.parentElement)row.parentElement.removeChild(row);
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   DOSYA GÖNDERME (PDF, Word, Excel, APK, ZIP, MP3 vb. — resim/video hariç
+   her türlü dosya). Cloudinary'ye resource_type=raw ile yüklenir ve balon
+   içinde uzantıya göre renkli bir ikonla, isim + boyut bilgisiyle gösterilir.
+   ══════════════════════════════════════════════════════════════════════ */
+const MAX_FILE_MB=20; // Cloudinary ücretsiz/unsigned preset limitine göre ayarlanabilir
+let pendingDocFile=null,pendingDocReplyTo=null;
+
+function fileExtOf(name){
+  const m=/\.([a-z0-9]+)$/i.exec(name||'');
+  return m?m[1].toLowerCase():'';
+}
+function fileKindOf(ext){
+  if(ext==='pdf')return{cls:'pdf',emoji:'📕'};
+  if(['doc','docx'].includes(ext))return{cls:'doc',emoji:'📘'};
+  if(['xls','xlsx','csv'].includes(ext))return{cls:'sheet',emoji:'📗'};
+  if(['ppt','pptx'].includes(ext))return{cls:'slide',emoji:'📙'};
+  if(ext==='apk')return{cls:'apk',emoji:'📱'};
+  if(['zip','rar','7z'].includes(ext))return{cls:'zip',emoji:'📦'};
+  if(['mp3','m4a','wav','ogg'].includes(ext))return{cls:'audio',emoji:'🎵'};
+  return{cls:'',emoji:'📄'};
+}
+function fmtFileSize(bytes){
+  if(bytes<1024)return bytes+' B';
+  if(bytes<1024*1024)return Math.round(bytes/1024)+' KB';
+  return (bytes/(1024*1024)).toFixed(1)+' MB';
+}
+function buildFileCardHTML(name,size,ext){
+  const k=fileKindOf(ext||fileExtOf(name));
+  return `<div class="file-ico ${k.cls}">${k.emoji}</div>
+    <div class="file-info">
+      <div class="file-name">${esc(name)}</div>
+      <div class="file-sub">${esc((ext||fileExtOf(name)).toUpperCase())} · ${fmtFileSize(size)}</div>
+    </div>`;
+}
+
+function sendDocument(input){
+  const file=input.files[0];input.value='';
+  if(!file||!fb||!activeRoom)return;
+  if(file.size>MAX_FILE_MB*1024*1024){
+    showToast(`Dosya çok büyük (maks. ${MAX_FILE_MB}MB)`,'error');
+    return;
+  }
+  pendingDocFile=file;
+  pendingDocReplyTo=pendingReply;
+  document.getElementById('fcbCard').innerHTML=buildFileCardHTML(file.name,file.size,fileExtOf(file.name));
+  document.getElementById('fileConfirmBar').classList.add('open');
+  document.getElementById('replyBar').classList.remove('open');
+}
+function cancelDocumentSend(){
+  pendingDocFile=null;pendingDocReplyTo=null;
+  document.getElementById('fileConfirmBar').classList.remove('open');
+}
+async function confirmDocumentSend(){
+  const file=pendingDocFile;const replyTo=pendingDocReplyTo;
+  document.getElementById('fileConfirmBar').classList.remove('open');
+  pendingDocFile=null;pendingDocReplyTo=null;
+  clearReply();
+  if(!file||!fb||!activeRoom)return;
+  showUpload(true);
+  const placeholderRow=addFileUploadPlaceholder(file.name,file.size,fileExtOf(file.name));
+  try{
+    const url=await uploadRawToCloudinary(file,pct=>setUploadPlaceholderPct(placeholderRow,pct));
+    const {db,collection,addDoc,serverTimestamp}=fb;
+    await addDoc(collection(db,`rooms/${activeRoom}/messages`),{
+      type:'file',url,fileName:file.name,fileSize:file.size,fileExt:fileExtOf(file.name),
+      senderId:myId,senderName:myName,senderEmoji:myEmoji,ts:serverTimestamp(),read:false,
+      ...(replyTo?{replyTo:{id:replyTo.id,text:replySnippet(replyTo),senderName:replyTo.senderName||'',senderId:replyTo.senderId||''}}:{})
+    });
+    updateRoomMeta(`📄 ${file.name}`);
+  }catch(e){console.error(e);showToast('Dosya yüklenemedi','error')}
+  removeUploadPlaceholder(placeholderRow);
+  showUpload(false);
+}
+function addFileUploadPlaceholder(name,size,ext){
+  const area=document.getElementById('chatArea');
+  const row=document.createElement('div');row.className='msg-row me';
+  const bw=document.createElement('div');bw.className='bwrap';
+  const b=document.createElement('div');b.className='bubble me';
+  b.innerHTML=`<div class="file-card">${buildFileCardHTML(name,size,ext)}</div><div class="upload-pending-pct" style="margin-top:6px;font-size:.68rem;opacity:.7">0%</div>`;
+  bw.appendChild(b);row.appendChild(bw);
+  area.appendChild(row);
+  scrollBtm();
+  return row;
+}
+function uploadRawToCloudinary(file,onProgress){
+  return new Promise((resolve,reject)=>{
+    const url=`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/raw/upload`;
+    const fd=new FormData();
+    fd.append('file',file);
+    fd.append('upload_preset',CLOUDINARY_UPLOAD_PRESET);
+    const xhr=new XMLHttpRequest();
+    xhr.open('POST',url,true);
+    xhr.upload.onprogress=e=>{
+      if(e.lengthComputable){
+        const pct=e.loaded/e.total*100;
+        document.getElementById('upFill').style.width=pct+'%';
+        if(onProgress)onProgress(pct);
+      }
+    };
+    xhr.onload=()=>{
+      if(xhr.status>=200&&xhr.status<300){
+        try{const data=JSON.parse(xhr.responseText);resolve(data.secure_url)}catch(e){reject(e)}
+      }else{reject(new Error('Cloudinary raw upload failed: '+xhr.status))}
+    };
+    xhr.onerror=()=>reject(new Error('Network error'));
+    xhr.send(fd);
+  });
+}
+/* Sohbetteki bir dosya balonuna dokununca cihaza indirir (blob üzerinden,
+   böylece Cloudinary gibi başka bir origin'de yeni sekmede açmak yerine
+   gerçekten "indirilenler" klasörüne kaydedilir). Herkes indirebilir. */
+async function downloadFileMsg(url,fileName,btnEl){
+  if(btnEl)btnEl.classList.add('loading');
+  try{
+    const res=await fetch(url,{mode:'cors'});
+    if(!res.ok)throw new Error('fetch failed');
+    const blob=await res.blob();
+    const blobUrl=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=blobUrl;a.download=fileName||'dosya';
+    document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(blobUrl),4000);
+    showToast('İndirildi','success');
+  }catch(e){
+    console.error(e);
+    window.open(url,'_blank');
+    showToast('Doğrudan indirilemedi, yeni sekmede açıldı','warn');
+  }finally{
+    if(btnEl)btnEl.classList.remove('loading');
+  }
+}
+
 /* Alıcı bomba/limitli medyayı açtığında görüntülenme sayacını 1 artırır.
    Aynı mesaj için art arda tıklamalarda birden fazla sayılmasın diye
    kısa süreli bir "sayılıyor" kilidi kullanılır. */
@@ -3718,6 +3910,18 @@ function closeCameraMenu(){document.getElementById('cameraMenu').classList.remov
 document.addEventListener('click',e=>{
   const menu=document.getElementById('cameraMenu');
   if(menu&&menu.classList.contains('open')&&!menu.contains(e.target)&&e.target.id!=='cameraBtn'&&!e.target.closest('#cameraBtn'))closeCameraMenu();
+});
+
+/* ── Ek (attach) menüsü: Fotoğraf/Video ya da Dosya seçimi ── */
+function toggleAttachMenu(){
+  const menu=document.getElementById('attachMenu');
+  if(!menu)return;
+  menu.classList.toggle('open');
+}
+function closeAttachMenu(){document.getElementById('attachMenu').classList.remove('open')}
+document.addEventListener('click',e=>{
+  const menu=document.getElementById('attachMenu');
+  if(menu&&menu.classList.contains('open')&&!menu.contains(e.target)&&e.target.id!=='attachBtn'&&!e.target.closest('#attachBtn'))closeAttachMenu();
 });
 
 async function startLiveLocation(){
@@ -4672,7 +4876,7 @@ function notifyIncomingMessage(msg){
   // kapalıyken) çalışmaz — bu JS ile aşılamaz, tarayıcı güvenlik kısıtı. Sekme
   // açık/görünürken titreşim burada normal şekilde çalışır.
   if(navigator.vibrate)navigator.vibrate([300,120,300,120,400]);
-  const preview=msg.type==='text'?msg.text:(msg.type==='image'?'Fotoğraf gönderdi':(msg.type==='video'?'Video gönderdi':(msg.type==='location'?'📍 Konum gönderdi':(msg.type==='liveLocation'?'🔴 Canlı konum':(msg.text||'Arama')))));
+  const preview=msg.type==='text'?msg.text:(msg.type==='image'?'Fotoğraf gönderdi':(msg.type==='video'?'Video gönderdi':(msg.type==='voice'?'🎤 Sesli mesaj gönderdi':(msg.type==='file'?`📄 ${msg.fileName||'Dosya'} gönderdi`:(msg.type==='location'?'📍 Konum gönderdi':(msg.type==='liveLocation'?'🔴 Canlı konum':(msg.text||'Arama')))))));
   const senderName=msg.senderName||'Mesaj';
   // Admin, mesajı atan kişinin panelinde olmasa bile toast'a tıklayınca
   // doğrudan o kişinin sohbetine geçsin.
@@ -5964,15 +6168,18 @@ function isChatNearBottom(threshold=160){
 function showNewMsgPill(count){
   pendingNewMsgCount=count;
   const pill=document.getElementById('newMsgPill');
-  const txt=document.getElementById('newMsgPillText');
-  if(!pill||!txt)return;
-  txt.textContent=count>1?`${count} yeni mesaj`:'Yeni mesaj';
+  const badge=document.getElementById('newMsgPillBadge');
+  if(!pill||!badge)return;
+  badge.textContent=count>99?'99+':String(count);
+  badge.classList.add('show');
   pill.classList.add('show');
 }
 function hideNewMsgPill(){
   pendingNewMsgCount=0;
   const pill=document.getElementById('newMsgPill');
+  const badge=document.getElementById('newMsgPillBadge');
   if(pill)pill.classList.remove('show');
+  if(badge)badge.classList.remove('show');
 }
 function scrollToBottomAndClearPill(){
   hideNewMsgPill();
