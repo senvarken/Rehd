@@ -3489,6 +3489,26 @@ function startDictation(){
     const base=dictateBaseText.trim();
     if(sf&&base.toLowerCase().endsWith(sf.toLowerCase())){
       sessionFinal='';
+    }else if(sf){
+      // Bazı Android sürümlerinde yankı tam bir "suffix" değil, BÜYÜYEN bir
+      // örtüşme şeklinde gelir: motor, önceki cümleyi baştan alıp üstüne
+      // birkaç kelime daha ekleyerek yeni "final" olarak yollar (ör. taban
+      // "...Yani" biterken yeni final "Yani daha ne yapabilirim" gelir).
+      // Bu durumda taban metnin SON kelimeleri ile yeni final'in İLK
+      // kelimeleri arasında en uzun örtüşmeyi bulup sadece örtüşmeden
+      // SONRAKİ (gerçekten yeni olan) kısmı ekliyoruz.
+      const baseWords=base.split(/\s+/).filter(Boolean);
+      const sfWords=sf.split(/\s+/).filter(Boolean);
+      const maxOverlap=Math.min(baseWords.length,sfWords.length);
+      for(let k=maxOverlap;k>0;k--){
+        const baseTail=baseWords.slice(-k).join(' ').toLowerCase();
+        const sfHead=sfWords.slice(0,k).join(' ').toLowerCase();
+        if(baseTail===sfHead){
+          const rest=sfWords.slice(k).join(' ');
+          sessionFinal=rest?rest+' ':'';
+          break;
+        }
+      }
     }
     inp.value=(dictateBaseText+sessionFinal+interim).replace(/\s+/g,' ').replace(/^\s+/,'');
     autoResize(inp);
