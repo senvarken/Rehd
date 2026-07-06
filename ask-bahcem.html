@@ -2659,17 +2659,26 @@ function listenMessages(){
   hideNewMsgPill();
   const {db,collection,query,orderBy,onSnapshot,limit}=fb;
   const q=query(collection(db,`rooms/${activeRoom}/messages`),orderBy('ts','asc'),limit(300));
+  // NOT: Firestore bir sorguya YENİ abone olunduğunda bazen önce önbellekten
+  // eksik/kısmi bir sonuç, hemen ardından sunucudan tam sonucu ayrı ayrı
+  // teslim eder. Bu iki teslimat arasındaki sayı farkı "yeni mesaj geldi"
+  // sanılıp paneli her açışta (daha önce görülmüş mesajlar için bile)
+  // titreşim/toast tetikleniyordu. Bu abonelik için gelen İLK snapshot asla
+  // bildirim tetiklemez — sayım karşılaştırması sadece ikinci teslimattan
+  // itibaren başlar (yani gerçekten sohbet açıkken canlı gelen mesajlar için).
+  let isFirstSnapshot=true;
   unsubMsg=onSnapshot(q,snap=>{
     const allMsgs=snap.docs.map(d=>({id:d.id,...d.data()}));
     const msgs=allMsgs.filter(m=>!isMsgHiddenForMe(m,activeRoom));
     // yeni gelen mesaj varsa ve karşı taraftan geldiyse bildirim tetikle
-    if(lastMsgCount&&msgs.length>lastMsgCount){
+    if(!isFirstSnapshot&&lastMsgCount&&msgs.length>lastMsgCount){
       const newest=msgs[msgs.length-1];
       if(newest.senderId!==myId){
         notifyIncomingMessage(newest);
       }
     }
     lastMsgCount=msgs.length;
+    isFirstSnapshot=false;
     const currentIds=new Set(msgs.map(m=>m.id));
     // Silinen / gizlenen mesajların DOM'dan kaldırılması ("herkesten sil" veya
     // "benden sil" sonrası ekran anında güncellensin diye)
