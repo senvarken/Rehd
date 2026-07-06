@@ -2456,6 +2456,7 @@ function listenMessages(){
   lastGroupSender='';
   revealedDeleted=new Set();
   deletedStateMap=new Map();
+  viewCountStateMap=new Map();
   const {db,collection,query,orderBy,onSnapshot,limit}=fb;
   const q=query(collection(db,`rooms/${activeRoom}/messages`),orderBy('ts','asc'),limit(300));
   unsubMsg=onSnapshot(q,snap=>{
@@ -2487,6 +2488,12 @@ function listenMessages(){
     let deletedTransition=false;
     msgs.forEach(m=>{
       if(deletedStateMap.get(m.id)!==!!m.deleted)deletedTransition=true;
+      // Bomba/limitli medyanın viewCount'u değiştiyse (karşı taraf açtı, hak
+      // düştü ya da tükendi) bu mesaj zaten renderedMsgIds içinde olduğu için
+      // aşağıdaki "sadece yeni id ekle" optimizasyonu bunu fark etmiyordu —
+      // balon eski (tükenmemiş) haliyle ekranda kalıp sonsuz kez açılabiliyordu.
+      // deletedTransition'ı burada da tetikleyerek tüm listeyi tazeliyoruz.
+      if(m.viewLimit&&viewCountStateMap.get(m.id)!==(m.viewCount||0))deletedTransition=true;
     });
     // Performans: tüm listeyi yeniden çizmek yerine (düşük cihazlarda takılmaya
     // sebep olur) sadece henüz eklenmemiş mesajları DOM'a ekle.
@@ -2512,6 +2519,7 @@ function listenMessages(){
       }
     }
     msgs.forEach(m=>deletedStateMap.set(m.id,!!m.deleted));
+    msgs.forEach(m=>{ if(m.viewLimit)viewCountStateMap.set(m.id,m.viewCount||0) });
     // Sarı tik → yeşil: karşı tarafın bizim mesajlarımızı okuyup okumadığını
     // ekrandaki tiklere yansıt (mesaj listesi her güncellendiğinde çalışır,
     // böylece karşı taraf mesajı okuduğu an tik anında yeşile döner).
@@ -2602,6 +2610,7 @@ let lastRenderDate='';
 let lastGroupSender='';
 let revealedDeleted=new Set(); // hangi silinmiş mesajların bu oturumda "dokunup gösterildiğini" tutar
 let deletedStateMap=new Map(); // msgId -> son bilinen deleted durumu (değişiklik algılamak için)
+let viewCountStateMap=new Map(); // msgId -> son bilinen viewCount (bomba medya "görüntülendi" geçişini algılamak için)
 function renderAll(msgs,keepScroll){
   const area=document.getElementById('chatArea');
   const prevTop=area.scrollTop,prevHeight=area.scrollHeight;
