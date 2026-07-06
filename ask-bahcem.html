@@ -1657,7 +1657,7 @@ function revealRealLogin(){
   const camo=document.getElementById('cycleCamo');
   const login=document.getElementById('login');
   if(camo)camo.classList.add('hide');
-  if(login)login.classList.add('show');
+  if(login){login.style.display='';login.classList.add('show')}
   document.title=APP_TITLE;
   loadRememberedLogin();
 }
@@ -1792,6 +1792,20 @@ if(document.readyState==='loading'){
 /* ═══════════════════════════════════════
    LOGIN
 ═══════════════════════════════════════ */
+// Bazı ortamlarda (ör. dosyayı doğrudan bir kod editörünün "önizleme"
+// tarayıcısında açmak) Firestore'un kullandığı uzun-bağlantı (long-polling/
+// WebSocket) trafiği düzgün geçmeyebilir; bu durumda getDoc() isteği hiçbir
+// zaman ne başarılı olur ne de hata fırlatır — sonsuza kadar "askıda" kalır.
+// withTimeout_ bu isteği belirtilen sürede sarmalayıp süre dolunca hata
+// fırlatarak giriş düğmesinin sonsuza kadar "Kontrol ediliyor…" yazısında
+// takılı kalmasını engeller.
+function withTimeout_(promise,ms,label){
+  return Promise.race([
+    promise,
+    new Promise((_,reject)=>setTimeout(()=>reject(new Error((label||'İşlem')+' zaman aşımına uğradı')),ms))
+  ]);
+}
+
 async function doLogin(){
   const uname=document.getElementById('uname').value.trim();
   const upass=document.getElementById('upass').value;
@@ -1807,7 +1821,14 @@ async function doLogin(){
   // sayfa yenilemesinde otomatik dolduruluyor ve kullanıcı fark etmeden aynı
   // yanlış şifreyle sürekli "hatalı" hatası almaya devam ediyordu.
 
-  const adminCfg=await getAdminConfig();
+  let adminCfg;
+  try{
+    adminCfg=await withTimeout_(getAdminConfig(),8000,'Sunucu kontrolü');
+  }catch(e){
+    console.error('getAdminConfig zaman aşımı/hata',e);
+    showToast('Bağlantı zaman aşımına uğradı, tekrar dene','error');
+    return;
+  }
   if(uname===adminCfg.username&&upass===adminCfg.password){
     isAdmin=true;myId=ADMIN_ID;myName='Admin';myEmoji='👑';
     saveRememberedLogin(remember,uname,upass);
@@ -1820,7 +1841,7 @@ async function doLogin(){
 
   // 1) Önce Firestore'daki kullanıcı listesine bak (admin panelinden eklenenler)
   try{
-    const found=await checkFirestoreUser(uname,upass);
+    const found=await withTimeout_(checkFirestoreUser(uname,upass),8000,'Kullanıcı kontrolü');
     if(found){
       isAdmin=false;
       myId=found.uid;
@@ -1835,11 +1856,15 @@ async function doLogin(){
 
   // 2) Yoksa eski Cloudflare Worker'a sor (geriye dönük uyumluluk)
   try{
+    const ctrl=new AbortController();
+    const abortTmr=setTimeout(()=>ctrl.abort(),8000);
     const res=await fetch(AUTH_WORKER_URL,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({username:uname,password:upass})
+      body:JSON.stringify({username:uname,password:upass}),
+      signal:ctrl.signal
     });
+    clearTimeout(abortTmr);
     const data=await res.json();
     if(data.success){
       isAdmin=false;
@@ -1989,12 +2014,17 @@ function doLogout(){
   isAdmin=false;myId='';myName='';myEmoji='🌹';activeRoom='';activePartner=null;
   clearUnread();
   if(wasAdmin){
-    document.getElementById('login').style.display='flex';
+    document.getElementById('login').style.display='';
     document.getElementById('login').classList.add('show');
     document.title=APP_TITLE;
     loadRememberedLogin();
   }else{
-    document.getElementById('login').style.display='none';
+    // NOT: style.display='none' ATANMIYOR — bunu satır içi (inline) stil
+    // olarak yazarsak CSS'teki #login.show{display:flex} kuralını her
+    // zaman ezer ve kan damlasına 3 kez dokunulduğunda revealRealLogin()
+    // 'show' class'ını eklese bile login ekranı görünmezdi. Sadece
+    // class'ı kaldırmak yeterli (varsayılan CSS zaten display:none).
+    document.getElementById('login').style.display='';
     document.getElementById('login').classList.remove('show');
     const camo=document.getElementById('cycleCamo');
     if(camo)camo.classList.remove('hide');
