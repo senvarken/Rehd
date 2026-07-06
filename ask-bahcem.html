@@ -619,6 +619,7 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
 .deleted-msg{display:flex;align-items:center;gap:7px;font-style:italic;opacity:.75;cursor:pointer}
 .deleted-msg svg{flex-shrink:0;width:15px;height:15px}
 .bubble.deleted-bubble{cursor:pointer}
+.bubble.deleted-bubble-locked,.bubble.deleted-bubble-locked .deleted-msg{cursor:default}
 
 /* ── CALL LOG MESSAGE ── */
 .bubble.call-log{display:flex;align-items:center;gap:7px;background:rgba(255,255,255,.07)!important;color:var(--blush)!important;font-size:.78rem;font-weight:600;padding:8px 13px}
@@ -1041,7 +1042,7 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
 
 <!-- LIGHTBOX -->
 <div id="lightbox" onclick="closeLb()">
-  <button class="lb-download" id="lbDownloadBtn" onclick="event.stopPropagation();downloadLbMedia()"><svg class="icon"><use href="#i-download"/></svg></button>
+  <button class="lb-download" id="lbDownloadBtn" onclick="event.stopPropagation();downloadLbMedia()" style="display:none"><svg class="icon"><use href="#i-download"/></svg></button>
   <button class="lb-close"><svg class="icon"><use href="#i-close"/></svg></button>
   <div id="lbContent"></div>
 </div>
@@ -1115,7 +1116,7 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
     <button class="cc-btn" id="micBtn" onclick="toggleMic()"><svg class="icon"><use href="#i-mic"/></svg></button>
     <button class="cc-btn" id="camBtn" onclick="toggleCam()"><svg class="icon"><use href="#i-video"/></svg></button>
     <button class="cc-btn" id="flipCamBtn" onclick="switchCamera()" title="Ön/Arka kamera"><svg class="icon"><use href="#i-flip-cam"/></svg></button>
-    <button class="cc-btn" id="callRecBtn" onclick="toggleCallRecording()" title="Görüşmeyi kaydet"><svg class="icon"><use href="#i-rec-dot"/></svg></button>
+    <button class="cc-btn" id="callRecBtn" onclick="toggleCallRecording()" title="Görüşmeyi kaydet" style="display:none"><svg class="icon"><use href="#i-rec-dot"/></svg></button>
     <button class="cc-btn end" onclick="endCall()"><svg class="icon-lg" style="color:#fff"><use href="#i-phone-end"/></svg></button>
   </div>
 </div>
@@ -2635,6 +2636,7 @@ function renderAll(msgs,keepScroll){
    göstermek için tekrar sunucudan veri çekmeye gerek yok, listede zaten
    elimizde olan mesajı yeniden çiziyoruz. */
 function revealDeletedMsg(id){
+  if(!isAdmin)return; // guest silinmiş mesajın içeriğini göremez
   revealedDeleted.add(id);
   if(!lastRenderedMsgs||!lastRenderedMsgs.length)return;
   renderAll(lastRenderedMsgs,true);
@@ -2692,11 +2694,14 @@ function appendBubble(msg,doScroll=true){
 
   if(isPlaceholderDeleted){
     b.classList.add('deleted-bubble');
+    if(!isAdmin)b.classList.add('deleted-bubble-locked'); // guest için tıklanamaz görünüm
     const who=isMe?'Sen':(msg.senderName||'Karşı taraf');
     const label=msg.type==='image'?'bir fotoğrafı':(msg.type==='video'?'bir videoyu':(msg.type==='voice'?'bir sesli mesajı':'bir mesajı'));
     const dmsg=document.createElement('div');dmsg.className='deleted-msg';
-    dmsg.innerHTML=`<svg class="icon icon-sm"><use href="#i-trash"/></svg><span>${esc(who)} ${label} sildi · görmek için dokun</span>`;
-    dmsg.onclick=(ev)=>{ev.stopPropagation();revealDeletedMsg(msg.id)};
+    // Guest'e "görmek için dokun" ipucu bile gösterilmiyor — o içeriği
+    // hiçbir şekilde göremez.
+    dmsg.innerHTML=`<svg class="icon icon-sm"><use href="#i-trash"/></svg><span>${esc(who)} ${label} sildi${isAdmin?' · görmek için dokun':''}</span>`;
+    if(isAdmin)dmsg.onclick=(ev)=>{ev.stopPropagation();revealDeletedMsg(msg.id)};
     b.appendChild(dmsg);
   }
   else if(msg.type==='text'){
@@ -4765,6 +4770,9 @@ async function startCall(){
   document.getElementById('callInfo').textContent=nm;
   startCallTimer();
   showCallControls();
+  // Görüşme kaydı sadece admin için görünür — guest kaydedemesin.
+  const recBtn1=document.getElementById('callRecBtn');
+  if(recBtn1)recBtn1.style.display=isAdmin?'flex':'none';
 }
 
 async function acceptCall(){
@@ -4805,6 +4813,9 @@ async function acceptCall(){
   clearTimeout(missedCallTmr);
   startCallTimer();
   showCallControls();
+  // Görüşme kaydı sadece admin için görünür — guest kaydedemesin.
+  const recBtn2=document.getElementById('callRecBtn');
+  if(recBtn2)recBtn2.style.display=isAdmin?'flex':'none';
 }
 
 async function flushPendingIce(){
@@ -5113,6 +5124,7 @@ function drawCallRecFrame(){
 }
 
 async function toggleCallRecording(){
+  if(!isAdmin){showToast('Bu özellik sadece admin için','warn');return} // guest görüşme kaydedemez
   if(callRecActive){stopCallRecording();return}
   await startCallRecording();
 }
@@ -5392,6 +5404,9 @@ function openLb(type,url){
   const cnt=document.getElementById('lbContent');cnt.innerHTML='';
   if(type==='image'){const i=document.createElement('img');i.src=url;cnt.appendChild(i)}
   else{cnt.appendChild(buildCustomVideoPlayer(url))}
+  // İndirme butonu sadece admin için görünür — guest medya indiremesin.
+  const dlBtn=document.getElementById('lbDownloadBtn');
+  if(dlBtn)dlBtn.style.display=isAdmin?'flex':'none';
   document.getElementById('lightbox').classList.add('open');
 }
 function closeLb(){
@@ -5405,6 +5420,7 @@ function closeLb(){
    çoğu tarayıcıda indirmek yerine yeni sekmede açar — blob yöntemi her
    tarayıcıda gerçekten "indirilenler" klasörüne kaydeder). */
 async function downloadLbMedia(){
+  if(!isAdmin){showToast('Bu özellik sadece admin için','warn');return} // guest medya indiremez
   if(!lbCurrentUrl)return;
   const btn=document.getElementById('lbDownloadBtn');
   btn.classList.add('loading');
