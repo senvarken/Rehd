@@ -2179,10 +2179,19 @@ let unsubAllMsgs=null;
 let allMsgsFirstLoad=true;
 function listenAllIncomingMessagesForAdmin(){
   if(!fb)return;
-  const {db,collectionGroup,query,orderBy,onSnapshot}=fb;
+  const {db,collectionGroup,query,orderBy,onSnapshot,limit}=fb;
   if(unsubAllMsgs)unsubAllMsgs();
   allMsgsFirstLoad=true;
-  const q=query(collectionGroup(db,'messages'),orderBy('ts','asc'));
+  // ÖNEMLİ: Bu sorguda ÖNCEDEN 'limit' yoktu — collectionGroup('messages')
+  // üzerinde limitsiz onSnapshot, SİSTEMDEKİ TÜM SOHBETLERİN TÜM MESAJ
+  // GEÇMİŞİNİ her admin girişinde/yeniden bağlanmada yeniden okuyordu.
+  // Mesaj sayısı arttıkça bu okuma sayısı katlanarak büyüyüp Firestore'un
+  // günlük ücretsiz okuma kotasını (50.000) hızla tüketiyordu (429 Quota
+  // exceeded hatasının asıl sebebi buydu). Artık sadece en SON 30 mesajı
+  // dinliyoruz — yeni bir mesaj geldiğinde zaten bu pencere içinde olacağı
+  // için bildirim hâlâ doğru çalışıyor, ama geçmişin tamamı bir daha
+  // okunmuyor.
+  const q=query(collectionGroup(db,'messages'),orderBy('ts','desc'),limit(30));
   unsubAllMsgs=onSnapshot(q,snap=>{
     if(allMsgsFirstLoad){allMsgsFirstLoad=false;return}
     snap.docChanges().forEach(ch=>{
