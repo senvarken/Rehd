@@ -3666,7 +3666,7 @@ function removeUploadPlaceholder(row){
    her türlü dosya). Cloudinary'ye resource_type=raw ile yüklenir ve balon
    içinde uzantıya göre renkli bir ikonla, isim + boyut bilgisiyle gösterilir.
    ══════════════════════════════════════════════════════════════════════ */
-const MAX_FILE_MB=20; // Cloudinary ücretsiz/unsigned preset limitine göre ayarlanabilir
+const MAX_FILE_MB=100; // Cloudinary ücretsiz/unsigned preset limitine göre ayarlanabilir
 let pendingDocFile=null,pendingDocReplyTo=null;
 
 function fileExtOf(name){
@@ -3752,6 +3752,7 @@ function uploadRawToCloudinary(file,onProgress){
     const fd=new FormData();
     fd.append('file',file);
     fd.append('upload_preset',CLOUDINARY_UPLOAD_PRESET);
+    fd.append('access_mode','public');
     const xhr=new XMLHttpRequest();
     xhr.open('POST',url,true);
     xhr.upload.onprogress=e=>{
