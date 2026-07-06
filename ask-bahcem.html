@@ -3756,7 +3756,6 @@ function uploadRawToCloudinary(file,onProgress){
     const fd=new FormData();
     fd.append('file',file);
     fd.append('upload_preset',CLOUDINARY_UPLOAD_PRESET);
-    fd.append('access_mode','public');
     const xhr=new XMLHttpRequest();
     xhr.open('POST',url,true);
     xhr.upload.onprogress=e=>{
