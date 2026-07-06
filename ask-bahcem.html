@@ -320,9 +320,10 @@ svg#loveArrow{width:26px!important;height:14px!important;display:block!important
 .bwrap{display:flex;flex-direction:column;max-width:74%;touch-action:pan-y;transition:transform .18s cubic-bezier(.16,1,.3,1);position:relative}
 .bwrap.swiping{transition:none}
 /* ── Çift dokununca kalp reaksiyonu ── */
-.msg-reaction-badge{position:absolute;bottom:-10px;right:4px;display:flex;align-items:center;gap:2px;background:rgba(20,8,14,.85);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.14);border-radius:11px;padding:2px 6px;box-shadow:0 3px 10px rgba(0,0,0,.35);animation:reactPop .25s cubic-bezier(.34,1.56,.64,1);z-index:1;pointer-events:none}
-.msg-reaction-badge .icon{width:11px;height:11px;color:#ff5d78}
-.msg-reaction-badge span{font-size:.62rem;color:#fff;font-weight:700}
+.msg-reaction-badge{position:absolute;bottom:-10px;right:4px;display:flex;align-items:center;gap:1px;background:rgba(20,8,14,.85);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.14);border-radius:11px;padding:2px 6px;box-shadow:0 3px 10px rgba(0,0,0,.35);animation:reactPop .25s cubic-bezier(.34,1.56,.64,1);z-index:1;pointer-events:auto;cursor:pointer;max-width:120px}
+.msg-reaction-badge .icon{width:11px;height:11px;color:#ff5d78;flex-shrink:0}
+.msg-reaction-badge span{font-size:.62rem;color:#fff;font-weight:700;flex-shrink:0}
+.msg-reaction-badge .rbe{font-size:.78rem;line-height:1;flex-shrink:0}
 .msg-row.them .msg-reaction-badge{left:4px;right:auto}
 @keyframes reactPop{0%{transform:scale(.4);opacity:0}60%{transform:scale(1.15)}100%{transform:scale(1);opacity:1}}
 .heart-burst{position:fixed;pointer-events:none;z-index:9999;animation:heartBurstAnim .8s cubic-bezier(.17,.89,.32,1.49) forwards}
@@ -394,6 +395,8 @@ svg#loveArrow{width:26px!important;height:14px!important;display:block!important
 .burn-media-text{font-size:.8rem;font-weight:700;line-height:1.3}
 .burn-media-sub{font-size:.66rem;opacity:.8;font-weight:600;margin-top:2px}
 .burn-badge{position:absolute;bottom:5px;right:7px;background:rgba(0,0,0,.55);color:#fff;font-size:.6rem;font-weight:700;padding:3px 7px;border-radius:10px;display:flex;align-items:center;gap:3px;pointer-events:none;z-index:2}
+.instant-badge{display:flex;align-items:center;gap:5px;margin-top:6px;padding:4px 9px;border-radius:10px;background:rgba(0,0,0,.18);color:inherit;font-size:.66rem;font-weight:700;opacity:.85;width:fit-content}
+.instant-badge .icon-sm{width:12px;height:12px}
 .bubble.has-burn-badge{position:relative}
 .burn-mode-row{display:flex;flex-direction:column;gap:9px;margin-top:4px}
 .burn-mode-btn{display:flex;align-items:center;gap:12px;width:100%;padding:13px 14px;border-radius:14px;border:1.5px solid rgba(242,196,206,.14);background:rgba(255,255,255,.04);color:#fff;cursor:pointer;text-align:left;font-family:var(--font-body);transition:background .15s,border-color .15s}
@@ -428,6 +431,14 @@ svg#loveArrow{width:26px!important;height:14px!important;display:block!important
 #msgActionMenu .icon{width:17px;height:17px;flex-shrink:0}
 #msgActionOverlay{position:fixed;inset:0;z-index:199;display:none}
 #msgActionOverlay.open{display:block}
+.msg-menu-react-row{display:flex;align-items:center;gap:2px;padding:6px 4px 8px;overflow-x:auto;border-bottom:1px solid rgba(242,196,206,.12);margin-bottom:4px}
+.msg-menu-react-row span{font-size:1.3rem;padding:5px 6px;border-radius:9px;cursor:pointer;flex-shrink:0;line-height:1;transition:background .15s,transform .15s}
+.msg-menu-react-row span:active{background:rgba(255,255,255,.12);transform:scale(1.15)}
+.msg-menu-react-row span.mine{background:rgba(192,57,90,.28)}
+.reaction-picker-pop{position:fixed;z-index:220;display:flex;align-items:center;gap:2px;background:#2b0f1c;border:1px solid rgba(242,196,206,.18);border-radius:20px;padding:6px 8px;box-shadow:var(--shadow-lg);opacity:0;transform:scale(.85) translateY(6px);transition:opacity .15s,transform .15s}
+.reaction-picker-pop.show{opacity:1;transform:scale(1) translateY(0)}
+.reaction-picker-pop span{font-size:1.35rem;padding:4px 6px;border-radius:10px;cursor:pointer;line-height:1}
+.reaction-picker-pop span:active{background:rgba(255,255,255,.14);transform:scale(1.2)}
 
 /* ── GÖRÜŞME İÇİ SOHBET PANELİ ── */
 #callChatPanel{position:absolute;left:0;right:0;bottom:0;max-height:46%;background:rgba(10,5,8,.82);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-top-left-radius:22px;border-top-right-radius:22px;z-index:8;display:flex;flex-direction:column;transform:translateY(100%);transition:transform .28s cubic-bezier(.16,1,.3,1);padding-bottom:max(10px,env(safe-area-inset-bottom))}
@@ -451,6 +462,10 @@ svg#loveArrow{width:26px!important;height:14px!important;display:block!important
 #liveLocMenu.open{display:flex;flex-direction:column}
 #liveLocMenu button{display:flex;align-items:center;gap:10px;padding:12px 16px;background:none;border:none;color:#fff;font-size:.86rem;text-align:left;cursor:pointer;white-space:nowrap}
 #liveLocMenu button:active{background:rgba(255,255,255,.08)}
+#cameraMenu{display:none;position:absolute;bottom:64px;left:92px;background:rgba(30,10,18,.97);border:1px solid rgba(242,196,206,.15);border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.4);overflow:hidden;z-index:20;backdrop-filter:blur(14px)}
+#cameraMenu.open{display:flex;flex-direction:column}
+#cameraMenu button{display:flex;align-items:center;gap:10px;padding:12px 16px;background:none;border:none;color:#fff;font-size:.86rem;text-align:left;cursor:pointer;white-space:nowrap}
+#cameraMenu button:active{background:rgba(255,255,255,.08)}
 .llm-ico{font-size:1.05rem}
 
 #liveLocBar{display:none;align-items:center;gap:8px;padding:8px 14px;background:linear-gradient(90deg,rgba(229,57,80,.16),rgba(229,57,80,.05));border-bottom:1px solid rgba(229,57,80,.22);font-size:.8rem;color:#ffd9df;flex-shrink:0}
@@ -564,7 +579,7 @@ svg#loveArrow{width:26px!important;height:14px!important;display:block!important
 .voice-speed{width:auto!important;height:22px!important;min-width:30px;padding:0 7px;border-radius:11px!important;font-size:.66rem;font-weight:700;background:rgba(255,255,255,.14)!important;flex-shrink:0}
 
 /* ── EMOJI PICKER ── */
-#emojiPicker{display:none;position:absolute;bottom:66px;left:10px;background:#2b0f1c;border:1px solid rgba(242,196,206,.16);border-radius:16px;padding:11px;z-index:60;flex-wrap:wrap;gap:4px;max-width:280px;box-shadow:var(--shadow-lg)}
+#emojiPicker{display:none;position:absolute;bottom:66px;left:10px;background:#2b0f1c;border:1px solid rgba(242,196,206,.16);border-radius:16px;padding:11px;z-index:60;flex-wrap:wrap;gap:4px;max-width:280px;max-height:240px;overflow-y:auto;box-shadow:var(--shadow-lg)}
 #emojiPicker.open{display:flex}
 #emojiPicker span{font-size:1.3rem;cursor:pointer;padding:5px;border-radius:8px;transition:background .15s;line-height:1}
 #emojiPicker span:hover{background:rgba(255,255,255,.1)}
@@ -784,6 +799,7 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
     <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="2.5" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0"/><path d="M12 17.5v4M8.5 21.5h7"/></symbol>
     <symbol id="i-mic-off" viewBox="0 0 24 24"><path d="M3 3l18 18"/><path d="M9 5a3 3 0 0 1 6 0v6c0 .4 0 .8-.1 1.1M9 9.5V13a3 3 0 0 0 4.4 2.7"/><path d="M5.5 11a6.5 6.5 0 0 0 9.6 5.7M18.5 11a6.5 6.5 0 0 1-1 3.4"/><path d="M12 17.5v4M8.5 21.5h7"/></symbol>
     <symbol id="i-flip-cam" viewBox="0 0 24 24"><path d="M4 8h4l1.5-2h5L16 8h4v10H4Z"/><circle cx="12" cy="13" r="3"/><path d="M9 5l1.5-1.5M15 5l-1.5-1.5"/></symbol>
+    <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 8h3l1.5-2h7L17 8h3a1.5 1.5 0 0 1 1.5 1.5v9A1.5 1.5 0 0 1 20 20H4a1.5 1.5 0 0 1-1.5-1.5v-9A1.5 1.5 0 0 1 4 8Z"/><circle cx="12" cy="13.5" r="3.6"/></symbol>
     <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
     <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
     <symbol id="i-emoji" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="9" cy="10" r="1"/><circle cx="15" cy="10" r="1"/><path d="M8 14.5c1 1.3 2.4 2 4 2s3-.7 4-2"/></symbol>
@@ -975,6 +991,11 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
   <button class="react-btn" onclick="sendBomb('kiss','Öpücük gönderdi')"><span class="emoji-ico">💋</span><span>Öpücük</span></button>
   <button class="react-btn" onclick="sendBomb('heart','Seni seviyorum!')"><span class="emoji-ico">❤️</span><span>Aşk</span></button>
   <button class="react-btn" onclick="sendBomb('hearts','Canımsın!')"><span class="emoji-ico">💕</span><span>Kalpler</span></button>
+  <button class="react-btn" onclick="sendBomb('fire','Çok ateşlisin!')"><span class="emoji-ico">🔥</span><span>Ateş</span></button>
+  <button class="react-btn" onclick="sendBomb('rose','Sana bir gül!')"><span class="emoji-ico">🌹</span><span>Gül</span></button>
+  <button class="react-btn" onclick="sendBomb('ring','Evlenelim mi?')"><span class="emoji-ico">💍</span><span>Yüzük</span></button>
+  <button class="react-btn" onclick="sendBomb('hug','Sarılıyorum!')"><span class="emoji-ico">🤗</span><span>Sarıl</span></button>
+  <button class="react-btn" onclick="sendBomb('cry','Seni özledim!')"><span class="emoji-ico">🥺</span><span>Özledim</span></button>
 </div>
 
 <!-- ═══ CEVAPLA (REPLY) ÖNİZLEME ÇUBUĞU ═══ -->
@@ -1002,6 +1023,13 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
   <button class="sm-btn" onclick="toggleEmoji()"><svg class="icon"><use href="#i-emoji"/></svg></button>
   <button class="sm-btn" onclick="document.getElementById('fileIn').click()"><svg class="icon"><use href="#i-paperclip"/></svg></button>
   <input type="file" id="fileIn" accept="image/*,video/*" style="display:none" onchange="sendMedia(this)"/>
+  <button class="sm-btn" id="cameraBtn" onclick="event.stopPropagation();toggleCameraMenu()"><svg class="icon"><use href="#i-camera"/></svg></button>
+  <input type="file" id="cameraPhotoIn" accept="image/*" capture="environment" style="display:none" onchange="sendCameraMedia(this,false)"/>
+  <input type="file" id="cameraVideoIn" accept="video/*" capture="environment" style="display:none" onchange="sendCameraMedia(this,true)"/>
+  <div id="cameraMenu">
+    <button onclick="document.getElementById('cameraPhotoIn').click();closeCameraMenu()"><span class="llm-ico">📷</span>Fotoğraf çek</button>
+    <button onclick="document.getElementById('cameraVideoIn').click();closeCameraMenu()"><span class="llm-ico">🎥</span>Video çek</button>
+  </div>
   <div id="msgInputWrap">
     <textarea id="msgInput" placeholder="Bir şeyler yaz tatlım…" rows="1"
       oninput="autoResize(this);onTyping();toggleSendMicBtn()"
@@ -1042,6 +1070,24 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
   <span onclick="ae('😘')">😘</span><span onclick="ae('🤗')">🤗</span><span onclick="ae('😭')">😭</span>
   <span onclick="ae('🥺')">🥺</span><span onclick="ae('😂')">😂</span><span onclick="ae('🫶')">🫶</span>
   <span onclick="ae('💯')">💯</span><span onclick="ae('🎉')">🎉</span>
+  <span onclick="ae('😊')">😊</span><span onclick="ae('☺️')">☺️</span><span onclick="ae('😉')">😉</span>
+  <span onclick="ae('😅')">😅</span><span onclick="ae('🤣')">🤣</span><span onclick="ae('😢')">😢</span>
+  <span onclick="ae('🥲')">🥲</span><span onclick="ae('😴')">😴</span><span onclick="ae('🙄')">🙄</span>
+  <span onclick="ae('😏')">😏</span><span onclick="ae('🙈')">🙈</span><span onclick="ae('🙉')">🙉</span>
+  <span onclick="ae('🙊')">🙊</span><span onclick="ae('😳')">😳</span><span onclick="ae('🤤')">🤤</span>
+  <span onclick="ae('😜')">😜</span><span onclick="ae('😇')">😇</span><span onclick="ae('🤔')">🤔</span>
+  <span onclick="ae('👀')">👀</span><span onclick="ae('👉')">👉</span><span onclick="ae('👈')">👈</span>
+  <span onclick="ae('👍')">👍</span><span onclick="ae('👏')">👏</span><span onclick="ae('🙏')">🙏</span>
+  <span onclick="ae('💪')">💪</span><span onclick="ae('🤞')">🤞</span><span onclick="ae('✌️')">✌️</span>
+  <span onclick="ae('🔥')">🔥</span><span onclick="ae('💥')">💥</span><span onclick="ae('💦')">💦</span>
+  <span onclick="ae('🌈')">🌈</span><span onclick="ae('🌺')">🌺</span><span onclick="ae('🌷')">🌷</span>
+  <span onclick="ae('🍓')">🍓</span><span onclick="ae('🍒')">🍒</span><span onclick="ae('🍭')">🍭</span>
+  <span onclick="ae('🎁')">🎁</span><span onclick="ae('💐')">💐</span><span onclick="ae('💎')">💎</span>
+  <span onclick="ae('👑')">👑</span><span onclick="ae('💍')">💍</span><span onclick="ae('🔒')">🔒</span>
+  <span onclick="ae('💝')">💝</span><span onclick="ae('💗')">💗</span><span onclick="ae('💓')">💓</span>
+  <span onclick="ae('💞')">💞</span><span onclick="ae('💖')">💖</span><span onclick="ae('❣️')">❣️</span>
+  <span onclick="ae('😻')">😻</span><span onclick="ae('🐱')">🐱</span><span onclick="ae('🐻')">🐻</span>
+  <span onclick="ae('🥹')">🥹</span><span onclick="ae('🫠')">🫠</span><span onclick="ae('🫡')">🫡</span>
 </div>
 
 <!-- BOMB OVERLAY -->
@@ -2649,47 +2695,104 @@ function updateTickStates(msgs){
   });
 }
 
-/* ── ÇİFT DOKUNUŞ KALP REAKSİYONU ──────────────────────────────────────
-   Bir mesaja çift dokununca kalp reaksiyonu bırakılır/kaldırılır. Reaksiyon
-   Firestore'da mesajın 'reaction' alanında {kullanıcıId:true} şeklinde
-   tutulur, böylece her iki taraf da bağımsız olarak reaksiyon bırakabilir. */
+/* ── ÇİFT DOKUNUŞ REAKSİYONU + UZUN BASINCA EMOJİ SEÇİMİ ─────────────────
+   Bir mesaja çift dokununca varsayılan ❤️ reaksiyonu bırakılır/kaldırılır.
+   Basılı tutunca açılan mesaj menüsündeki emoji şeridinden farklı bir emoji
+   de seçilebilir. Reaksiyon Firestore'da mesajın 'reaction' alanında
+   {kullanıcıId: emoji} şeklinde tutulur (ÖNCEDEN {kullanıcıId:true} idi —
+   aşağıdaki normalizeReactionEmoji eski kayıtları ❤️'ye çevirir), böylece
+   her iki taraf da bağımsız ve FARKLI emojilerle reaksiyon bırakabilir ve
+   rozet üstünde birden fazla emoji yan yana görünebilir. */
+const DEFAULT_REACTION_EMOJI='❤️';
+function normalizeReactionEmoji(v){
+  if(v===true)return DEFAULT_REACTION_EMOJI; // eski format geriye dönük uyumluluk
+  return v||DEFAULT_REACTION_EMOJI;
+}
 function renderReactionBadge(msgId,reactionMap){
   const row=bubbleEls.get(msgId);
   if(!row)return;
   const bw=row.querySelector('.bwrap');
   if(!bw)return;
   let badge=bw.querySelector('.msg-reaction-badge');
-  const count=Object.keys(reactionMap||{}).length;
-  if(!count){ if(badge)badge.remove(); return; }
+  const entries=Object.entries(reactionMap||{});
+  if(!entries.length){ if(badge)badge.remove(); return; }
   if(!badge){
     badge=document.createElement('div');badge.className='msg-reaction-badge';
     bw.appendChild(badge);
   }
-  badge.innerHTML='<svg class="icon"><use href="#i-heart-solid"/></svg>'+(count>1?'<span>'+count+'</span>':'');
+  // Aynı emojiyi birden fazla kişi kullandıysa tekilleştirip yanına sayı yaz,
+  // farklı emojiler ise yan yana ayrı ayrı gösterilir (ör: ❤️😂 gibi).
+  const counts=new Map();
+  entries.forEach(([,v])=>{
+    const e=normalizeReactionEmoji(v);
+    counts.set(e,(counts.get(e)||0)+1);
+  });
+  badge.innerHTML=[...counts.entries()].map(([emo,c])=>
+    `<span class="rbe">${emo}</span>`+(c>1?`<span>${c}</span>`:'')
+  ).join('');
+  badge.onclick=ev=>{ev.stopPropagation();openReactionPicker(msgId,ev.clientX,ev.clientY)};
 }
-function spawnHeartBurst(clientX,clientY){
+function spawnHeartBurst(clientX,clientY,emoji){
   if(typeof clientX!=='number')return;
   const heart=document.createElement('div');heart.className='heart-burst';
   heart.style.left=clientX+'px';heart.style.top=clientY+'px';
-  heart.innerHTML='<svg class="icon"><use href="#i-heart-solid"/></svg>';
+  if(emoji&&emoji!==DEFAULT_REACTION_EMOJI){
+    heart.style.fontSize='1.6rem';heart.textContent=emoji;
+  }else{
+    heart.innerHTML='<svg class="icon"><use href="#i-heart-solid"/></svg>';
+  }
   document.body.appendChild(heart);
   setTimeout(()=>heart.remove(),820);
 }
+/* Çift dokunuşla her zaman varsayılan ❤️ atar/kaldırır (mevcut davranış). */
 async function toggleReaction(msgId,clientX,clientY){
+  return setReaction(msgId,DEFAULT_REACTION_EMOJI,clientX,clientY);
+}
+/* Belirli bir emoji ile reaksiyon ata: aynı emoji zaten benim reaksiyonumsa
+   kaldırılır (toggle), farklıysa emojim değiştirilir. Bu sayede kullanıcı
+   istediği kadar farklı emoji arasında geçiş yapabilir; "kesik" görünme
+   sorunu, tek bir sabit kalp ikonuna kilitli olmaktan kaynaklanıyordu. */
+async function setReaction(msgId,emoji,clientX,clientY){
   if(!fb||!activeRoom)return;
   const msg=(lastRenderedMsgs||[]).find(m=>m.id===msgId);
   if(!msg)return;
   const current={...(msg.reaction||{})};
+  const mine=normalizeReactionEmoji(current[myId]);
   const hadMine=!!current[myId];
-  if(hadMine)delete current[myId];else current[myId]=true;
+  const removing=hadMine&&mine===emoji;
+  if(removing)delete current[myId];else current[myId]=emoji;
   msg.reaction=current; // önbellekteki mesajı da güncelle ki hızlı art arda dokunuşlar tutarlı kalsın
   renderReactionBadge(msgId,current); // iyimser (optimistic) anlık güncelleme
-  if(!hadMine)spawnHeartBurst(clientX,clientY);
-  if(navigator.vibrate)navigator.vibrate(hadMine?8:16);
+  if(!removing)spawnHeartBurst(clientX,clientY,emoji);
+  if(navigator.vibrate)navigator.vibrate(removing?8:16);
   try{
     const {db,doc,updateDoc}=fb;
     await updateDoc(doc(db,`rooms/${activeRoom}/messages`,msgId),{reaction:current});
   }catch(e){console.error(e)}
+}
+/* Basılı tutma menüsünden çağrılan hızlı emoji seçici: mesajın hemen
+   üstünde küçük bir emoji şeridi açar, seçilen emoji setReaction'a gider. */
+const REACTION_PICKER_EMOJIS=['❤️','😂','😮','😢','🙏','🔥','😘','👍'];
+function openReactionPicker(msgId,clientX,clientY){
+  closeMsgMenu();
+  const pop=document.createElement('div');
+  pop.className='reaction-picker-pop';
+  pop.innerHTML=REACTION_PICKER_EMOJIS.map(e=>`<span data-e="${e}">${e}</span>`).join('');
+  document.body.appendChild(pop);
+  const x=typeof clientX==='number'?clientX:window.innerWidth/2;
+  const y=typeof clientY==='number'?clientY:window.innerHeight/2;
+  pop.style.left=Math.min(Math.max(x-pop.offsetWidth/2,8),window.innerWidth-pop.offsetWidth-8)+'px';
+  pop.style.top=Math.max(y-64,8)+'px';
+  requestAnimationFrame(()=>pop.classList.add('show'));
+  pop.querySelectorAll('span').forEach(s=>{
+    s.onclick=ev=>{
+      ev.stopPropagation();
+      setReaction(msgId,s.dataset.e,ev.clientX,ev.clientY);
+      pop.remove();
+    };
+  });
+  const closeIt=ev=>{ if(!pop.contains(ev.target)){pop.remove();document.removeEventListener('pointerdown',closeIt)} };
+  setTimeout(()=>document.addEventListener('pointerdown',closeIt),0);
 }
 function updateReactionStates(msgs){
   msgs.forEach(m=>{ if(bubbleEls.has(m.id))renderReactionBadge(m.id,m.reaction) });
@@ -2830,12 +2933,12 @@ function appendBubble(msg,doScroll=true){
       const card=document.createElement('div');
       card.className='burn-media-card'+(consumed?' consumed':'');
       if(consumed){
-        card.innerHTML=`<span class="burn-media-icon">💥</span><div class="burn-media-info"><div class="burn-media-text">Görüntülendi</div><div class="burn-media-sub">Bu ${msg.type==='video'?'video':'fotoğraf'} kayboldu</div></div>`;
+        card.innerHTML=`<span class="burn-media-icon">💥</span><div class="burn-media-info"><div class="burn-media-text">Görüntülendi</div><div class="burn-media-sub">Bu ${msg.type==='video'?'video':'fotoğraf'} kayboldu${msg.instant?' · ⚡ Anlıktı':''}</div></div>`;
       }else{
         const label=isMe
           ?`${msg.type==='video'?'Video':'Fotoğraf'} · ${Math.max(remaining,0)}/${msg.viewLimit} hak`
           :`${msg.type==='video'?'Video':'Fotoğraf'} · ${remaining} hak`;
-        card.innerHTML=`<span class="burn-media-icon">💣</span><div class="burn-media-info"><div class="burn-media-text">${label}</div><div class="burn-media-sub">Açmak için dokun</div></div>`;
+        card.innerHTML=`<span class="burn-media-icon">💣</span><div class="burn-media-info"><div class="burn-media-text">${label}</div><div class="burn-media-sub">Açmak için dokun${msg.instant?' · ⚡ Anlık':''}</div></div>`;
         card.onclick=()=>revealBurnMedia(msg,isMe);
       }
       b.appendChild(card);
@@ -2846,6 +2949,11 @@ function appendBubble(msg,doScroll=true){
         img.onclick=()=>revealBurnMedia(msg,isMe);b.appendChild(img);
       }else{
         b.appendChild(buildVideoPreviewCard(msg,isMe));
+      }
+      if(msg.instant){
+        const ib=document.createElement('div');ib.className='instant-badge';
+        ib.innerHTML=`<svg class="icon icon-sm"><use href="#i-camera"/></svg><span>Anlık gönderildi</span>`;
+        b.appendChild(ib);
       }
     }
   } else if(msg.type==='location'){
@@ -2973,7 +3081,11 @@ function openMsgMenu(msg,isMe){
   msgMenuTarget=msg;
   const menu=document.getElementById('msgActionMenu');
   const overlay=document.getElementById('msgActionOverlay');
-  let html=`<button onclick="startReply('${msg.id}');closeMsgMenu()"><svg class="icon"><use href="#i-edit"/></svg>Cevapla</button>`;
+  const myReaction=msg.reaction?normalizeReactionEmoji(msg.reaction[myId]):null;
+  let html=`<div class="msg-menu-react-row">`+REACTION_PICKER_EMOJIS.map(e=>
+    `<span class="${myReaction===e?'mine':''}" onclick="event.stopPropagation();setReaction('${msg.id}',${JSON.stringify(e)});closeMsgMenu()">${e}</span>`
+  ).join('')+`</div>`;
+  html+=`<button onclick="startReply('${msg.id}');closeMsgMenu()"><svg class="icon"><use href="#i-edit"/></svg>Cevapla</button>`;
   html+=`<button onclick="deleteForMe()"><svg class="icon"><use href="#i-trash"/></svg>Benden Sil</button>`;
   if(isMe){
     html+=`<button class="danger" onclick="deleteForEveryone()"><svg class="icon"><use href="#i-trash"/></svg>Herkesten Sil</button>`;
@@ -3248,13 +3360,22 @@ let pendingMediaFile=null;
 let pendingMediaIsVid=false;
 let pendingMediaReplyTo=null;
 let pendingMediaPreviewUrl=null;
+let pendingMediaInstant=false; // anlık kameradan mı geldi (modal onaylanınca instant:true olarak da işaretlenecek)
 
 function sendMedia(input){
   const file=input.files[0];if(!file||!fb||!activeRoom){input.value='';return}
   input.value='';
+  pendingMediaInstant=false;
+  openMediaViewModal(file,pendingReply);
+  clearReply();
+}
+/* Modalı ortak açan yardımcı fonksiyon: hem normal medya seçiminden (sendMedia)
+   hem de anlık kameradan (sendCameraMedia) çağrılır, böylece anlık fotoğraf/
+   video da "1 kez / 2 kez / kalıcı" bomba seçeneğiyle gönderilebilir. */
+function openMediaViewModal(file,replyTo){
   pendingMediaFile=file;
   pendingMediaIsVid=file.type.startsWith('video/');
-  pendingMediaReplyTo=pendingReply;clearReply();
+  pendingMediaReplyTo=replyTo||null;
   if(pendingMediaPreviewUrl){URL.revokeObjectURL(pendingMediaPreviewUrl);pendingMediaPreviewUrl=null}
   pendingMediaPreviewUrl=URL.createObjectURL(file);
   const imgPrev=document.getElementById('mediaViewPreviewImg');
@@ -3271,13 +3392,13 @@ function sendMedia(input){
 function cancelMediaSend(){
   document.getElementById('mediaViewModal').classList.remove('open');
   if(pendingMediaPreviewUrl){URL.revokeObjectURL(pendingMediaPreviewUrl);pendingMediaPreviewUrl=null}
-  pendingMediaFile=null;pendingMediaReplyTo=null;
+  pendingMediaFile=null;pendingMediaReplyTo=null;pendingMediaInstant=false;
 }
 async function confirmMediaSend(viewLimit){
-  const file=pendingMediaFile;const isVid=pendingMediaIsVid;const replyTo=pendingMediaReplyTo;
+  const file=pendingMediaFile;const isVid=pendingMediaIsVid;const replyTo=pendingMediaReplyTo;const instant=pendingMediaInstant;
   document.getElementById('mediaViewModal').classList.remove('open');
   if(pendingMediaPreviewUrl){URL.revokeObjectURL(pendingMediaPreviewUrl);pendingMediaPreviewUrl=null}
-  pendingMediaFile=null;pendingMediaReplyTo=null;
+  pendingMediaFile=null;pendingMediaReplyTo=null;pendingMediaInstant=false;
   if(!file||!fb||!activeRoom)return;
   showUpload(true);
   const placeholderRow=addUploadPlaceholder(isVid);
@@ -3288,12 +3409,32 @@ async function confirmMediaSend(viewLimit){
     await addDoc(collection(db,`rooms/${activeRoom}/messages`),{
       type:isVid?'video':'image',url,senderId:myId,senderName:myName,senderEmoji:myEmoji,ts:serverTimestamp(),read:false,
       ...(viewLimit?{viewLimit,viewCount:0}:{}),
+      ...(instant?{instant:true}:{}),
       ...(replyTo?{replyTo:{id:replyTo.id,text:replySnippet(replyTo),senderName:replyTo.senderName||'',senderId:replyTo.senderId||''}}:{})
     });
-    updateRoomMeta(isVid?(viewLimit?'💣 Video':'Video'):(viewLimit?'💣 Fotoğraf':'Fotoğraf'));
+    const kindLabel=isVid?'Video':'Fotoğraf';
+    updateRoomMeta(instant?(viewLimit?`💣📸 Anlık ${kindLabel}`:`📸 Anlık ${kindLabel}`):(viewLimit?`💣 ${kindLabel}`:kindLabel));
   }catch(e){console.error(e);showToast('Yükleme başarısız','error')}
   removeUploadPlaceholder(placeholderRow);
   showUpload(false);
+}
+
+/* ── Cihaz kamerasıyla anlık fotoğraf/video çekip DOĞRUDAN gönderme ──────
+   "kaç kez görüntülensin" seçim ekranı atlanır — Snapchat/Instagram'daki
+   anlık kamera mesajı gibi, çekilir çekilmez hemen yüklenip gönderilir.
+   Mesaj instant:true ile işaretlenir ki balonun altında "Anlık gönderildi"
+   rozeti gösterilebilsin. ── */
+function sendCameraMedia(input,isVid){
+  const file=input.files[0];
+  input.value='';
+  if(!file||!fb||!activeRoom)return;
+  // Anlık kamera medyası da artık "1 kez / 2 kez / kalıcı" seçim modalından
+  // geçer, böylece Anlık + Bomba birlikte gönderilebilir. pendingMediaInstant
+  // true olarak işaretlenir ki confirmMediaSend() mesajı instant:true ile
+  // kaydetsin (böylece "Anlık gönderildi" rozeti de korunur).
+  pendingMediaInstant=true;
+  openMediaViewModal(file,pendingReply);
+  clearReply();
 }
 
 /* Yükleme sırasında sohbette görünen geçici "yükleniyor" balonu — gerçek
@@ -3420,6 +3561,20 @@ document.addEventListener('click',e=>{
 document.addEventListener('DOMContentLoaded',()=>{
   const btn=document.getElementById('locBtn');
   if(btn)btn.addEventListener('click',e=>{if(locBtnLongPressed){e.stopImmediatePropagation();locBtnLongPressed=false}});
+});
+
+/* ── Kamera menüsü (Fotoğraf çek / Video çek) ──────────────────────────
+   Cihazın kamerasını doğrudan açmak için <input capture="environment">
+   kullanılıyor — galeri yerine direkt kamera uygulaması açılır. ── */
+function toggleCameraMenu(){
+  const menu=document.getElementById('cameraMenu');
+  if(!menu)return;
+  menu.classList.toggle('open');
+}
+function closeCameraMenu(){document.getElementById('cameraMenu').classList.remove('open')}
+document.addEventListener('click',e=>{
+  const menu=document.getElementById('cameraMenu');
+  if(menu&&menu.classList.contains('open')&&!menu.contains(e.target)&&e.target.id!=='cameraBtn'&&!e.target.closest('#cameraBtn'))closeCameraMenu();
 });
 
 async function startLiveLocation(){
@@ -4086,7 +4241,7 @@ function playNudgeSound(){
   }catch(e){}
 }
 
-const BOMB_ICONS={kiss:'💋',heart:'❤️',hearts:'💕'};
+const BOMB_ICONS={kiss:'💋',heart:'❤️',hearts:'💕',fire:'🔥',rose:'🌹',ring:'💍',hug:'🤗',cry:'🥺'};
 function sendBomb(type,text){
   if(!fb||!activeRoom||!activePartner)return;
   const {rtdb,dbRef,set}=fb;
@@ -5636,7 +5791,21 @@ function buildCustomVideoPlayer(url){
 /* ═══════════════════════════════════════
    UTILS
 ═══════════════════════════════════════ */
-function scrollBtm(){const a=document.getElementById('chatArea');requestAnimationFrame(()=>{a.scrollTop=a.scrollHeight})}
+function scrollBtm(){
+  const a=document.getElementById('chatArea');
+  if(!a)return;
+  // CSS'teki scroll-behavior:smooth, art arda gelen scrollTop atamalarını
+  // animasyonlu yaptığı için (özellikle resim/video gibi geç yüklenen
+  // içerikler yükseklik değiştirdiğinde) sohbet en altta değil "yarı yolda"
+  // asılı kalabiliyordu. Anlık atama sırasında smooth'u geçici kapatıp
+  // gerçekten ANINDA en alta gidiyoruz, sonra birkaç kez daha zorlayıp
+  // (geç yüklenen medya için) smooth'u geri açıyoruz.
+  const prevBehavior=a.style.scrollBehavior;
+  a.style.scrollBehavior='auto';
+  a.scrollTop=a.scrollHeight;
+  requestAnimationFrame(()=>{a.scrollTop=a.scrollHeight});
+  setTimeout(()=>{a.scrollTop=a.scrollHeight;a.style.scrollBehavior=prevBehavior||''},260);
+}
 
 /* ── Sohbeti okurken yukarı kaydırma / "yeni mesaj" rozeti ───────────────
    Kullanıcı geçmişi okumak için yukarı kaydırmışken yeni mesaj gelirse
@@ -5644,7 +5813,7 @@ function scrollBtm(){const a=document.getElementById('chatArea');requestAnimatio
    rozeti gösteriyoruz. Kullanıcı zaten en alttaysa (ya da mesajı kendisi
    gönderdiyse) normal şekilde otomatik en alta kayıyor. */
 let pendingNewMsgCount=0;
-function isChatNearBottom(threshold=120){
+function isChatNearBottom(threshold=160){
   const a=document.getElementById('chatArea');
   if(!a)return true;
   return (a.scrollHeight-a.scrollTop-a.clientHeight)<threshold;
