@@ -320,11 +320,10 @@ svg#loveArrow{width:26px!important;height:14px!important;display:block!important
 .bwrap{display:flex;flex-direction:column;max-width:74%;touch-action:pan-y;transition:transform .18s cubic-bezier(.16,1,.3,1);position:relative}
 .bwrap.swiping{transition:none}
 /* ── Çift dokununca kalp reaksiyonu ── */
-.msg-reaction-badge{position:absolute;bottom:-10px;right:4px;display:flex;align-items:center;gap:1px;background:rgba(20,8,14,.85);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.14);border-radius:11px;padding:2px 6px;box-shadow:0 3px 10px rgba(0,0,0,.35);animation:reactPop .25s cubic-bezier(.34,1.56,.64,1);z-index:1;pointer-events:auto;cursor:pointer;max-width:120px}
+.msg-reaction-badge{position:absolute;bottom:-3px;right:6px;left:auto;display:flex;align-items:center;gap:1px;background:rgba(20,8,14,.85);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.14);border-radius:11px;padding:2px 6px;box-shadow:0 3px 10px rgba(0,0,0,.35);animation:reactPop .25s cubic-bezier(.34,1.56,.64,1);z-index:2;pointer-events:auto;cursor:pointer;max-width:120px}
 .msg-reaction-badge .icon{width:11px;height:11px;color:#ff5d78;flex-shrink:0}
 .msg-reaction-badge span{font-size:.62rem;color:#fff;font-weight:700;flex-shrink:0}
 .msg-reaction-badge .rbe{font-size:.78rem;line-height:1;flex-shrink:0}
-.msg-row.them .msg-reaction-badge{left:4px;right:auto}
 @keyframes reactPop{0%{transform:scale(.4);opacity:0}60%{transform:scale(1.15)}100%{transform:scale(1);opacity:1}}
 .heart-burst{position:fixed;pointer-events:none;z-index:9999;animation:heartBurstAnim .8s cubic-bezier(.17,.89,.32,1.49) forwards}
 .heart-burst svg{width:64px;height:64px;color:#ff5d78;filter:drop-shadow(0 4px 14px rgba(0,0,0,.4))}
@@ -810,6 +809,7 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
     <symbol id="i-check2" viewBox="0 0 24 24"><path d="M2 12.5l4.5 4.5L16 7M8.5 12.5L13 17l9.5-10"/></symbol>
     <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
     <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4.5a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 4.5V7M6 7l1 13a2 2 0 0 0 2 1.8h6a2 2 0 0 0 2-1.8l1-13"/></symbol>
+    <symbol id="i-logout" viewBox="0 0 24 24"><path d="M9 4H5.5A1.5 1.5 0 0 0 4 5.5v13A1.5 1.5 0 0 0 5.5 20H9"/><path d="M14 8l4.5 4-4.5 4"/><path d="M18.3 12H9.5"/></symbol>
     <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5.5h16v10H9.5L5 19v-3.5H4v-10Z"/></symbol>
     <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20l.8-3.6L15.6 5.6a2 2 0 0 1 2.8 0l.8.8a2 2 0 0 1 0 2.8L8.4 20 4 20Z"/></symbol>
     <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 10.5a6 6 0 0 1 12 0c0 4 1.5 5.5 1.5 5.5H4.5S6 14.5 6 10.5Z"/><path d="M10 19.5a2 2 0 0 0 4 0"/></symbol>
@@ -1951,7 +1951,57 @@ function buildHdMoreMenu(role){
     menu.innerHTML+=`<button id="passiveLocToggleBtn" onclick="toggleHdMore();togglePassiveLocationSharing()"><span style="font-size:1.05em;width:18px;text-align:center;flex-shrink:0">📍</span><span id="passiveLocToggleLabel">Konum Paylaşımı: Kapalı</span></button>
     <button onclick="toggleHdMore();openAdminSettings()"><svg class="icon icon-sm"><use href="#i-gear"/></svg><span>Ayarlar</span></button>`;
   }
+  menu.innerHTML+=`<button onclick="doLogout()" style="color:#ff8fa3"><svg class="icon icon-sm"><use href="#i-logout"/></svg><span>Oturumu Kapat</span></button>`;
   refreshPassiveLocToggleLabel();
+}
+
+/* ═══════════════════════════════════════
+   OTURUM KAPAT
+   Sekme kapanmadan uygulamayı sıfırlar. Misafir çıkış yaparsa doğrudan
+   regl-sayaç kamuflajına döner (biri telefona bakarsa gerçek uygulamayı
+   görmesin); admin çıkış yaparsa (bu cihaz zaten güvenilir sayıldığından)
+   kamuflaj yerine gerçek giriş ekranına döner. "Beni hatırla" bilgisi ve
+   cihazın admin güveni SİLİNMEZ — sadece aktif oturum kapanır.
+═══════════════════════════════════════ */
+function doLogout(){
+  if(!confirm('Oturumu kapatmak istediğine emin misin?'))return;
+  const wasAdmin=isAdmin;
+  // Aktif dinleyicileri kapat ki çıkış yaptıktan sonra arka planda gereksiz
+  // Firestore/RTDB okuması devam etmesin.
+  [unsubMsg,unsubPresence,unsubCallSig,unsubCallIce,unsubBomb,unsubNudge,
+   unsubAllMsgs,unsubAllCalls,unsubRoomsMeta,unsubUsers,unsubHeartName,unsubPassiveLoc]
+   .forEach(u=>{try{if(u)u()}catch(e){}});
+  unsubMsg=unsubPresence=unsubCallSig=unsubCallIce=unsubBomb=unsubNudge=null;
+  unsubAllMsgs=unsubAllCalls=unsubRoomsMeta=unsubUsers=unsubHeartName=unsubPassiveLoc=null;
+  // Presence'ı elle çevrimdışı yap — onDisconnect sadece sekme/tarayıcı
+  // gerçekten kapatılınca tetiklenir, burada sekme açık kalıyor.
+  try{
+    if(fb&&myId){
+      const {rtdb,dbRef,set}=fb;
+      set(dbRef(rtdb,`presence/${myId}`),{name:myName,emoji:myEmoji,online:false,lastSeen:Date.now(),isAdmin:wasAdmin});
+    }
+  }catch(e){}
+  ['chatWrap','inputBar','reactionBar','sidebar','sideOverlay'].forEach(id=>{
+    const el=document.getElementById(id);if(el)el.style.display='none';
+  });
+  document.getElementById('header').style.display='none';
+  document.getElementById('hdMoreMenu').classList.remove('open');
+  isAdmin=false;myId='';myName='';myEmoji='🌹';activeRoom='';activePartner=null;
+  clearUnread();
+  if(wasAdmin){
+    document.getElementById('login').style.display='flex';
+    document.getElementById('login').classList.add('show');
+    document.title=APP_TITLE;
+    loadRememberedLogin();
+  }else{
+    document.getElementById('login').style.display='none';
+    document.getElementById('login').classList.remove('show');
+    const camo=document.getElementById('cycleCamo');
+    if(camo)camo.classList.remove('hide');
+    document.title='Regl Sayaç';
+    initCycleCamo();
+  }
+  showToast('Oturum kapatıldı','info');
 }
 
 /* ═══════════════════════════════════════
@@ -2282,6 +2332,14 @@ function listenAllIncomingMessagesForAdmin(){
       notifyIncomingMessage(msg);
       refreshAppBadge();
     });
+  },err=>{
+    // Bu dinleyici sessizce başarısız olursa (Firestore izin kuralı ya da
+    // collectionGroup('messages') için eksik index yüzünden) sidebar rozeti
+    // VE toast bildirimleri hiç tetiklenmez ama hiçbir hata da görünmezdi.
+    // Artık hatayı konsola yazıp kullanıcıya da bir toast gösteriyoruz ki
+    // sorunun index/izin kaynaklı olduğu anlaşılabilsin.
+    console.error('listenAllIncomingMessagesForAdmin hata:',err);
+    showToast('Bildirim dinleyicisi hata verdi: '+(err&&err.code||err),'error',6000);
   });
 }
 // Firestore collectionGroup query fonksiyon imzasında limit'i opsiyonel bırakmak
@@ -2348,6 +2406,9 @@ function listenAllRoomsMetaForAdmin(){
       };
     });
     renderSidebar(lastPresenceData||{});
+  },err=>{
+    console.error('listenAllRoomsMetaForAdmin hata:',err);
+    showToast('Sohbet önizleme hatası: '+(err&&err.code||err),'error',6000);
   });
 }
 
@@ -2513,6 +2574,7 @@ function selectUser(uid,name,emoji){
 
   userUnreadMap[uid]=0;
   clearUnread();
+  renderSidebar(lastPresenceData||{});
 
   openChatUI();
   listenMessages();
@@ -2739,14 +2801,14 @@ function normalizeReactionEmoji(v){
 function renderReactionBadge(msgId,reactionMap){
   const row=bubbleEls.get(msgId);
   if(!row)return;
-  const bw=row.querySelector('.bwrap');
-  if(!bw)return;
-  let badge=bw.querySelector('.msg-reaction-badge');
+  const bub=row.querySelector('.bubble');
+  if(!bub)return;
+  let badge=bub.querySelector('.msg-reaction-badge');
   const entries=Object.entries(reactionMap||{});
   if(!entries.length){ if(badge)badge.remove(); return; }
   if(!badge){
     badge=document.createElement('div');badge.className='msg-reaction-badge';
-    bw.appendChild(badge);
+    bub.appendChild(badge);
   }
   // Aynı emojiyi birden fazla kişi kullandıysa tekilleştirip yanına sayı yaz,
   // farklı emojiler ise yan yana ayrı ayrı gösterilir (ör: ❤️😂 gibi).
