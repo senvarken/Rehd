@@ -264,8 +264,11 @@ svg#loveArrow{width:26px!important;height:14px!important;display:block!important
 .user-item.active::before{content:'';position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:3px;background:var(--bright)}
 .ui-av{width:40px;height:40px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-weight:700;color:#fff;font-size:1.05rem;background:linear-gradient(135deg,var(--rose),var(--mid));position:relative}
 .ui-info{min-width:0;flex:1}
-.ui-name{font-size:.87rem;color:#fff;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ui-name{font-size:.87rem;color:#fff;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1}
 .ui-last{font-size:.72rem;color:#9a6070;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center;gap:4px;margin-top:1px}
+.ui-last.unread{color:#f2c4ce;font-weight:700}
+.ui-top-row{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.ui-time{font-size:.62rem;color:#7a4a55;flex-shrink:0}
 .ui-badge{background:var(--bright);color:#fff;border-radius:10px;font-size:.65rem;padding:2px 7px;flex-shrink:0;display:none;font-weight:700}
 .ui-badge.show{display:block}
 .ui-ondot{width:9px;height:9px;border-radius:50%;flex-shrink:0;position:absolute;right:-1px;bottom:-1px;border:2px solid rgba(17,5,10,1)}
@@ -1299,6 +1302,7 @@ let missedCallTmr=null;
 let deferredInstall=null;
 let unsubUsers=null;
 let userUnreadMap={};
+let roomsMetaMap={}; // uid -> {lastMsg, lastTs(ms), lastSenderId} — sidebar son mesaj önizlemesi için
 /* Düşük donanımlı telefon/TV kutularında backdrop-filter blur ve bazı
    animasyonlar GPU'yu zorlayıp arayüzü kasıtır. Zayıf cihaz tespit edilirse
    body'e .low-end sınıfı eklenir; CSS tarafında bu sınıf blur'ları kapatır. */
@@ -1843,6 +1847,7 @@ function enterAppAsAdmin(){
   listenAllUsers();
   listenAllIncomingMessagesForAdmin();
   listenAllIncomingCallsForAdmin();
+  listenAllRoomsMetaForAdmin();
   addInstallBtn();
   initPassiveLocationOnLoad();
 }
@@ -2249,6 +2254,34 @@ function listenAllIncomingCallsForAdmin(){
 }
 
 /* ═══════════════════════════════════════
+   ADMİN SIDEBAR — SON MESAJ ÖNİZLEMESİ
+   Her mesaj gönderiminde updateRoomMeta() ile rooms/{roomId} dokümanına
+   lastMsg/lastTs/lastSenderId yazılıyor. Burada TÜM oda dokümanlarını
+   dinleyip roomsMetaMap'i güncelliyoruz ki sidebar'da her kullanıcının
+   satırında (WhatsApp'taki gibi) son mesaj metni + saati görünsün. ── */
+let unsubRoomsMeta=null;
+function listenAllRoomsMetaForAdmin(){
+  if(!fb)return;
+  const {db,collection,onSnapshot}=fb;
+  if(unsubRoomsMeta)unsubRoomsMeta();
+  unsubRoomsMeta=onSnapshot(collection(db,'rooms'),snap=>{
+    snap.docChanges().forEach(ch=>{
+      const roomId=ch.doc.id;
+      const otherUid=roomId.split('__').find(id=>id!==ADMIN_ID);
+      if(!otherUid)return;
+      if(ch.type==='removed'){delete roomsMetaMap[otherUid];return}
+      const d=ch.doc.data();
+      roomsMetaMap[otherUid]={
+        lastMsg:d.lastMsg||'',
+        lastTs:d.lastTs?.toDate?d.lastTs.toDate().getTime():(d.lastTs||0),
+        lastSenderId:d.lastSenderId||''
+      };
+    });
+    renderSidebar(lastPresenceData||{});
+  });
+}
+
+/* ═══════════════════════════════════════
    PRESENCE
 ═══════════════════════════════════════ */
 function registerUserPresence(){
@@ -2279,6 +2312,19 @@ function formatLastSeen(ts){
   if(sameDay)return `Son görülme: bugün ${hm}`;
   if(isYest)return `Son görülme: dün ${hm}`;
   return `Son görülme: ${d.toLocaleDateString('tr-TR',{day:'numeric',month:'short'})} ${hm}`;
+}
+
+/* ── Sidebar'da son mesaj saatinin kısa (WhatsApp tarzı) gösterimi ── */
+function formatSidebarTime(ts){
+  if(!ts)return '';
+  const d=new Date(ts);
+  const now=new Date();
+  const sameDay=d.toDateString()===now.toDateString();
+  const yest=new Date(now);yest.setDate(now.getDate()-1);
+  const isYest=d.toDateString()===yest.toDateString();
+  if(sameDay)return d.toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'});
+  if(isYest)return 'Dün';
+  return d.toLocaleDateString('tr-TR',{day:'numeric',month:'short'});
 }
 
 function listenAdminPresence(){
@@ -2349,11 +2395,21 @@ function renderSidebar(presenceData){
   users.forEach(([uid,u])=>{
     const div=document.createElement('div');
     div.className='user-item'+(activePartner&&activePartner.id===uid?' active':'');
+    const meta=roomsMetaMap[uid];
+    const hasUnread=userUnreadMap[uid]>0;
+    const timeTxt=meta&&meta.lastTs?formatSidebarTime(meta.lastTs):'';
+    const previewTxt=meta&&meta.lastMsg
+      ?(meta.lastSenderId===myId?'Sen: ':'')+meta.lastMsg
+      :(u.online?'Çevrimiçi':formatLastSeen(u.lastSeen));
+    const statusTitle=u.online?'Çevrimiçi':formatLastSeen(u.lastSeen);
     div.innerHTML=`
-      <div class="ui-av">${initialOf(u.name||uid)}<span class="ui-ondot" style="background:${u.online?'#43d17a':'#5c4048'}"></span></div>
+      <div class="ui-av" title="${esc(statusTitle)}">${initialOf(u.name||uid)}<span class="ui-ondot" style="background:${u.online?'#43d17a':'#5c4048'}"></span></div>
       <div class="ui-info">
-        <div class="ui-name">${esc(u.name||uid)}</div>
-        <div class="ui-last">${u.online?'Çevrimiçi':esc(formatLastSeen(u.lastSeen))}</div>
+        <div class="ui-top-row">
+          <div class="ui-name">${esc(u.name||uid)}</div>
+          ${timeTxt?`<div class="ui-time">${esc(timeTxt)}</div>`:''}
+        </div>
+        <div class="ui-last${hasUnread?' unread':''}">${esc(previewTxt)}</div>
       </div>
       <span class="ui-badge" id="badge_${uid}"></span>
       <button type="button" class="ui-action-btn sb-del-btn" title="Sohbeti Sil"><span class="emoji-ico" style="font-size:14px">🗑️</span></button>
@@ -2503,7 +2559,22 @@ function listenMessages(){
       // aşağıdaki "sadece yeni id ekle" optimizasyonu bunu fark etmiyordu —
       // balon eski (tükenmemiş) haliyle ekranda kalıp sonsuz kez açılabiliyordu.
       // deletedTransition'ı burada da tetikleyerek tüm listeyi tazeliyoruz.
-      if(m.viewLimit&&viewCountStateMap.get(m.id)!==(m.viewCount||0))deletedTransition=true;
+      if(m.viewLimit){
+        const oldCount=viewCountStateMap.get(m.id);
+        const newCount=m.viewCount||0;
+        if(oldCount!==newCount){
+          deletedTransition=true;
+          // Sadece bombayı ATAN kişiye bildirim gönder: karşı taraf medyayı
+          // açtığında (viewCount arttığında) "Medya açıldı" / "Medya 2. kez
+          // açıldı" gibi bir toast göster. İlk yüklemede (oldCount undefined)
+          // ya da kendi mesajımızı biz açtığımızda (senderId!==myId) tetiklenmez.
+          if(oldCount!==undefined&&newCount>oldCount&&m.senderId===myId){
+            const typeLabel=m.type==='video'?'Video':'Fotoğraf';
+            const text=newCount===1?`👁️ ${typeLabel} açıldı`:`👁️ ${typeLabel} ${newCount}. kez açıldı`;
+            showToast(text,'info',3000);
+          }
+        }
+      }
     });
     // Performans: tüm listeyi yeniden çizmek yerine (düşük cihazlarda takılmaya
     // sebep olur) sadece henüz eklenmemiş mesajları DOM'a ekle.
@@ -2727,34 +2798,33 @@ function appendBubble(msg,doScroll=true){
   }
   else if(msg.type==='image'||msg.type==='video'){
     const hasLimit=!!msg.viewLimit;
-    const remaining=hasLimit?(msg.viewLimit-(msg.viewCount||0)):Infinity;
-    const consumed=hasLimit&&!isMe&&remaining<=0;
-    if(hasLimit&&!isMe){
-      // Alıcı tarafında: hak kalmadıysa medya hiç gösterilmez, varsa "aç" kartı gösterilir.
+    if(hasLimit){
+      // WhatsApp'taki gibi: bombalı/limitli medya HEM gönderende HEM alıcıda
+      // kilitli "aç" kartı olarak görünür — hiçbir zaman doğrudan resim/video
+      // olarak sohbet ekranında durmaz. Alıcı tarafında hak biterse kalıcı
+      // olarak "görüntülendi" kartına döner; gönderen tarafında ise hakkı
+      // (kaçının kaldığını) her zaman görebilir ve istediği an açabilir.
+      const remaining=msg.viewLimit-(msg.viewCount||0);
+      const consumed=!isMe&&remaining<=0;
       const card=document.createElement('div');
       card.className='burn-media-card'+(consumed?' consumed':'');
       if(consumed){
         card.innerHTML=`<span class="burn-media-icon">💥</span><div class="burn-media-info"><div class="burn-media-text">Görüntülendi</div><div class="burn-media-sub">Bu ${msg.type==='video'?'video':'fotoğraf'} kayboldu</div></div>`;
       }else{
-        card.innerHTML=`<span class="burn-media-icon">💣</span><div class="burn-media-info"><div class="burn-media-text">${msg.type==='video'?'Video':'Fotoğraf'} · ${remaining} hak</div><div class="burn-media-sub">Açmak için dokun</div></div>`;
+        const label=isMe
+          ?`${msg.type==='video'?'Video':'Fotoğraf'} · ${Math.max(remaining,0)}/${msg.viewLimit} hak`
+          :`${msg.type==='video'?'Video':'Fotoğraf'} · ${remaining} hak`;
+        card.innerHTML=`<span class="burn-media-icon">💣</span><div class="burn-media-info"><div class="burn-media-text">${label}</div><div class="burn-media-sub">Açmak için dokun</div></div>`;
         card.onclick=()=>revealBurnMedia(msg,isMe);
       }
       b.appendChild(card);
     }else{
-      // Gönderen tarafı ya da limitsiz medya: her zaman normal görünür.
+      // Limitsiz medya: her zaman normal görünür.
       if(msg.type==='image'){
         const img=document.createElement('img');img.src=msg.url;img.loading='lazy';
         img.onclick=()=>revealBurnMedia(msg,isMe);b.appendChild(img);
       }else{
         b.appendChild(buildVideoPreviewCard(msg,isMe));
-      }
-      if(hasLimit){
-        b.classList.add('has-burn-badge');
-        const badge=document.createElement('div');badge.className='burn-badge';
-        badge.innerHTML=isMe
-          ?`💣 ${Math.max(remaining,0)}/${msg.viewLimit} hak`
-          :`💣 ${remaining} hak`;
-        b.appendChild(badge);
       }
     }
   } else if(msg.type==='location'){
@@ -3902,6 +3972,7 @@ async function updateRoomMeta(preview){
     participants:[myId,partner.id||ADMIN_ID],
     lastMsg:preview.slice(0,50),
     lastTs:serverTimestamp(),
+    lastSenderId:myId,
     [`name_${myId}`]:myName,
     [`emoji_${myId}`]:myEmoji,
     [`name_${partner.id||ADMIN_ID}`]:partner.name||'Admin',
