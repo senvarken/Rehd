@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="tr" data-build="askbahcem-debug-2026-07-07-v4">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -25,6 +25,92 @@
       document.querySelector('meta[name="apple-mobile-web-app-title"]').setAttribute('content','Aşk Bahçem');
     }
   }catch(e){}
+})();
+</script>
+<script>
+// DÜZELTME: Bazı eski/zayıf cihazların tarayıcılarında (özellikle 'dvh' CSS
+// birimini desteklemeyen WebView'lar) "height:100dvh" hiçbir zaman devreye
+// girmiyor ve tarayıcının üst çubuğu (adres çubuğu/bildirim ikonları) her
+// açılıp kapandığında html/body'nin gerçek yüksekliği ekranla senkron
+// kalmıyordu. Bu durumda sayfa içeriği (header + sohbet + reaksiyon çubuğu +
+// mesaj yazma kutusu) görünür alandan TAŞIYOR, body'deki "overflow:hidden"
+// yüzünden de en alttaki öğe (mesaj yazma kutusu / inputBar) ekran dışına
+// kayıp tamamen kayboluyordu — kullanıcı onu göremiyordu. Burada gerçek
+// pencere yüksekliğini (window.innerHeight, klavye açıkken visualViewport
+// varsa onu) JS ile ölçüp bir CSS değişkenine yazıyoruz; html/body bu
+// değişkeni kullanıyor (dvh'yi destekleyen modern tarayıcılarda zaten dvh
+// yeterli olacağı için bu sadece ek bir güvence).
+(function(){
+  function setAppHeight(){
+    try{
+      const h=(window.visualViewport&&window.visualViewport.height)||window.innerHeight;
+      document.documentElement.style.setProperty('--app-height',h+'px');
+    }catch(e){}
+  }
+  setAppHeight();
+  window.addEventListener('resize',setAppHeight);
+  window.addEventListener('orientationchange',()=>setTimeout(setAppHeight,150));
+  if(window.visualViewport){
+    window.visualViewport.addEventListener('resize',setAppHeight);
+    window.visualViewport.addEventListener('scroll',setAppHeight);
+  }
+  document.addEventListener('DOMContentLoaded',setAppHeight);
+  window.addEventListener('pageshow',setAppHeight);
+})();
+</script>
+<script>
+/* ── OTOMATİK GÜNCELLEME KONTROLÜ ──────────────────────────────────────────
+   SORUN: "Ana ekrana ekle" ile kurulan uygulama (standalone PWA/WebAPK),
+   normal tarayıcı sekmesinden farklı olarak sayfanın ESKİ bir kopyasını
+   (tarayıcı/OS önbelleğinden) günlerce gösterebiliyor — sunucuda dosya
+   güncellenmiş olsa bile kurulu uygulama bunu fark etmiyordu. Bu yüzden
+   yapılan düzeltmeler tarayıcıda hemen görünürken, kurulu uygulamada
+   görünmüyor, ancak uygulama silinip yeniden kurulunca (bu da önbelleği
+   sıfırlıyor) düzeltmeler ortaya çıkıyordu.
+   ÇÖZÜM: Uygulama her açıldığında, sayfanın KENDİSİNİ ağdan (önbellek
+   atlanarak) yeniden indirip HTML içindeki data-build etiketini şu an
+   çalışan sürümle karşılaştırıyoruz. Sunucuda daha yeni bir sürüm varsa
+   sessizce (kısa bir bilgi balonuyla) cache-busting parametreli bir adrese
+   yönlendirip sayfayı tazeliyoruz — kullanıcı artık uygulamayı silip
+   yeniden kurmak zorunda kalmıyor. */
+(function(){
+  function checkForUpdate(){
+    try{
+      fetch(location.pathname+location.search,{cache:'no-store'})
+        .then(res=>res.text())
+        .then(html=>{
+          const m=html.match(/data-build=["']([^"']+)["']/);
+          const serverBuild=m&&m[1];
+          const myBuild=document.documentElement.getAttribute('data-build');
+          if(serverBuild&&myBuild&&serverBuild!==myBuild){
+            console.log('Yeni sürüm bulundu:',serverBuild,'(mevcut:',myBuild+') — yenileniyor…');
+            try{
+              const t=document.getElementById('toast');
+              if(t){
+                t.innerHTML='<span>✨ Yeni güncelleme yükleniyor…</span>';
+                t.classList.add('show');
+              }
+            }catch(e){}
+            setTimeout(()=>{
+              location.href=location.pathname+'?_v='+Date.now();
+            },900);
+          }
+        })
+        .catch(()=>{}); // çevrimdışıysa/ağ hatasında sessizce vazgeç, mevcut sürümle devam
+    }catch(e){}
+  }
+  // Uygulama açılışında bir kez kontrol et…
+  if(document.readyState==='complete'||document.readyState==='interactive'){
+    setTimeout(checkForUpdate,600);
+  }else{
+    document.addEventListener('DOMContentLoaded',()=>setTimeout(checkForUpdate,600));
+  }
+  // …ve uygulama arka plandan öne her gelişinde (standalone PWA'da kullanıcı
+  // uygulamayı günlerce hiç kapatmayabilir, sadece arka plana alıp geri
+  // dönebilir) tekrar kontrol et.
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState==='visible')checkForUpdate();
+  });
 })();
 </script>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
@@ -94,7 +180,7 @@ html.low-end .av-name{-webkit-text-fill-color:currentColor;background:none!impor
   --font-display:'Playfair Display',serif;
   --font-body:'Manrope',sans-serif;
 }
-html,body{height:100%;height:100dvh}
+html,body{height:100%;height:var(--app-height,100dvh)}
 body{font-family:var(--font-body);background:var(--deep);overflow:hidden;display:flex;flex-direction:column;position:relative;color:#fff}
 
 svg{display:block}
@@ -1798,7 +1884,7 @@ function manualInstall(){
    FIREBASE READY
 ═══════════════════════════════════════ */
 window.addEventListener('firebaseReady',()=>{
-  fb=window._fb;console.log('FB ok — BUILD askbahcem-debug-2026-07-06-v3');
+  fb=window._fb;console.log('FB ok — BUILD askbahcem-debug-2026-07-07-v4');
   loadSoundPref();
   loadVibratePref();
   maybeAutoLogin();
