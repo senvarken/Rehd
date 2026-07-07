@@ -449,6 +449,7 @@ svg#loveArrow{width:26px!important;height:14px!important;display:block!important
 #callChatPanel{position:absolute;left:0;right:0;bottom:0;max-height:46%;background:rgba(10,5,8,.82);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-top-left-radius:22px;border-top-right-radius:22px;z-index:8;display:flex;flex-direction:column;transform:translateY(100%);transition:transform .28s cubic-bezier(.16,1,.3,1);padding-bottom:max(10px,env(safe-area-inset-bottom))}
 #callChatPanel.open{transform:translateY(0)}
 .ccp-handle{width:36px;height:4px;border-radius:3px;background:rgba(255,255,255,.25);margin:9px auto 4px}
+.ccp-close{position:absolute;top:6px;right:8px;width:30px;height:30px;border-radius:50%;border:none;background:rgba(255,255,255,.1);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:1}
 #callChatList{flex:1;overflow-y:auto;padding:6px 14px;display:flex;flex-direction:column;gap:7px;min-height:60px}
 .ccp-msg{max-width:80%;padding:8px 12px;border-radius:14px;font-size:.82rem;line-height:1.4;color:#fff;word-break:break-word}
 .ccp-msg.me{align-self:flex-end;background:var(--bubble-me);border-bottom-right-radius:3px}
@@ -1212,6 +1213,7 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
   <!-- Görüşme sırasında mesajlaşma paneli -->
   <div id="callChatPanel">
     <div class="ccp-handle"></div>
+    <button class="ccp-close" onclick="event.stopPropagation();closeCallChat()" title="Kapat"><svg class="icon icon-sm"><use href="#i-close"/></svg></button>
     <div id="callChatList"></div>
     <div class="ccp-input-row">
       <input type="text" id="callMsgInput" placeholder="Mesaj yaz…"
@@ -2470,7 +2472,15 @@ function listenAllIncomingCallsForAdmin(){
       if(roomId===activeRoom)return; // bu sohbet zaten açık, listenCallSignal hallediyor
       const otherUid=roomId.split('__').find(x=>x!==ADMIN_ID);
       if(!otherUid)return;
+      // DÜZELTME: mesajlarda olduğu gibi, aktif olmayan bir sohbetten gelen
+      // görüntülü arama da sidebar rozetine + sekme başlığı/favicon "1,2,3…"
+      // sayacına yansısın — önceden sadece geçici bir toast gösterilip hiçbir
+      // kalıcı iz bırakılmadığı için admin paneli açtığında kaçırdığı aramayı
+      // hiçbir yerde göremiyordu.
+      userUnreadMap[otherUid]=(userUnreadMap[otherUid]||0)+1;
+      renderSidebar(lastPresenceData||{});
       notifyIncomingCall(d.fromName||'Sevgilim',otherUid,d.fromEmoji);
+      refreshAppBadge();
     });
   });
 }
@@ -5177,6 +5187,43 @@ function restoreCall(){
 }
 
 /* ═══════════════════════════════════════
+   GÖRÜŞME SIRASINDA GERİ TUŞU
+   Telefonun fiziksel geri tuşu (WebView'de history.back() tetikler → popstate)
+   önceden görüşmeyi doğrudan kapatıyordu. Artık görüşme başlarken/görüşme-içi
+   sohbet paneli açılırken tarayıcı geçmişine bir "koruma" adımı ekleniyor:
+   ilk geri tuşu (panel açıksa) SADECE paneli kapatır, sonraki geri tuşu ise
+   görüşmeyi tam kapatmak yerine küçük PIP'e küçültür (minimizeCall). Görüşme
+   endCallCleanup() içinde gerçekten bittiğinde eklenen geçmiş adımı da geri
+   alınır ki tarayıcı geçmişi tutarsız kalıp uygulamanın başka yerlerindeki
+   geri tuşu davranışını bozmasın. */
+let inCallHistPushed=false;
+let suppressCallPopstate=false;
+function pushCallHistIfNeeded(){
+  if(inCallHistPushed)return;
+  inCallHistPushed=true;
+  try{history.pushState({askbahcemCall:true},'')}catch(e){}
+}
+function popCallHistIfNeeded(){
+  if(!inCallHistPushed)return;
+  inCallHistPushed=false;
+  suppressCallPopstate=true;
+  try{history.back()}catch(e){}
+}
+window.addEventListener('popstate',()=>{
+  if(suppressCallPopstate){suppressCallPopstate=false;return}
+  if(!inCallHistPushed)return; // bizim eklediğimiz bir adım yoksa normal geri davransın
+  inCallHistPushed=false;
+  const panel=document.getElementById('callChatPanel');
+  const overlay=document.getElementById('callOverlay');
+  if(panel&&panel.classList.contains('open')){
+    closeCallChat();
+    if(overlay&&overlay.classList.contains('open'))pushCallHistIfNeeded(); // görüşme sürüyor, sıradaki geri yine yakalansın
+  }else if(overlay&&overlay.classList.contains('open')&&!overlay.classList.contains('minimized')){
+    minimizeCall();
+  }
+});
+
+/* ═══════════════════════════════════════
    GÖRÜŞME BUTONLARI — otomatik gizleme
    Instagram/WhatsApp tarzı: görüşme sırasında üst/alt butonlar gizli kalır,
    ekrana (video alanına) dokununca açılır/kapanır, 5 saniye hiçbir işlem
@@ -5414,6 +5461,7 @@ async function startCall(){
   ovStart.style.left='';ovStart.style.top='';ovStart.style.right='';ovStart.style.bottom='';ovStart.style.transition='';
   pipJustDragged=false;
   ovStart.classList.add('open');
+  pushCallHistIfNeeded();
   document.getElementById('callInfo').textContent=nm;
   startCallTimer();
   showCallControls();
@@ -5455,6 +5503,7 @@ async function acceptCall(){
   ovAccept.style.left='';ovAccept.style.top='';ovAccept.style.right='';ovAccept.style.bottom='';ovAccept.style.transition='';
   pipJustDragged=false;
   ovAccept.classList.add('open');
+  pushCallHistIfNeeded();
   document.getElementById('callInfo').textContent=nm;
   callConnected=true;
   clearTimeout(missedCallTmr);
@@ -5844,6 +5893,7 @@ function stopCallRecording(){
 }
 
 function endCallCleanup(){
+  popCallHistIfNeeded();
   if(callRecActive)stopCallRecording();
   callConnected=false;
   callPeerId=null;
@@ -5966,7 +6016,17 @@ function toggleCallChat(){
   const panel=document.getElementById('callChatPanel');
   const opening=!panel.classList.contains('open');
   panel.classList.toggle('open');
-  if(opening)populateCallChatFromHistory();
+  if(opening){
+    populateCallChatFromHistory();
+    pushCallHistIfNeeded();
+  }
+}
+// Panel kapatma tuşuna (X) veya geri tuşuna basınca çağrılır — sadece paneli
+// kapatır, görüşmeyi etkilemez.
+function closeCallChat(){
+  const panel=document.getElementById('callChatPanel');
+  if(!panel.classList.contains('open'))return;
+  panel.classList.remove('open');
 }
 function populateCallChatFromHistory(){
   const list=document.getElementById('callChatList');
