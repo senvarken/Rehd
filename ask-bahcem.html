@@ -249,6 +249,10 @@ svg#loveArrow{width:26px!important;height:14px!important;display:block!important
 .ico-btn.red{background:rgba(229,57,53,.85);color:#fff}
 .ico-btn.active-toggle{background:rgba(217,174,85,.22);color:var(--gold)}
 
+.hd-mute-txt-btn{border:none;background:rgba(255,255,255,.06);border-radius:14px;padding:0 10px;height:34px;font-family:var(--font-body);font-size:.72rem;font-weight:800;cursor:pointer;flex-shrink:0;white-space:nowrap;transition:background .18s,transform .12s}
+.hd-mute-txt-btn:hover{background:rgba(255,255,255,.12)}
+.hd-mute-txt-btn:active{transform:scale(.94)}
+
 /* ── SOUND STATUS PILL ── */
 .sound-pill{display:flex;align-items:center;gap:5px;padding:4px 9px 4px 7px;border-radius:20px;background:rgba(255,255,255,.06);font-size:.68rem;color:var(--blush);border:1px solid rgba(242,196,206,.1);cursor:pointer;flex-shrink:0}
 
@@ -982,6 +986,7 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
     <div class="hd-acts" id="headerActs">
       <button class="ico-btn nudge-btn" onclick="sendNudge()" title="Titreşim Gönder"><svg class="icon"><use href="#i-buzz"/></svg></button>
       <button class="ico-btn" onclick="startCall()" title="Görüntülü Arama"><svg class="icon"><use href="#i-video"/></svg></button>
+      <button id="muteAllHeaderBtn" class="hd-mute-txt-btn" onclick="toggleMuteAll()"></button>
       <div class="hd-more-wrap">
         <button class="ico-btn" id="hdMoreBtn" onclick="event.stopPropagation();toggleHdMore()" title="Diğer"><svg class="icon"><use href="#i-more"/></svg></button>
         <div class="hd-more-menu" id="hdMoreMenu"></div>
@@ -1916,7 +1921,19 @@ async function doLogin(){
         console.warn('doLogin: worker customToken döndürmedi — rules sıkılaştırıldıysa okuma/yazmalar başarısız olabilir');
       }
       isAdmin=!!data.isAdmin;
-      myId=data.uid;
+      // DÜZELTME: Admin girişinde myId, Firebase'in döndürdüğü GERÇEK auth uid'i
+      // ile ayarlanıyordu. Oysa kodun geri kalanı (oda ID'leri, misafirin arama
+      // sinyali gönderdiği hedef, genel arama/mesaj bildirim dinleyicileri) admin
+      // için hep sabit ADMIN_ID('admin') değerini varsayıyor. Bu tutarsızlık
+      // yüzünden misafir admin'i aradığında sinyal doğru şekilde 'callsig/
+      // {oda}_to_admin' yoluna yazılıyor, genel dinleyici bunu görüp toast/
+      // bildirim gösteriyordu — ama admin'in canlı "gelen arama" ekranını açan
+      // asıl dinleyici (listenCallSignal) kendi gerçek uid'sine göre FARKLI bir
+      // yolu dinlediği için teklifi hiç görmüyor, ekran hiç açılmıyordu. Firestore
+      // kuralları sadece "auth != null" şartını arıyor (yukarıdaki not), belirli
+      // bir uid eşleşmesi istemiyor; bu yüzden admin için myId'yi sabit ADMIN_ID
+      // yapmak güvenli ve kodun geri kalanıyla tutarlı.
+      myId=isAdmin?ADMIN_ID:data.uid;
       myName=data.name;
       myEmoji=data.emoji||(isAdmin?'👑':'💕');
       if(isAdmin)sessionAdminPassword=upass;
@@ -2019,7 +2036,6 @@ function buildHdMoreMenu(role){
   menu.innerHTML=`<button onclick="toggleHdMore();confirmClearAll()"><svg class="icon icon-sm"><use href="#i-trash"/></svg><span>Sohbeti Temizle</span></button>
     <button id="soundToggleBtn" onclick="toggleHdMore();toggleSound()"><svg class="icon icon-sm"><use href="#i-bell"/></svg><span>Bildirim Sesi</span></button>
     <button id="vibrateToggleBtn" onclick="toggleHdMore();toggleVibrate()"><span style="font-size:1.05em;width:18px;text-align:center;flex-shrink:0">📳</span><span>Titreşim</span></button>
-    <button id="muteAllToggleBtn" onclick="toggleHdMore();toggleMuteAll()"><span style="font-size:1.05em;width:18px;text-align:center;flex-shrink:0">🔕</span><span>Sessize Al</span></button>
     <button id="pushToggleBtn" onclick="toggleHdMore();togglePush()"><svg class="icon icon-sm"><use href="#i-bell"/></svg><span>Kapalıyken Bildirim</span></button>
     <button onclick="toggleHdMore();manualInstall()"><svg class="icon icon-sm"><use href="#i-download"/></svg><span>Uygulama Olarak Ekle</span></button>
     <button onclick="toggleHdMore();clearAppDataAndReload()"><svg class="icon icon-sm"><use href="#i-refresh"/></svg><span>Verileri Temizle (Güncelle)</span></button>`;
@@ -4884,11 +4900,14 @@ function toggleMuteAll(){
   showToast(currentlyMuted?'Bildirimler tekrar açıldı':'Sessize alındı (ses + titreşim kapalı)');
 }
 function updateMuteAllBtnUI(){
-  const btn=document.getElementById('muteAllToggleBtn');
+  const btn=document.getElementById('muteAllHeaderBtn');
   if(!btn)return;
   const muted=!soundOn&&!vibrateOn;
-  const label=muted?'Sessize Alındı':'Sessize Al';
-  btn.innerHTML=`<span style="font-size:1.05em;width:18px;text-align:center;flex-shrink:0">${muted?'🔇':'🔕'}</span><span>${label}</span>`;
+  // DÜZELTME: eskiden ayarlar menüsünde emoji+etiket olan bu buton artık
+  // header'da düz metin olarak duruyor — sessizken kırmızı "Sessiz Alındı",
+  // sesliyken yeşil "Sessiz Al" yazıyor (emoji yok, sadece renkli yazı).
+  btn.textContent=muted?'Sessiz Alındı':'Sessiz Al';
+  btn.style.color=muted?'#ff4d5e':'#3ddc7a';
   btn.classList.toggle('active-toggle',!muted);
 }
 
@@ -6106,11 +6125,33 @@ async function switchCamera(){
   if(!oldTrack)return;
   camSwitching=true;
   const nextFacing=currentFacingMode==='user'?'environment':'user';
+  let newStream=null;
   try{
-    const newStream=await navigator.mediaDevices.getUserMedia({
+    newStream=await navigator.mediaDevices.getUserMedia({
       video:{...CALL_MEDIA_CONSTRAINTS.video,facingMode:{exact:nextFacing}},
       audio:false
     });
+  }catch(e){
+    // DÜZELTME: 'exact' constraint bazı cihazlarda (özellikle tek kameralı
+    // tabletler ya da facingMode etiketlemesi farklı/eksik olan cihazlarda)
+    // OverconstrainedError fırlatıp kamera değişimini baştan engelliyordu —
+    // misafirde "Kamera değiştirilemedi" hatası hep buradan geliyordu. Aynı
+    // isteği daha esnek bir şekilde ('ideal') tekrar deniyoruz; tarayıcı o
+    // zaman elindeki en yakın/mevcut kamerayı vermeye çalışır ve hata
+    // fırlatmaz. Bu da başarısız olursa gerçekten değiştirilecek başka
+    // kamera yok demektir.
+    try{
+      newStream=await navigator.mediaDevices.getUserMedia({
+        video:{...CALL_MEDIA_CONSTRAINTS.video,facingMode:{ideal:nextFacing}},
+        audio:false
+      });
+    }catch(e2){
+      showToast('Bu cihazda değiştirilecek başka kamera bulunamadı','warn');
+      camSwitching=false;
+      return;
+    }
+  }
+  try{
     const newTrack=newStream.getVideoTracks()[0];
     if(!newTrack){camSwitching=false;return}
     currentFacingMode=nextFacing;
