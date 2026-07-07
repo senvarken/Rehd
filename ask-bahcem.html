@@ -4731,7 +4731,7 @@ function toggleVoicePlay(msgId,url){
 
 async function updateRoomMeta(preview){
   if(!fb||!activeRoom)return;
-  const {db,doc,setDoc,serverTimestamp}=fb;
+  const {db,doc,setDoc,serverTimestamp,rtdb,dbRef,set}=fb;
   const partner=activePartner||{};
   await setDoc(doc(fb.db,'rooms',activeRoom),{
     participants:[myId,partner.id||ADMIN_ID],
@@ -4743,6 +4743,18 @@ async function updateRoomMeta(preview){
     [`name_${partner.id||ADMIN_ID}`]:partner.name||'Admin',
     [`emoji_${partner.id||ADMIN_ID}`]:partner.emoji||'👑'
   },{merge:true});
+  // ★ Telegram bildirim scripti (Apps Script) artık Firestore yerine bunu
+  // okuyor — RTDB okuması çok daha ucuz, Firestore 50K/gün kotasını
+  // tüketmiyor. Sadece son mesajın kısa özetini tutuyoruz.
+  try{
+    await set(dbRef(rtdb,`lastMessage/${activeRoom}`),{
+      preview:preview.slice(0,200),
+      senderId:myId,
+      senderName:myName,
+      senderEmoji:myEmoji,
+      ts:Date.now()
+    });
+  }catch(e){console.error('lastMessage RTDB yazma hatası',e)}
 }
 
 /* ═══════════════════════════════════════
@@ -5180,7 +5192,10 @@ function notifyIncomingMessage(msg){
   // doğrudan o kişinin sohbetine geçsin.
   const onClick=(isAdmin&&msg.senderId)?()=>selectUser(msg.senderId,msg.senderName,msg.senderEmoji||'💕'):null;
   showToast(`💌 ${esc(senderName)}: ${preview}`,'info',3200,onClick);
-  if(isAdmin)sendTelegramNotification(`💌 ${senderName} mesaj attı: ${preview}`);
+  // NOT: Telegram bildirimi burada ARTIK gönderilmiyor — admin uygulama
+  // açıkken zaten toast/ses/titreşimle haberdar oluyor. Telegram sadece
+  // admin uygulaması KAPALIYKEN anlamlı; o iş Apps Script tarafındaki
+  // checkNewMessages() fonksiyonuna bırakıldı (RTDB lastMessage okuyor).
   if(document.hidden){
     showSystemNotification(msg.senderName||'Aşk Bahçem',preview,'msg-'+activeRoom);
     bumpUnread();
@@ -5199,7 +5214,9 @@ function notifyIncomingCall(fromName,fromUid,fromEmoji){
   vib([400,150,400,150,400]);
   const onClick=(isAdmin&&fromUid)?()=>selectUser(fromUid,fromName,fromEmoji||'💕'):null;
   showToast(`📹 ${esc(fromName||'Aşk Bahçem')} arıyor…`,'info',3200,onClick);
-  if(isAdmin)sendTelegramNotification(`📹 ${fromName||'Biri'} görüntülü arıyor!`);
+  // Sadece admin uygulamayı görmüyorken (arka planda/sekme kapalı) Telegram'a
+  // bildirim gönder — admin zaten uygulamadaysa toast/titreşim yeterli.
+  if(isAdmin&&document.hidden)sendTelegramNotification(`📹 ${fromName||'Biri'} görüntülü arıyor!`);
   if(document.hidden){
     showSystemNotification(fromName||'Aşk Bahçem','Görüntülü arama yapıyor…','call-incoming');
     bumpUnread();
