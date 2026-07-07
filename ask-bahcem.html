@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260707-113743-c8caf17">
+<html lang="tr" data-build="askbahcem-20260707-115116-11d63da">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -1642,9 +1642,16 @@ const QUALITY_TIERS={
     adaptiveMin:180000,adaptiveMax:800000,startBitrate:400000
   },
   verylow:{
-    video:{width:{ideal:480,max:640},height:{ideal:360,max:480},frameRate:{ideal:18,max:20}},
-    maxBitrate:320000,maxFramerate:18,minFrameRate:10,
-    adaptiveMin:120000,adaptiveMax:500000,startBitrate:280000
+    // DÜZELTME (en zayıf cihazda maksimum akıcılık): Bu kademe artık "kabul
+    // edilebilir görüntü" hedeflemiyor, doğrudan "hiç donmasın" hedefliyor.
+    // Çözünürlük bilerek 240p'ye çekildi (encode/CPU maliyetinin ana kaynağı
+    // piksel sayısıdır — çözünürlüğü yarıya indirmek encode yükünü ~4'e
+    // böler); bu payla en zayıf Exynos/eski Android encoder'ı bile 15-16fps'i
+    // rahatça karşılayabilir. fps hedefi de düşürüldü (max 16) ki encoder
+    // asla "yetişemiyorum" durumuna düşüp kare atlamasın/donmasın.
+    video:{width:{ideal:320,max:400},height:{ideal:240,max:320},frameRate:{ideal:15,max:16}},
+    maxBitrate:180000,maxFramerate:16,minFrameRate:8,
+    adaptiveMin:70000,adaptiveMax:280000,startBitrate:140000
   }
 };
 function currentQualityTier(){return QUALITY_TIERS[DEVICE_TIER]||QUALITY_TIERS.mid}
