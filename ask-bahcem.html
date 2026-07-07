@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260707-094821-219618a">
+<html lang="tr" data-build="askbahcem-20260707-095855-cea3349">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -871,6 +871,13 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
 .call-rec-badge{position:absolute;top:calc(14px + env(safe-area-inset-top));left:14px;display:none;align-items:center;gap:6px;padding:5px 11px 5px 8px;border-radius:20px;background:rgba(20,4,10,.55);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);font-size:.72rem;font-weight:700;color:#fff;z-index:6}
 .call-rec-badge.show{display:flex}
 .call-rec-badge .dot{width:9px;height:9px;border-radius:50%;background:#ff3b52;animation:recDotPulse 1.1s ease-in-out infinite}
+/* DÜZELTME: kasma/netlik sorununu teşhis etmek için görüşme sırasında
+   canlı istatistik (çözünürlük/fps/bitrate/paket kaybı) gösteren küçük
+   bir rozet. Konsola bakmaya gerek kalmadan ekran görüntüsüyle bile
+   sorunun tam olarak nerede olduğu (düşük çözünürlük mü, paket kaybı mı,
+   düşük fps mi) anlaşılabilir. */
+.call-stats-badge{position:absolute;bottom:calc(96px + env(safe-area-inset-bottom));left:14px;display:none;flex-direction:column;gap:2px;padding:7px 11px;border-radius:12px;background:rgba(20,4,10,.6);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);font-size:.68rem;font-weight:600;color:#fff;z-index:6;font-family:monospace;line-height:1.5;white-space:pre}
+.call-stats-badge.show{display:flex}
 @media (max-width:400px){
   .call-bottom-bar{gap:clamp(4px,2vw,8px)}
 }
@@ -1361,6 +1368,7 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
     </div>
   </div>
   <div class="call-rec-badge" id="callRecBadge"><span class="dot"></span><span>Kaydediliyor</span></div>
+  <div class="call-stats-badge" id="callStatsBadge"></div>
   <video id="localVid" autoplay playsinline muted onpointerdown="selfVidPointerDown(event)"></video>
   <div id="swapHint">↕ değiştir</div>
 
@@ -1603,18 +1611,22 @@ const ICE=[
   {urls:'turn:openrelay.metered.ca:443?transport=tcp',username:'openrelayproject',credential:'openrelayproject'}
 ];
 
-/* Görüşme kalitesi/performans ayarları — mobil veri üzerinde kasma/donmayı
-   azaltmak için orta çözünürlük + sınırlı bitrate kullanılır. Yüksek
-   çözünürlük+bitrate zayıf bağlantılarda tam tersine takılmaya sebep olur. */
+/* Görüşme kalitesi/performans ayarları. DÜZELTME: önceki 640x480/550kbps
+   sınırı hem kasmayı çözmedi hem de görüntüyü belirgin şekilde bulanık
+   bıraktı — çünkü adaptif sistem devreye girince bitrate 120kbps'e kadar
+   düşebiliyordu, bu çözünürlükte bile ciddi blok/bulanıklık yapar. Hedef
+   çözünürlük ve taban bitrate biraz yükseltildi; asıl kasma/netlik dengesi
+   artık aşağıdaki ADAPTIVE_BR_* sabitleri ve gerçek zamanlı ölçümle
+   sağlanıyor (bkz. startAdaptiveBitrate). */
 const CALL_MEDIA_CONSTRAINTS={
-  video:{width:{ideal:640,max:960},height:{ideal:480,max:720},frameRate:{ideal:24,max:30},facingMode:'user'},
+  video:{width:{ideal:960,max:1280},height:{ideal:720,max:720},frameRate:{ideal:24,max:30},facingMode:'user'},
   audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}
 };
 function capVideoBitrate(sender){
   try{
     const params=sender.getParameters();
     if(!params.encodings||!params.encodings.length)params.encodings=[{}];
-    params.encodings[0].maxBitrate=550000; // ~550kbps — kararlı, kasmayan bir üst sınır
+    params.encodings[0].maxBitrate=700000; // ~700kbps — 720p hedefinde makul başlangıç netliği
     // DÜZELTME (kasma/donma): degradationPreference belirtilmezse tarayıcı
     // varsayılan olarak genelde 'balanced' kullanır ve donanım zorlandığında
     // bazen ÇÖZÜNÜRLÜĞÜ korumaya çalışıp KARE HIZINI (fps) düşürür — bu da
@@ -1657,14 +1669,14 @@ function preferStableVideoCodec(pc){
    böylece her bağlantı koşuluna kendini uyarlayan bir video akışı elde
    ediliyor.
 */
-const ADAPTIVE_BR_MIN=120000;   // ~120kbps — çok kötü ağda bile görüntü akmaya devam etsin
-const ADAPTIVE_BR_MAX=900000;   // ~900kbps — çok iyi ağda daha net görüntü
-const ADAPTIVE_BR_STEP=120000;
+const ADAPTIVE_BR_MIN=300000;   // ~300kbps — 720p'de bile makul netlik için taban yükseltildi
+const ADAPTIVE_BR_MAX=1500000;  // ~1.5Mbps — iyi ağda net 720p görüntüye izin ver
+const ADAPTIVE_BR_STEP=150000;
 let adaptiveBrTmr=null;
-let adaptiveBrCurrent=550000;
+let adaptiveBrCurrent=700000; // başlangıç: eskisinden biraz yüksek, ilk karelerden itibaren daha net
 function startAdaptiveBitrate(pc){
   clearInterval(adaptiveBrTmr);
-  adaptiveBrCurrent=550000;
+  adaptiveBrCurrent=700000;
   let lastBytesLost=0,lastPacketsSent=0,haveBaseline=false;
   adaptiveBrTmr=setInterval(async()=>{
     if(!peerConn||peerConn!==pc)return clearInterval(adaptiveBrTmr);
@@ -1681,6 +1693,11 @@ function startAdaptiveBitrate(pc){
       const packetsSent=outbound.packetsSent||0;
       const packetsLost=(remoteInbound&&remoteInbound.packetsLost)||0;
       const rtt=(remoteInbound&&remoteInbound.roundTripTime)||0; // saniye
+      // DÜZELTME: kullanıcı konsola bakmadan görüşme sırasında gerçek
+      // çözünürlük/fps/bitrate/kayıp oranını görebilsin diye ekrandaki
+      // rozeti burada güncelliyoruz — "net değil" şikayetinin sebebi düşük
+      // çözünürlük mü, düşük bitrate mi, yoksa paket kaybı mı anlaşılır.
+      updateStatsBadge(outbound,remoteInbound);
       if(!haveBaseline){
         haveBaseline=true;lastBytesLost=packetsLost;lastPacketsSent=packetsSent;
         return;
@@ -1716,6 +1733,26 @@ function startAdaptiveBitrate(pc){
 function stopAdaptiveBitrate(){
   clearInterval(adaptiveBrTmr);
   adaptiveBrTmr=null;
+  const badge=document.getElementById('callStatsBadge');
+  if(badge)badge.classList.remove('show');
+}
+/* Ekrandaki küçük teşhis rozetini gerçek gönderim istatistikleriyle
+   doldurur: gönderilen çözünürlük, fps, mevcut bitrate hedefi ve karşı
+   tarafın bildirdiği paket kaybı yüzdesi. */
+function updateStatsBadge(outbound,remoteInbound){
+  try{
+    const badge=document.getElementById('callStatsBadge');
+    if(!badge)return;
+    const w=outbound.frameWidth||'?',h=outbound.frameHeight||'?';
+    const fps=outbound.framesPerSecond!=null?Math.round(outbound.framesPerSecond):'?';
+    const kbps=Math.round(adaptiveBrCurrent/1000);
+    const lostPct=remoteInbound&&remoteInbound.packetsLost!=null&&outbound.packetsSent
+      ?((remoteInbound.packetsLost/Math.max(1,outbound.packetsSent))*100).toFixed(1)
+      :'0.0';
+    const rttMs=remoteInbound&&remoteInbound.roundTripTime!=null?Math.round(remoteInbound.roundTripTime*1000):'?';
+    badge.textContent=`${w}x${h} @${fps}fps\n${kbps}kbps  kayıp:%${lostPct}  ping:${rttMs}ms`;
+    badge.classList.add('show');
+  }catch(e){}
 }
 
 /* ═══════════════════════════════════════
