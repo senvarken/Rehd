@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260707-121151-8a6bf3c">
+<html lang="tr" data-build="askbahcem-20260707-130212-e1dae6f">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -6351,6 +6351,23 @@ function startVideoHealthCheck(pc){
               vid.srcObject=null;
               requestAnimationFrame(()=>{vid.srcObject=s;vid.play().catch(()=>{})});
             }catch(e){}
+          }
+          // DÜZELTME 7 (asıl kök neden — "karşı tarafın görüntüsü hiç
+          // gelmiyor/donuk kalıyor" şikayeti): paketler ağdan sorunsuz
+          // akmaya devam edebilir (gelen kayıp/jitter düşük görünür) ama
+          // DECODER bir bozuk/eksik kareden sonra tıkanıp yeni kare
+          // üretemeyebilir — bu, yukarıdaki srcObject söküp-takma (render
+          // pipeline sıfırlama) ile düzelmez, çünkü sorun render
+          // katmanında değil decode katmanındadır. Decoder'ın kurtulması
+          // için TAZE BİR ANAHTAR KARE (keyframe) şart; bunu JS'den
+          // tetiklemenin elimizdeki tek güvenilir yolu ICE restart'tır
+          // (SSRC/negotiation'ı yeniler, karşı taraf yeni bir keyframe
+          // gönderir). Reattach denemesi ~8-12sn daha işe yaramazsa
+          // otomatik olarak ICE'i de yeniden başlatıyoruz.
+          if(stuckTicks===4){
+            try{pc.restartIce&&pc.restartIce()}catch(e){}
+            showToast('Görüntü takıldı, yeniden bağlanılıyor…','warn');
+            stuckTicks=0; // bir sonraki gerçek donmayı da yakalayabilmek için sıfırla
           }
         }else{
           stuckTicks=0;
