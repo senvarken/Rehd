@@ -35,6 +35,7 @@ import{getFirestore,collection,collectionGroup,addDoc,query,orderBy,onSnapshot,s
 import{getStorage,ref,uploadBytesResumable,getDownloadURL}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js';
 import{getDatabase,ref as dbRef,set,onValue,onDisconnect,remove,push,get}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
 import{getMessaging,getToken,deleteToken,onMessage,isSupported as fcmIsSupported}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js';
+import{getAuth,signInWithCustomToken}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 
 // ★ KENDİ FIREBASE AYARLARINIZI GİRİN ★
 const firebaseConfig={
@@ -51,6 +52,7 @@ const app=initializeApp(firebaseConfig);
 const db=getFirestore(app);
 const storage=getStorage(app);
 const rtdb=getDatabase(app);
+const authInst=getAuth(app);
 
 window._fb={
   app,db,storage,rtdb,
@@ -1863,7 +1865,7 @@ async function doLogin(){
 
   if(!uname||!upass){showToast('Kullanıcı adı ve şifre gir','warn');return}
   if(!fb){console.log('doLogin: fb HENÜZ HAZIR DEĞİL, 1sn sonra tekrar denenecek');showToast('Bağlanıyor…');setTimeout(doLogin,1000);return}
-  console.log('doLogin: fb hazır, adminCfg isteniyor…');
+  console.log('doLogin: fb hazır, worker\'a soruluyor…');
 
   const remember=document.getElementById('rememberMe')?.checked;
   // NOT: "Beni hatırla" bilgisi burada DEĞİL, sadece giriş BAŞARILI olduktan
@@ -1872,45 +1874,13 @@ async function doLogin(){
   // sayfa yenilemesinde otomatik dolduruluyor ve kullanıcı fark etmeden aynı
   // yanlış şifreyle sürekli "hatalı" hatası almaya devam ediyordu.
 
-  let adminCfg;
-  try{
-    adminCfg=await withTimeout_(getAdminConfig(),8000,'Sunucu kontrolü');
-    console.log('doLogin: adminCfg alındı ->',adminCfg);
-  }catch(e){
-    console.error('doLogin: getAdminConfig zaman aşımı/hata',e);
-    showToast('Bağlantı zaman aşımına uğradı, tekrar dene','error');
-    return;
-  }
-  if(uname===adminCfg.username&&upass===adminCfg.password){
-    console.log('doLogin: ADMIN girişi eşleşti');
-    isAdmin=true;myId=ADMIN_ID;myName='Admin';myEmoji='👑';
-    saveRememberedLogin(remember,uname,upass);
-    document.getElementById('login').style.display='none';
-    enterAppAsAdmin();
-    return;
-  }
-
   if(btn){btn.disabled=true;btn.innerHTML='<svg class="icon icon-sm"><use href="#i-refresh"/></svg>Kontrol ediliyor…'}
-  console.log('doLogin: admin değil, Firestore kullanıcı kontrolüne geçiliyor…');
+  console.log('doLogin: Cloudflare Worker\'a soruluyor (admin + misafir tek noktadan)…');
 
-  // 1) Önce Firestore'daki kullanıcı listesine bak (admin panelinden eklenenler)
-  try{
-    const found=await withTimeout_(checkFirestoreUser(uname,upass),8000,'Kullanıcı kontrolü');
-    console.log('doLogin: Firestore kullanıcı sonucu ->',found);
-    if(found){
-      isAdmin=false;
-      myId=found.uid;
-      myName=found.name;
-      myEmoji=found.emoji||'💕';
-      saveRememberedLogin(remember,uname,upass);
-      document.getElementById('login').style.display='none';
-      enterAppAsGuest();
-      return;
-    }
-  }catch(e){console.error('doLogin: Firestore auth check failed',e)}
-
-  // 2) Yoksa eski Cloudflare Worker'a sor (geriye dönük uyumluluk)
-  console.log('doLogin: Cloudflare Worker fallback deneniyor…');
+  // Hem admin hem misafir girişleri artık tek noktadan: Cloudflare Worker.
+  // Worker şifreyi server-side doğrulayıp bir Firebase customToken döndürüyor;
+  // biz de bu token'la gerçek bir Firebase Auth oturumu açıyoruz. Böylece
+  // Firestore/RTDB rules'daki "auth != null" şartı gerçek anlamda sağlanıyor.
   try{
     const ctrl=new AbortController();
     const abortTmr=setTimeout(()=>ctrl.abort(),8000);
@@ -1922,14 +1892,28 @@ async function doLogin(){
     });
     clearTimeout(abortTmr);
     const data=await res.json();
+    console.log('doLogin: worker cevabı ->',{...data,customToken:data.customToken?'(var)':undefined});
     if(data.success){
-      isAdmin=false;
+      if(data.customToken){
+        try{
+          await signInWithCustomToken(authInst,data.customToken);
+          console.log('doLogin: Firebase Auth oturumu açıldı, uid=',authInst.currentUser?.uid);
+        }catch(e){
+          console.error('doLogin: signInWithCustomToken başarısız',e);
+          showToast('Oturum açılamadı, tekrar dene','error');
+          if(btn){btn.disabled=false;btn.innerHTML='Bahçeye Gir'}
+          return;
+        }
+      }else{
+        console.warn('doLogin: worker customToken döndürmedi — rules sıkılaştırıldıysa okuma/yazmalar başarısız olabilir');
+      }
+      isAdmin=!!data.isAdmin;
       myId=data.uid;
       myName=data.name;
-      myEmoji=data.emoji||'💕';
+      myEmoji=data.emoji||(isAdmin?'👑':'💕');
       saveRememberedLogin(remember,uname,upass);
       document.getElementById('login').style.display='none';
-      enterAppAsGuest();
+      if(isAdmin){enterAppAsAdmin()}else{enterAppAsGuest()}
       return;
     }
     saveRememberedLogin(false,'','');
