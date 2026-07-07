@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260707-105738-ddb40e9">
+<html lang="tr" data-build="askbahcem-20260707-113137-6c6f3e7">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -1806,7 +1806,20 @@ function startAdaptiveBitrate(pc){
   const ADAPTIVE_BR_MIN=q.adaptiveMin,ADAPTIVE_BR_MAX=q.adaptiveMax,ADAPTIVE_BR_STEP=Math.round(q.startBitrate*0.2);
   adaptiveBrCurrent=q.startBitrate;
   negotiatedCodecLabel='';
+  currentJitterBufferMs=150;
   let lastBytesLost=0,lastPacketsSent=0,haveBaseline=false;
+  // DÜZELTME 5 (donma — gelen akış tarafı): "kayıp:%0.0 ping:9ms" gibi iyi
+  // değerlere rağmen donma olabiliyor çünkü o değerler SENİN GÖNDERDİĞİN
+  // akışın (karşı tarafın raporladığı) kalitesini gösteriyor — SENİN
+  // ALDIĞIN (decode edip ekrana bastığın) akışın kaybı/jitter'ı hiç ayrı
+  // gösterilmiyordu. Burada inbound-rtp'den gelen akışın kendi kaybı ve
+  // jitter'ını da okuyup rozete ekliyoruz; ayrıca donma sayısı arttıkça
+  // (karşıdan gelen akış kesintili/dalgalıysa) alıcı jitter tamponunu
+  // kademeli büyütüyoruz (150ms→400ms) — bu, küçük ağ dalgalanmalarının
+  // donma yerine biraz daha fazla ama fark edilmeyecek gecikmeyle
+  // yutulmasını sağlar; donma bir süre tekrarlanmazsa tamponu yavaşça
+  // 150ms'e geri indiririz (gereksiz gecikme birikmesin).
+  let lastFreezeCount=null,cleanTicksInARow=0;
   adaptiveBrTmr=setInterval(async()=>{
     if(!peerConn||peerConn!==pc)return clearInterval(adaptiveBrTmr);
     try{
@@ -1854,6 +1867,23 @@ function startAdaptiveBitrate(pc){
       // rozeti burada güncelliyoruz — "net değil" şikayetinin sebebi düşük
       // çözünürlük mü, düşük bitrate mi, yoksa paket kaybı mı anlaşılır.
       updateStatsBadge(outbound,remoteInbound,inbound,mediaSource);
+      // Donma sayısı bu tick'te arttıysa (karşıdan gelen akış kesintiye
+      // uğradıysa) jitter tamponunu büyüt; birkaç tick temiz geçerse
+      // yavaşça eski haline indir.
+      if(inbound&&inbound.freezeCount!=null){
+        const fc=inbound.freezeCount;
+        if(lastFreezeCount!==null&&fc>lastFreezeCount){
+          cleanTicksInARow=0;
+          adjustJitterBuffer(pc,Math.min(400,currentJitterBufferMs+50));
+        }else{
+          cleanTicksInARow++;
+          if(cleanTicksInARow>=3&&currentJitterBufferMs>150){
+            cleanTicksInARow=0;
+            adjustJitterBuffer(pc,Math.max(150,currentJitterBufferMs-50));
+          }
+        }
+        lastFreezeCount=fc;
+      }
       if(!haveBaseline){
         haveBaseline=true;lastBytesLost=packetsLost;lastPacketsSent=packetsSent;
         return;
@@ -1887,6 +1917,22 @@ function startAdaptiveBitrate(pc){
       }
     }catch(e){}
   },4000);
+}
+/* Alıcı tarafın jitter tamponunu (receiver.jitterBufferTarget) çalışma
+   zamanında değiştirir. Tarayıcı desteklemiyorsa (playoutDelayHint'e
+   düşer) sorunsuzca yoksayar. */
+let currentJitterBufferMs=150;
+function adjustJitterBuffer(pc,ms){
+  try{
+    const receiver=pc.getReceivers().find(r=>r.track&&r.track.kind==='video');
+    if(!receiver)return;
+    if('jitterBufferTarget' in receiver){
+      receiver.jitterBufferTarget=ms;
+    }else if('playoutDelayHint' in receiver){
+      receiver.playoutDelayHint=ms/1000;
+    }
+    currentJitterBufferMs=ms;
+  }catch(e){}
 }
 function stopAdaptiveBitrate(){
   clearInterval(adaptiveBrTmr);
@@ -1932,7 +1978,21 @@ function updateStatsBadge(outbound,remoteInbound,inbound,mediaSource){
       const camFps=Math.round(mediaSource.framesPerSecond);
       camLine=`\nkamera:${camFps}fps  gönderim:${fps}fps${usedMinFpsConstraint?' (fps-zorlandı)':''}`;
     }
-    badge.textContent=`${w}x${h} @${fps}fps\n${kbps}kbps  kayıp:%${lostPct}  ping:${rttMs}ms${line3}${tierLine}${camLine}`;
+    // DÜZELTME 5: gelen (senin izlediğin) akışın kendi kaybı/jitter'ı — bu,
+    // "kayıp:%" satırındaki (SENİN GÖNDERDİĞİN akışın kaybı) değerinden
+    // FARKLI bir yöndür. Donma varken bu satır yüksekse sebep ağ/jitter'dır;
+    // düşükse sebep muhtemelen render/JS ana thread tarafıdır.
+    let inLine='';
+    if(inbound){
+      const inLostPct=inbound.packetsLost!=null&&inbound.packetsReceived!=null
+        ?((inbound.packetsLost/Math.max(1,inbound.packetsReceived+inbound.packetsLost))*100).toFixed(1)
+        :null;
+      const jitterMs=inbound.jitter!=null?Math.round(inbound.jitter*1000):null;
+      if(inLostPct!=null||jitterMs!=null){
+        inLine=`\ngelen kayıp:%${inLostPct!=null?inLostPct:'?'}  jitter:${jitterMs!=null?jitterMs:'?'}ms  tampon:${currentJitterBufferMs}ms`;
+      }
+    }
+    badge.textContent=`${w}x${h} @${fps}fps\n${kbps}kbps  kayıp:%${lostPct}  ping:${rttMs}ms${line3}${tierLine}${camLine}${inLine}`;
     badge.classList.add('show');
   }catch(e){}
 }
