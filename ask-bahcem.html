@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260707-115116-11d63da">
+<html lang="tr" data-build="askbahcem-20260707-115929-0535f1a">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -1878,11 +1878,23 @@ function startAdaptiveBitrate(pc){
       // Donma sayısı bu tick'te arttıysa (karşıdan gelen akış kesintiye
       // uğradıysa) jitter tamponunu büyüt; birkaç tick temiz geçerse
       // yavaşça eski haline indir.
+      let emergencyCut=false;
       if(inbound&&inbound.freezeCount!=null){
         const fc=inbound.freezeCount;
         if(lastFreezeCount!==null&&fc>lastFreezeCount){
+          const freezesThisTick=fc-lastFreezeCount;
           cleanTicksInARow=0;
-          adjustJitterBuffer(pc,Math.min(400,currentJitterBufferMs+50));
+          // DÜZELTME (arka arkaya/patlama halinde donma): tek tikte 2+ yeni
+          // donma varsa ağ o an gerçekten kötü demektir — +50ms'lik yavaş
+          // artışı beklemek yerine tamponu doğrudan üst sınıra (600ms)
+          // sıçratıyoruz ve aşağıda bitrate'i de bir sonraki periyodik
+          // kontrolü beklemeden ANINDA tabana çekiyoruz (emergencyCut).
+          if(freezesThisTick>=2){
+            adjustJitterBuffer(pc,600);
+            emergencyCut=true;
+          }else{
+            adjustJitterBuffer(pc,Math.min(600,currentJitterBufferMs+80));
+          }
         }else{
           cleanTicksInARow++;
           if(cleanTicksInARow>=3&&currentJitterBufferMs>150){
@@ -1905,11 +1917,16 @@ function startAdaptiveBitrate(pc){
       // düşür; ikisi de iyiyse kademeli olarak yükselterek daha iyi
       // görüntüye izin ver.
       let target=adaptiveBrCurrent;
-      if(lossRatio>0.05||rtt>0.4){
+      if(emergencyCut){
+        // Donma patlaması az önce tespit edildi: periyodik kademeli düşüşü
+        // beklemeden bitrate'i doğrudan tabana çekiyoruz. Ağ birkaç tik
+        // temiz geçerse zaten yukarıdaki normal kurallar tekrar yükseltir.
+        target=ADAPTIVE_BR_MIN;
+      }else if(lossRatio>0.035||rtt>0.35){
         target=Math.max(ADAPTIVE_BR_MIN,adaptiveBrCurrent-ADAPTIVE_BR_STEP*2);
-      }else if(lossRatio>0.02||rtt>0.25){
+      }else if(lossRatio>0.015||rtt>0.2){
         target=Math.max(ADAPTIVE_BR_MIN,adaptiveBrCurrent-ADAPTIVE_BR_STEP);
-      }else if(lossRatio<0.01&&rtt<0.15){
+      }else if(lossRatio<0.008&&rtt<0.15){
         target=Math.min(ADAPTIVE_BR_MAX,adaptiveBrCurrent+ADAPTIVE_BR_STEP);
       }
       if(target!==adaptiveBrCurrent){
@@ -1924,7 +1941,7 @@ function startAdaptiveBitrate(pc){
         // yansıyor (her tick'te updateStatsBadge zaten günceller).
       }
     }catch(e){}
-  },4000);
+  },2000);
 }
 /* Alıcı tarafın jitter tamponunu (receiver.jitterBufferTarget) çalışma
    zamanında değiştirir. Tarayıcı desteklemiyorsa (playoutDelayHint'e
