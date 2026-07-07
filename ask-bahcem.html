@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260707-102950-d03eac2">
+<html lang="tr" data-build="askbahcem-20260707-104940-f75d753">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -1578,17 +1578,76 @@ let roomsMetaMap={}; // uid -> {lastMsg, lastTs(ms), lastSenderId} — sidebar s
 /* Düşük donanımlı telefon/TV kutularında backdrop-filter blur ve bazı
    animasyonlar GPU'yu zorlayıp arayüzü kasıtır. Zayıf cihaz tespit edilirse
    body'e .low-end sınıfı eklenir; CSS tarafında bu sınıf blur'ları kapatır. */
-(function detectLowEndDevice(){
+/* DÜZELTME 3 (cihaza göre otomatik görüşme kalitesi): Önceden TÜM cihazlara
+   sabit 540p/24fps hedefi veriliyordu — bu, güçlü cihazlarda (ör. iPhone 11,
+   yeni tablet) gereksiz yere görüntüyü kısıtlarken, en zayıf cihazda (ör.
+   Samsung A6 — Exynos 7870, 2018, software H264/VP8 encode) hâlâ CPU'nun
+   kaldıramayacağı bir hedefti (ekranda 9fps'te tıkanma buradan kaynaklanıyor).
+   Burada cihazı 4 kademeye (verylow/low/mid/high) ayırıp HER KADEMEYE KENDİ
+   çözünürlük/fps/bitrate hedefini veriyoruz — güçlü cihaz elindeki gücü
+   kullanıp daha net görüntü üretebilirken, zayıf cihaz gerçekçi bir hedefe
+   göre encode ettiği için akıcı kalır. */
+let DEVICE_TIER='mid';
+(function detectDeviceTier(){
   try{
-    const mem=navigator.deviceMemory||8;
-    const cores=navigator.hardwareConcurrency||8;
+    const mem=navigator.deviceMemory||null; // iOS'ta bu API yok -> null döner
+    const cores=navigator.hardwareConcurrency||4;
     const ua=navigator.userAgent||'';
-    const isOldAndroid=/Android\s([0-4]\.|5\.|6\.|7\.|8\.|9\.)/i.test(ua);
+    const isIOS=/iPhone|iPad|iPod/i.test(ua);
+    const isOldAndroidOS=/Android\s([0-4]\.|5\.|6\.|7\.|8\.|9\.)/i.test(ua);
     const reducedMotion=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const isLow=mem<=4||cores<=4||isOldAndroid||reducedMotion;
-    if(isLow)document.documentElement.classList.add('low-end');
+    let tier;
+    if(isIOS&&!isOldAndroidOS){
+      // Apple donanımı (iPhone/iPad) her zaman H264 donanım hızlandırmalı
+      // encode/decode kullanır; navigator.deviceMemory/hardwareConcurrency
+      // burada güvenilir bir zayıflık göstergesi değildir, o yüzden iOS'u
+      // düşük kademeye düşürmüyoruz.
+      tier='high';
+    }else if(isOldAndroidOS||(mem!==null&&mem<=2)||cores<=4){
+      // "verylow": eski Android sürümü VEYA çok düşük RAM/çekirdek —
+      // Samsung A6 (Exynos 7870, 4 çekirdek, genelde 2-3GB RAM) tam burada.
+      tier=(mem!==null&&mem<=2)||cores<=4?'verylow':'low';
+    }else if(mem!==null&&mem>=6&&cores>=8){
+      tier='high';
+    }else if(reducedMotion){
+      tier='low';
+    }else{
+      tier='mid';
+    }
+    DEVICE_TIER=tier;
+    if(tier==='low'||tier==='verylow')document.documentElement.classList.add('low-end');
+    // Not: bu bilgi artık konsol yerine görüşme sırasında ekrandaki teşhis
+    // rozetinde (updateStatsBadge) gösteriliyor.
   }catch(e){}
 })();
+/* Her kademe için: video constraints (getUserMedia hedefi), encoder üst
+   sınırı (maxBitrate/maxFramerate) ve adaptif bitrate'in taban/tavan/başlangıç
+   değerleri. "high" kademesi artık 540p'de SABİT KALMIYOR — 720p'ye kadar
+   çıkabiliyor; "verylow" ise A6 gibi cihazların gerçekten kaldırabileceği
+   360p civarına iniyor. */
+const QUALITY_TIERS={
+  high:{
+    video:{width:{ideal:1280,max:1280},height:{ideal:720,max:720},frameRate:{ideal:30,max:30}},
+    maxBitrate:2000000,maxFramerate:30,
+    adaptiveMin:600000,adaptiveMax:2600000,startBitrate:1500000
+  },
+  mid:{
+    video:{width:{ideal:720,max:960},height:{ideal:540,max:540},frameRate:{ideal:24,max:30}},
+    maxBitrate:900000,maxFramerate:24,
+    adaptiveMin:250000,adaptiveMax:1300000,startBitrate:600000
+  },
+  low:{
+    video:{width:{ideal:640,max:720},height:{ideal:480,max:540},frameRate:{ideal:20,max:24}},
+    maxBitrate:500000,maxFramerate:20,
+    adaptiveMin:180000,adaptiveMax:800000,startBitrate:400000
+  },
+  verylow:{
+    video:{width:{ideal:480,max:640},height:{ideal:360,max:480},frameRate:{ideal:18,max:20}},
+    maxBitrate:320000,maxFramerate:18,
+    adaptiveMin:120000,adaptiveMax:500000,startBitrate:280000
+  }
+};
+function currentQualityTier(){return QUALITY_TIERS[DEVICE_TIER]||QUALITY_TIERS.mid}
 let soundOn=true;
 let vibrateOn=true;
 let notifPermission='default';
@@ -1611,27 +1670,27 @@ const ICE=[
   {urls:'turn:openrelay.metered.ca:443?transport=tcp',username:'openrelayproject',credential:'openrelayproject'}
 ];
 
-/* Görüşme kalitesi/performans ayarları. DÜZELTME 2: Gerçek ölçümde (bkz.
-   ekran içi teşhis rozeti) 960x720 hedefinde HEM WiFi HEM mobil veride
-   fps sabit 8'de tıkanıyordu — ping ve paket kaybı düşük olduğu için bu
-   ağ değil, CİHAZLARIN 720p VP8 ENCODE YÜKÜNÜ kaldıramaması demekti.
-   Çözünürlük 540p'ye düşürülüp encoder'a maxFramerate ile net bir hedef
-   verildi (bkz. capVideoBitrate) — 540p'de encode yükü çok daha az
-   olduğundan fps'in gerçek hedefine (20-24) ulaşması bekleniyor. */
-const CALL_MEDIA_CONSTRAINTS={
-  video:{width:{ideal:720,max:960},height:{ideal:540,max:540},frameRate:{ideal:24,max:30},facingMode:'user'},
-  audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}
-};
+/* Görüşme kalitesi/performans ayarları. DÜZELTME 3: Sabit tek bir hedef
+   yerine artık getCallMediaConstraints() her görüşme başlangıcında
+   DEVICE_TIER'a bakıp o cihaza uygun çözünürlük/fps isteğini üretiyor —
+   güçlü cihaz maksimuma yakın, zayıf cihaz gerçekçi bir hedefe göre kamera
+   açıyor. */
+function getCallMediaConstraints(){
+  const q=currentQualityTier();
+  return{
+    video:{...q.video,facingMode:'user'},
+    audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}
+  };
+}
+const CALL_MEDIA_CONSTRAINTS=getCallMediaConstraints(); // geriye dönük uyumluluk için ilk değer; asıl kullanım fonksiyon üzerinden
 function capVideoBitrate(sender){
   try{
+    const q=currentQualityTier();
     const params=sender.getParameters();
     if(!params.encodings||!params.encodings.length)params.encodings=[{}];
-    params.encodings[0].maxBitrate=600000; // ~600kbps — 540p'de zaten net görüntü için yeterli
-    // DÜZELTME 2: fps'in gerçek darboğaz olduğu ölçümle doğrulandığı için
-    // encoder'a maxFramerate ile açık bir üst hedef veriyoruz — bazı
-    // tarayıcılarda bu değer belirtilmezse encoder kendi iç sezgisiyle çok
-    // daha düşük (ör. 8fps gibi) bir hedefe "kilitlenip" orada kalabiliyor.
-    params.encodings[0].maxFramerate=24;
+    // DÜZELTME 3: 600kbps/24fps sabiti kalktı — kademeye göre üst sınır.
+    params.encodings[0].maxBitrate=q.startBitrate;
+    params.encodings[0].maxFramerate=q.maxFramerate;
     // DÜZELTME (kasma/donma): degradationPreference belirtilmezse tarayıcı
     // varsayılan olarak genelde 'balanced' kullanır ve donanım zorlandığında
     // bazen ÇÖZÜNÜRLÜĞÜ korumaya çalışıp KARE HIZINI (fps) düşürür — bu da
@@ -1651,7 +1710,14 @@ function capVideoBitrate(sender){
    24fps'e rahat ulaşabiliyor — yani sorun ağ değil, bu codec+cihaz
    kombinasyonu). H264 ise Android'de (Exynos dahil) neredeyse her zaman
    MediaCodec ile DONANIMSAL hızlandırılır ve çok daha az CPU tüketir.
-   Bu yüzden H264'ü artık VP8'İN ÖNÜNE alıyoruz. */
+   Bu yüzden H264'ü artık VP8'İN ÖNÜNE alıyoruz.
+   DÜZELTME 3 (Baseline profile): H264'ün "High Profile" (profile-level-id
+   64xx) varyantı bazı düşük/orta segment Exynos'larda donanım kapsamı
+   dışında kalıp yine yazılıma düşebiliyor. "Baseline Profile"
+   (profile-level-id 42e01f) neredeyse TÜM Android MediaCodec donanım
+   encoder'larında desteklenen en yaygın profil olduğu için H264 seçenekleri
+   içinde ÖNCE Baseline'ı, sonra kalan H264 varyantlarını, en son VP8/diğer
+   codec'leri deniyoruz. */
 function preferStableVideoCodec(pc){
   try{
     if(!('setCodecPreferences' in RTCRtpTransceiver.prototype))return;
@@ -1660,10 +1726,12 @@ function preferStableVideoCodec(pc){
       if(!tr.sender||!tr.sender.track||tr.sender.track.kind!=='video')return;
       const caps=RTCRtpSender.getCapabilities('video');
       if(!caps||!caps.codecs)return;
-      const h264=caps.codecs.filter(c=>/H264/i.test(c.mimeType));
+      const allH264=caps.codecs.filter(c=>/H264/i.test(c.mimeType));
+      const h264Baseline=allH264.filter(c=>/42e01f/i.test(c.sdpFmtpLine||''));
+      const h264Rest=allH264.filter(c=>!/42e01f/i.test(c.sdpFmtpLine||''));
       const vp8=caps.codecs.filter(c=>/VP8/i.test(c.mimeType));
       const rest=caps.codecs.filter(c=>!/VP8|H264/i.test(c.mimeType));
-      const ordered=[...h264,...vp8,...rest];
+      const ordered=[...h264Baseline,...h264Rest,...vp8,...rest];
       if(ordered.length)tr.setCodecPreferences(ordered);
     });
   }catch(e){}
@@ -1675,15 +1743,36 @@ function preferStableVideoCodec(pc){
    ve RTT'yi ölçüp bitrate'i buna göre kademeli düşürüp/yükseltiyoruz —
    böylece her bağlantı koşuluna kendini uyarlayan bir video akışı elde
    ediliyor.
-*/
-const ADAPTIVE_BR_MIN=250000;   // ~250kbps — 540p'de bile makul netlik için taban
-const ADAPTIVE_BR_MAX=1100000;  // ~1.1Mbps — iyi ağda net 540p için tavan (720p'ye göre daha düşük yeterli)
-const ADAPTIVE_BR_STEP=120000;
+   DÜZELTME 3: taban/tavan/adım artık sabit değil, DEVICE_TIER'a göre
+   currentQualityTier()'dan okunuyor — güçlü cihaz çok daha yükseğe
+   çıkabilirken zayıf cihaz kendi gerçekçi tavanının üzerine hiç çıkmıyor. */
 let adaptiveBrTmr=null;
-let adaptiveBrCurrent=600000; // başlangıç: 540p hedefine uygun
+let adaptiveBrCurrent=600000;
+let negotiatedCodecLabel=''; // teşhis rozetinde gösterilecek, konsol yerine ekrana yazılır
+/* H264 profile-level-id'yi ("42e01f" gibi) okunur bir etikete çevirir —
+   Baseline/Main/High. Hangi profilin negotiate edildiğini bilmek, bir
+   cihazda hâlâ düşük fps varsa "donanım hızlanan Baseline mi yoksa
+   yazılıma düşen High mı kullanılıyor" sorusunu ekran başında cevaplar. */
+function describeCodec(mimeType,fmtpLine){
+  let label=(mimeType||'?').replace('video/','');
+  if(/H264/i.test(mimeType)&&fmtpLine){
+    const m=/profile-level-id=([0-9a-fA-F]{6})/.exec(fmtpLine);
+    if(m){
+      const pid=m[1].toLowerCase();
+      if(pid.startsWith('42'))label+=' Baseline';
+      else if(pid.startsWith('4d'))label+=' Main';
+      else if(pid.startsWith('64'))label+=' High';
+      else label+=' '+pid.slice(0,2);
+    }
+  }
+  return label;
+}
 function startAdaptiveBitrate(pc){
   clearInterval(adaptiveBrTmr);
-  adaptiveBrCurrent=600000;
+  const q=currentQualityTier();
+  const ADAPTIVE_BR_MIN=q.adaptiveMin,ADAPTIVE_BR_MAX=q.adaptiveMax,ADAPTIVE_BR_STEP=Math.round(q.startBitrate*0.2);
+  adaptiveBrCurrent=q.startBitrate;
+  negotiatedCodecLabel='';
   let lastBytesLost=0,lastPacketsSent=0,haveBaseline=false;
   adaptiveBrTmr=setInterval(async()=>{
     if(!peerConn||peerConn!==pc)return clearInterval(adaptiveBrTmr);
@@ -1704,6 +1793,18 @@ function startAdaptiveBitrate(pc){
         if(r.type==='inbound-rtp'&&r.kind==='video')inbound=r;
       });
       if(!outbound)return;
+      // DÜZELTME 3 (codec teşhisi): "H264 tercih edildi" ile "H264 gerçekten
+      // kullanılıyor" aynı şey değil — karşı taraf desteklemiyorsa negotiation
+      // başka codec'e düşebilir. Görüşme başında bir kez, gerçekte hangi
+      // codec/profilin negotiate edildiğini konsola yazıyoruz; A6 gibi bir
+      // cihazda hâlâ fps düşükse buradan hangi codec'e düştüğü görülebilir.
+      if(!negotiatedCodecLabel&&outbound.codecId){
+        const codecStat=stats.get(outbound.codecId);
+        // DÜZELTME 3: konsol yerine ekrandaki teşhis rozetinde gösteriliyor
+        // ("H264 tercih edildi" ile "gerçekten kullanılan codec/profil" aynı
+        // şey olmayabilir — burada gerçekte negotiate edilen görülür).
+        if(codecStat)negotiatedCodecLabel=describeCodec(codecStat.mimeType,codecStat.sdpFmtpLine);
+      }
       const packetsSent=outbound.packetsSent||0;
       const packetsLost=(remoteInbound&&remoteInbound.packetsLost)||0;
       const rtt=(remoteInbound&&remoteInbound.roundTripTime)||0; // saniye
@@ -1738,9 +1839,10 @@ function startAdaptiveBitrate(pc){
         if(!params.encodings||!params.encodings.length)params.encodings=[{}];
         params.encodings[0].maxBitrate=target;
         params.encodings[0].degradationPreference='maintain-framerate';
-        params.encodings[0].maxFramerate=24; // adaptif bitrate ayarı sırasında fps hedefini kaybetme
+        params.encodings[0].maxFramerate=q.maxFramerate; // adaptif bitrate ayarı sırasında fps hedefini kaybetme
         sender.setParameters(params).catch(()=>{});
-        console.log('[ADAPTIVE-BR] bitrate ayarlandı:',target,'lossRatio:',lossRatio.toFixed(3),'rtt:',rtt);
+        // Not: bitrate değişimi artık konsola değil, rozetteki kbps değerine
+        // yansıyor (her tick'te updateStatsBadge zaten günceller).
       }
     }catch(e){}
   },4000);
@@ -1752,8 +1854,10 @@ function stopAdaptiveBitrate(){
   if(badge)badge.classList.remove('show');
 }
 /* Ekrandaki küçük teşhis rozetini gerçek gönderim istatistikleriyle
-   doldurur: gönderilen çözünürlük, fps, mevcut bitrate hedefi ve karşı
-   tarafın bildirdiği paket kaybı yüzdesi. */
+   doldurur: gönderilen çözünürlük, fps, mevcut bitrate hedefi, karşı
+   tarafın bildirdiği paket kaybı yüzdesi, cihaz kademesi ve gerçekte
+   negotiate edilen codec/profil. DÜZELTME 3: bu bilgiler önceden sadece
+   konsola yazılıyordu — artık hepsi burada, ekranda görünüyor. */
 function updateStatsBadge(outbound,remoteInbound,inbound){
   try{
     const badge=document.getElementById('callStatsBadge');
@@ -1776,7 +1880,8 @@ function updateStatsBadge(outbound,remoteInbound,inbound){
     if(freezeCount!=null){
       line3=`\ndonma:${freezeCount}x  toplam:${freezeDur}s`;
     }
-    badge.textContent=`${w}x${h} @${fps}fps\n${kbps}kbps  kayıp:%${lostPct}  ping:${rttMs}ms${line3}`;
+    const tierLine=`\ncihaz:${DEVICE_TIER}${negotiatedCodecLabel?'  codec:'+negotiatedCodecLabel:''}`;
+    badge.textContent=`${w}x${h} @${fps}fps\n${kbps}kbps  kayıp:%${lostPct}  ping:${rttMs}ms${line3}${tierLine}`;
     badge.classList.add('show');
   }catch(e){}
 }
@@ -5945,7 +6050,7 @@ function setCallConnectedUI(){
 async function startCall(){
   if(!fb||!activeRoom||!activePartner){showToast('Önce bir sohbet seç','warn');return}
   if(peerConn){showToast('Arama devam ediyor','warn');return}
-  try{localStream=await navigator.mediaDevices.getUserMedia(CALL_MEDIA_CONSTRAINTS)}
+  try{localStream=await navigator.mediaDevices.getUserMedia(getCallMediaConstraints())}
   catch(e){showToast('Kamera/Mikrofon izni gerekli','error');return}
   document.getElementById('localVid').srcObject=localStream;
   applySavedSelfVidPos();
@@ -5979,7 +6084,7 @@ async function startCall(){
 async function acceptCall(){
   document.getElementById('incomingCall').classList.remove('open');
   stopRingtone();
-  try{localStream=await navigator.mediaDevices.getUserMedia(CALL_MEDIA_CONSTRAINTS)}
+  try{localStream=await navigator.mediaDevices.getUserMedia(getCallMediaConstraints())}
   catch(e){showToast('Kamera/Mikrofon izni gerekli','error');return}
   document.getElementById('localVid').srcObject=localStream;
   applySavedSelfVidPos();
@@ -6583,10 +6688,10 @@ async function switchCamera(){
   let newStream=null;
   const attempts=[];
   if(targetDeviceId){
-    attempts.push({video:{...CALL_MEDIA_CONSTRAINTS.video,deviceId:{exact:targetDeviceId}},audio:false});
+    attempts.push({video:{...getCallMediaConstraints().video,deviceId:{exact:targetDeviceId}},audio:false});
   }
-  attempts.push({video:{...CALL_MEDIA_CONSTRAINTS.video,facingMode:{exact:nextFacing}},audio:false});
-  attempts.push({video:{...CALL_MEDIA_CONSTRAINTS.video,facingMode:{ideal:nextFacing}},audio:false});
+  attempts.push({video:{...getCallMediaConstraints().video,facingMode:{exact:nextFacing}},audio:false});
+  attempts.push({video:{...getCallMediaConstraints().video,facingMode:{ideal:nextFacing}},audio:false});
   attempts.push({video:{facingMode:{ideal:nextFacing}},audio:false});
   if(targetDeviceId)attempts.push({video:{deviceId:{ideal:targetDeviceId}},audio:false});
 
