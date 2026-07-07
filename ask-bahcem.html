@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260707-113137-6c6f3e7">
+<html lang="tr" data-build="askbahcem-20260707-113743-c8caf17">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -1807,6 +1807,7 @@ function startAdaptiveBitrate(pc){
   adaptiveBrCurrent=q.startBitrate;
   negotiatedCodecLabel='';
   currentJitterBufferMs=150;
+  renderStallCount=0;
   let lastBytesLost=0,lastPacketsSent=0,haveBaseline=false;
   // DÜZELTME 5 (donma — gelen akış tarafı): "kayıp:%0.0 ping:9ms" gibi iyi
   // değerlere rağmen donma olabiliyor çünkü o değerler SENİN GÖNDERDİĞİN
@@ -1992,7 +1993,7 @@ function updateStatsBadge(outbound,remoteInbound,inbound,mediaSource){
         inLine=`\ngelen kayıp:%${inLostPct!=null?inLostPct:'?'}  jitter:${jitterMs!=null?jitterMs:'?'}ms  tampon:${currentJitterBufferMs}ms`;
       }
     }
-    badge.textContent=`${w}x${h} @${fps}fps\n${kbps}kbps  kayıp:%${lostPct}  ping:${rttMs}ms${line3}${tierLine}${camLine}${inLine}`;
+    badge.textContent=`${w}x${h} @${fps}fps\n${kbps}kbps  kayıp:%${lostPct}  ping:${rttMs}ms${line3}${tierLine}${camLine}${inLine}${renderStallCount>0?`\nekran donması:${renderStallCount}x`:''}`;
     badge.classList.add('show');
   }catch(e){}
 }
@@ -6248,9 +6249,14 @@ async function flushPendingIce(){
    ICE'i yeniden başlatarak (yeni bir keyframe/negotiation tetikler)
    kendiliğinden düzelme ihtimalini deniyoruz. */
 let videoHealthTmr=null;
+let renderStallCount=0; // teşhis rozetinde gösterilir — WebRTC'nin kendi
+// "donma" metriğinden (inbound.freezeCount) BAĞIMSIZ bir kontrol: gerçekten
+// decode edilen kare sayısı zaman içinde ilerliyor mu, ilerlemiyorsa bu
+// başka türden bir "ekran donması"dır (ör. video elementi/render tarafı).
 function startVideoHealthCheck(pc){
   clearTimeout(videoHealthTmr);
   let triedRestart=false;
+  let prevFramesDecoded=null,stuckTicks=0;
   const check=async()=>{
     if(!peerConn||peerConn!==pc)return;
     try{
@@ -6272,6 +6278,37 @@ function startVideoHealthCheck(pc){
       if(hasFrames&&ph&&!ph.classList.contains('hide')){
         ph.classList.add('hide');
       }
+      // DÜZELTME 6 ("karşı tarafın görüntüsü açıldığı anda kalıyor"):
+      // inbound.freezeCount, tarayıcının KENDİ tanımına göre yeterince uzun
+      // ve belirgin donmaları sayar — bazı durumlarda (ör. görüntü ilk
+      // açıldığında tek bir kare gelip TAKILI KALMASI, ama tarayıcının bunu
+      // "freeze" olarak saymaması) bu metrik 0 kalırken kullanıcı gerçekten
+      // donuk bir görüntü görebiliyor. Burada framesDecoded'ın ZAMANLA
+      // İLERLEYİP İLERLEMEDİĞİNİ kendimiz takip ediyoruz — bağlantı
+      // "connected" olduğu hâlde art arda birkaç kontrolde hiç yeni kare
+      // decode edilmemişse (video gerçekten ekranda donmuş demektir),
+      // hem sayaç artırıyoruz (rozette görünür) hem de basit bir kurtarma
+      // denemesi yapıyoruz: video elementinin srcObject'ini kısa süreliğine
+      // koparıp yeniden bağlamak, bazı tarayıcılarda takılı kalan decode/
+      // render pipeline'ını sıfırlayıp yeni bir anahtar kare isteğini
+      // tetikleyebiliyor.
+      if(hasFrames&&inbound&&inbound.framesDecoded!=null){
+        const fd=inbound.framesDecoded;
+        if(prevFramesDecoded!==null&&fd<=prevFramesDecoded){
+          stuckTicks++;
+          if(stuckTicks===2){ // ~4-6sn boyunca hiç yeni kare yok
+            renderStallCount++;
+            try{
+              const s=vid.srcObject;
+              vid.srcObject=null;
+              requestAnimationFrame(()=>{vid.srcObject=s;vid.play().catch(()=>{})});
+            }catch(e){}
+          }
+        }else{
+          stuckTicks=0;
+        }
+        prevFramesDecoded=fd;
+      }
       if(!hasFrames){
         if(!triedRestart){
           triedRestart=true;
@@ -6288,12 +6325,9 @@ function startVideoHealthCheck(pc){
         // takılı kalmadığından emin olmak için.
         videoHealthTmr=setTimeout(check,4000);
       }
-      console.log('[VIDEO-TANI]',JSON.stringify({
-        role:iAmCaller?'ARAYAN(caller)':'ARANAN(callee)',
-        hasFrames,framesDecoded:inbound?.framesDecoded,bytesReceived:inbound?.bytesReceived,
-        placeholderHiddenNow:ph?.classList.contains('hide')
-      }));
-    }catch(e){console.error('[VIDEO-TANI] stats error',e)}
+      // Not: bu bilgiler artık konsola değil, görüşme sırasında ekrandaki
+      // teşhis rozetine (renderStallCount üzerinden) yansıyor.
+    }catch(e){}
   };
   videoHealthTmr=setTimeout(check,2000);
 }
