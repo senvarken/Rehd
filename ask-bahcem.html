@@ -6265,6 +6265,16 @@ async function switchCamera(){
   if(!oldTrack)return;
   camSwitching=true;
   const nextFacing=currentFacingMode==='user'?'environment':'user';
+  // DÜZELTME 3: Bazı cihazlarda (özellikle WebView/App24 ortamındaki
+  // guest telefonlarda) kamera donanımına aynı anda sadece TEK bir akış
+  // erişebiliyor — eski track açık kalmışken yeni kamera isteği yapılırsa
+  // tarayıcı OverconstrainedError/NotReadableError fırlatıp üç denemenin
+  // de başarısız olmasına yol açıyor (admin'in cihazı çoklu erişime izin
+  // verdiği için orada sorun görünmüyordu). Önce eski track'i tamamen
+  // durdurup kamerayı serbest bırakıyoruz, sonra yeni kamerayı istiyoruz.
+  oldTrack.stop();
+  localStream.removeTrack(oldTrack);
+  await new Promise(r=>setTimeout(r,150)); // donanımın serbest kalması için kısa bekleme
   let newStream=null;
   try{
     newStream=await navigator.mediaDevices.getUserMedia({
@@ -6300,6 +6310,27 @@ async function switchCamera(){
         });
       }catch(e3){
         console.error('switchCamera: üç denemede de başarısız —',e.name,e2.name,e3.name,e3.message);
+        // Eski track'i zaten durdurduk (yukarıda) — yeni kamera da açılamadıysa
+        // kullanıcı görüntüsüz kalmasın diye eski kamerayı (currentFacingMode)
+        // geri açmayı deniyoruz, tamamen kamerasız kalmasın.
+        try{
+          const fallbackStream=await navigator.mediaDevices.getUserMedia({
+            video:{facingMode:{ideal:currentFacingMode}},
+            audio:false
+          });
+          const fbTrack=fallbackStream.getVideoTracks()[0];
+          if(fbTrack){
+            fbTrack.enabled=camOn;
+            if(peerConn){
+              const sender=peerConn.getSenders().find(s=>s.track&&s.track.kind==='video');
+              if(sender){await sender.replaceTrack(fbTrack);capVideoBitrate(sender)}
+            }
+            localStream.addTrack(fbTrack);
+            [document.getElementById('localVid'),document.getElementById('remoteVid')].forEach(el=>{
+              if(el&&el.srcObject===localStream){el.srcObject=null;el.srcObject=localStream;el.play&&el.play().catch(()=>{})}
+            });
+          }
+        }catch(e4){/* eski kamera da geri gelmediyse sessizce bırak */}
         showToast('Bu cihazda değiştirilecek başka kamera bulunamadı','warn');
         camSwitching=false;
         return;
@@ -6315,9 +6346,7 @@ async function switchCamera(){
       const sender=peerConn.getSenders().find(s=>s.track&&s.track.kind==='video');
       if(sender){await sender.replaceTrack(newTrack);capVideoBitrate(sender)}
     }
-    localStream.removeTrack(oldTrack);
     localStream.addTrack(newTrack);
-    oldTrack.stop();
     // Video elementi hangi stream'i gösteriyorsa (swap yapılmış olsa bile)
     // onu tazeleyip yeni track'in görünmesini sağla.
     [document.getElementById('localVid'),document.getElementById('remoteVid')].forEach(el=>{
