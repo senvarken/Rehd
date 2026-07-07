@@ -448,7 +448,8 @@ svg#loveArrow{width:26px!important;height:14px!important;display:block!important
 /* ── GÖRÜŞME İÇİ SOHBET PANELİ ── */
 #callChatPanel{position:absolute;left:0;right:0;bottom:0;max-height:46%;background:rgba(10,5,8,.82);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-top-left-radius:22px;border-top-right-radius:22px;z-index:8;display:flex;flex-direction:column;transform:translateY(100%);transition:transform .28s cubic-bezier(.16,1,.3,1);padding-bottom:max(10px,env(safe-area-inset-bottom))}
 #callChatPanel.open{transform:translateY(0)}
-.ccp-handle{width:36px;height:4px;border-radius:3px;background:rgba(255,255,255,.25);margin:9px auto 4px}
+.ccp-handle{width:36px;height:4px;border-radius:3px;background:rgba(255,255,255,.25);margin:9px auto 4px;position:relative;touch-action:none}
+.ccp-handle::before{content:'';position:absolute;left:50%;top:50%;width:88px;height:36px;transform:translate(-50%,-50%)}
 .ccp-close{position:absolute;top:6px;right:8px;width:30px;height:30px;border-radius:50%;border:none;background:rgba(255,255,255,.1);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:1}
 #callChatList{flex:1;overflow-y:auto;padding:6px 14px;display:flex;flex-direction:column;gap:7px;min-height:60px}
 .ccp-msg{max-width:80%;padding:8px 12px;border-radius:14px;font-size:.82rem;line-height:1.4;color:#fff;word-break:break-word}
@@ -1430,6 +1431,7 @@ let roomsMetaMap={}; // uid -> {lastMsg, lastTs(ms), lastSenderId} — sidebar s
   }catch(e){}
 })();
 let soundOn=true;
+let vibrateOn=true;
 let notifPermission='default';
 let manageUsersCache=[];
 let unsubCallSig=null;
@@ -1795,6 +1797,7 @@ function manualInstall(){
 window.addEventListener('firebaseReady',()=>{
   fb=window._fb;console.log('FB ok — BUILD askbahcem-debug-2026-07-06-v3');
   loadSoundPref();
+  loadVibratePref();
   maybeAutoLogin();
   // Sekme açıkken (arka planda bile) gelen push'lar burada yakalanır; Firebase
   // SDK zaten sekme açıksa Service Worker'ın arka plan bildirimini tetiklemez,
@@ -2017,6 +2020,8 @@ function buildHdMoreMenu(role){
   if(!menu)return;
   menu.innerHTML=`<button onclick="toggleHdMore();confirmClearAll()"><svg class="icon icon-sm"><use href="#i-trash"/></svg><span>Sohbeti Temizle</span></button>
     <button id="soundToggleBtn" onclick="toggleHdMore();toggleSound()"><svg class="icon icon-sm"><use href="#i-bell"/></svg><span>Bildirim Sesi</span></button>
+    <button id="vibrateToggleBtn" onclick="toggleHdMore();toggleVibrate()"><span style="font-size:1.05em;width:18px;text-align:center;flex-shrink:0">📳</span><span>Titreşim</span></button>
+    <button id="muteAllToggleBtn" onclick="toggleHdMore();toggleMuteAll()"><span style="font-size:1.05em;width:18px;text-align:center;flex-shrink:0">🔕</span><span>Sessize Al</span></button>
     <button id="pushToggleBtn" onclick="toggleHdMore();togglePush()"><svg class="icon icon-sm"><use href="#i-bell"/></svg><span>Kapalıyken Bildirim</span></button>
     <button onclick="toggleHdMore();manualInstall()"><svg class="icon icon-sm"><use href="#i-download"/></svg><span>Uygulama Olarak Ekle</span></button>
     <button onclick="toggleHdMore();clearAppDataAndReload()"><svg class="icon icon-sm"><use href="#i-refresh"/></svg><span>Verileri Temizle (Güncelle)</span></button>`;
@@ -2026,6 +2031,9 @@ function buildHdMoreMenu(role){
   }
   menu.innerHTML+=`<button onclick="doLogout()" style="color:#ff8fa3"><svg class="icon icon-sm"><use href="#i-logout"/></svg><span>Oturumu Kapat</span></button>`;
   refreshPassiveLocToggleLabel();
+  updateSoundBtnUI();
+  updateVibrateBtnUI();
+  updateMuteAllBtnUI();
 }
 
 /* ═══════════════════════════════════════
@@ -2453,6 +2461,34 @@ function getRoomId(a,b){return [a,b].sort().join('__')}
    ekranını normal şekilde açar. */
 let unsubAllCalls=null;
 let allCallsFirstLoad=true;
+// Bir görüntülü arama teklifi çok eskiyse (canlı "geliyor" ekranını açmanın artık
+// anlamı yok — arayan muhtemelen vazgeçmiştir) ama saatler/günler öncesine ait
+// anlamsız bir kalıntı da değilse, bunu "cevapsız arama" olarak kaydediyoruz.
+const MISSED_CALL_LOG_WINDOW=10*60*1000; // 10 dakika
+function notifyMissedCall(fromName,fromUid){
+  const onClick=fromUid?()=>selectUser(fromUid,fromName,null):null;
+  showToast(`📵 ${esc(fromName||'Biri')} seni aramış (cevapsız)`,'warn',3200,onClick);
+  sendTelegramNotification(`📵 ${fromName||'Biri'} seni aradı ama cevap veremedin (cevapsız arama)`);
+  showSystemNotification(fromName||'Aşk Bahçem','📵 Cevapsız görüntülü arama','call-missed-'+fromUid);
+  bumpUnread();
+}
+function registerMissedCall(fromName,fromUid,roomId){
+  userUnreadMap[fromUid]=(userUnreadMap[fromUid]||0)+1;
+  renderSidebar(lastPresenceData||{});
+  notifyMissedCall(fromName,fromUid);
+  refreshAppBadge();
+  // Sohbet geçmişine de "cevapsız arama" kaydı düşülsün ki panel açıldığında
+  // orada da görünsün (mevcut cevapsız arama mesaj formatıyla aynı).
+  if(fb&&roomId){
+    try{
+      const {db,collection,addDoc,serverTimestamp}=fb;
+      addDoc(collection(db,`rooms/${roomId}/messages`),{
+        type:'call',text:'📵 Cevapsız arama',callKind:'missed',
+        senderId:fromUid,senderName:fromName||'',senderEmoji:'',ts:serverTimestamp(),read:false
+      }).catch(()=>{});
+    }catch(e){}
+  }
+}
 function listenAllIncomingCallsForAdmin(){
   if(!fb)return;
   const {db,collection,onSnapshot}=fb;
@@ -2467,16 +2503,27 @@ function listenAllIncomingCallsForAdmin(){
       if(!id.endsWith(suffix))return;
       const d=ch.doc.data();
       if(!d||d.type!=='offer'||!d.ts)return;
-      if(Date.now()-d.ts>15000)return;
       const roomId=id.slice(0,-suffix.length);
       if(roomId===activeRoom)return; // bu sohbet zaten açık, listenCallSignal hallediyor
       const otherUid=roomId.split('__').find(x=>x!==ADMIN_ID);
       if(!otherUid)return;
-      // DÜZELTME: mesajlarda olduğu gibi, aktif olmayan bir sohbetten gelen
+      const age=Date.now()-d.ts;
+      // DÜZELTME (ASIL HATA): Telefon kilitliyken/uygulama arka plandayken bir
+      // misafir ararsa, admin geri döndüğünde teklif artık "eski" (>15sn)
+      // sayılıp ESKİDEN TAMAMEN SESSİZCE ATILIYORDU — ne rozet, ne bildirim,
+      // ne de sohbette bir iz kalıyordu; admin paneli aramayı hiç görmüyordu.
+      // Artık: 15sn'den yeniyse canlı çalma ekranı zaten listenCallSignal
+      // tarafından açılıyor (bu döngü sadece rozet/bildirimi tetikler); daha
+      // eskiyse (ama makul bir süre içindeyse) canlı ekran açılmaz ama
+      // "cevapsız arama" olarak kalıcı şekilde kaydedilir.
+      if(age>MISSED_CALL_LOG_WINDOW)return; // günler/saatler önceki anlamsız kalıntı
+      if(age>15000){
+        registerMissedCall(d.fromName||'Sevgilim',otherUid,roomId);
+        return;
+      }
+      // Mesajlarda olduğu gibi, aktif olmayan bir sohbetten gelen TAZE bir
       // görüntülü arama da sidebar rozetine + sekme başlığı/favicon "1,2,3…"
-      // sayacına yansısın — önceden sadece geçici bir toast gösterilip hiçbir
-      // kalıcı iz bırakılmadığı için admin paneli açtığında kaçırdığı aramayı
-      // hiçbir yerde göremiyordu.
+      // sayacına yansısın.
       userUnreadMap[otherUid]=(userUnreadMap[otherUid]||0)+1;
       renderSidebar(lastPresenceData||{});
       notifyIncomingCall(d.fromName||'Sevgilim',otherUid,d.fromEmoji);
@@ -2779,6 +2826,16 @@ function listenMessages(){
       const newest=msgs[msgs.length-1];
       if(newest.senderId!==myId){
         notifyIncomingMessage(newest);
+        // DÜZELTME: mesaj o an açık olan sohbette gelse bile, admin telefona
+        // GERÇEKTEN bakmıyorsa (uygulama arka planda/ekran kapalıyken geldiyse)
+        // bu mesaj fiilen "okunmamış" sayılmalı. Önceden sadece sekme
+        // başlığındaki genel sayaç (unreadTotal) güncelleniyordu; sidebar'daki
+        // bu kişiye özel rozet hiç artmıyordu, bu yüzden "Sevgilim" mesaj atmış
+        // olsa bile admin panelinde okunmamış olarak görünmüyordu.
+        if(isAdmin&&document.hidden&&activePartner){
+          userUnreadMap[activePartner.id]=(userUnreadMap[activePartner.id]||0)+1;
+          renderSidebar(lastPresenceData||{});
+        }
       }
     }
     lastMsgCount=msgs.length;
@@ -2967,7 +3024,7 @@ async function setReaction(msgId,emoji,clientX,clientY){
   msg.reaction=current; // önbellekteki mesajı da güncelle ki hızlı art arda dokunuşlar tutarlı kalsın
   renderReactionBadge(msgId,current); // iyimser (optimistic) anlık güncelleme
   if(!removing)spawnHeartBurst(clientX,clientY,emoji);
-  if(navigator.vibrate)navigator.vibrate(removing?8:16);
+  vib(removing?8:16);
   try{
     const {db,doc,updateDoc}=fb;
     await updateDoc(doc(db,`rooms/${activeRoom}/messages`,msgId),{reaction:current});
@@ -3254,7 +3311,7 @@ function appendBubble(msg,doScroll=true){
       row.classList.remove('swipe-armed');
       if(swipeArmed){
         swipeArmed=false;
-        if(navigator.vibrate)navigator.vibrate(14);
+        vib(14);
         startReply(msg.id);
       }
     };
@@ -3319,7 +3376,7 @@ function openMsgMenu(msg,isMe){
   menu.style.left='50%';menu.style.top='50%';menu.style.transform='translate(-50%,-50%)';
   menu.classList.add('open');
   overlay.classList.add('open');
-  if(navigator.vibrate)navigator.vibrate(15);
+  vib(15);
 }
 function closeMsgMenu(){
   document.getElementById('msgActionMenu').classList.remove('open');
@@ -3577,7 +3634,7 @@ function startDictation(){
   document.getElementById('inputBar').classList.add('dictating');
   document.getElementById('dictateOverlay').classList.add('open');
   document.getElementById('dictateStatus').textContent='Dinleniyor…';
-  if(navigator.vibrate)navigator.vibrate(12);
+  vib(12);
 }
 function stopDictation(){
   if(!dictateRecognition)return;
@@ -4376,7 +4433,7 @@ async function micPointerDown(ev){
   if(pauseBtn)pauseBtn.querySelector('use').setAttribute('href','#i-pause-solid');
   document.getElementById('vrTime').textContent='0:00';
   recTimerId=setInterval(updateRecTimeDisplay,250);
-  if(navigator.vibrate)navigator.vibrate(12);
+  vib(12);
 }
 function micPointerMove(ev){
   if(!mediaRecorder||recLocked)return; // kilitliyken sürükleme artık hiçbir şeyi etkilemesin
@@ -4393,7 +4450,7 @@ function micPointerMove(ev){
     // aksi halde sağ altta sabit kalıp gönder/duraklat/çöp butonlarının
     // üzerine biniyordu (ekran görüntüsündeki üst üste binme hatası buydu).
     setTimeout(()=>{lockPill.classList.remove('show')},220);
-    if(navigator.vibrate)navigator.vibrate(18);
+    vib(18);
     return;
   }
   if(dx<-REC_CANCEL_THRESHOLD){recCanceled=true;ov.classList.add('cancel-zone')}
@@ -4508,7 +4565,7 @@ function cycleVoiceSpeed(msgId){
   voicePlaybackRate=order[(idx+1)%order.length];
   document.querySelectorAll('.voice-speed').forEach(elm=>{elm.textContent=(voicePlaybackRate===1?'1':voicePlaybackRate)+'x'});
   if(voicePlayerAudio)voicePlayerAudio.playbackRate=voicePlaybackRate;
-  if(navigator.vibrate)navigator.vibrate(8);
+  vib(8);
 }
 function toggleVoicePlay(msgId,url){
   if(voicePlayerAudio&&voicePlayerMsgId===msgId){
@@ -4621,7 +4678,7 @@ function triggerNudgeFx(remote,fromName){
   bd.classList.add('nudge-shake');
   setTimeout(()=>bd.classList.remove('nudge-shake'),600);
   // Daha uzun ve güçlü titreşim paterni — telefon gerçekten hissedilir şekilde titresin
-  if(navigator.vibrate)navigator.vibrate([250,100,250,100,250,100,400]);
+  vib([250,100,250,100,250,100,400]);
   playNudgeSound();
   if(remote)showToast((fromName||'Sevgilin')+' titreşim gönderdi 💥','info');
 }
@@ -4773,6 +4830,7 @@ function toggleSound(){
   soundOn=!soundOn;
   saveSoundPref();
   updateSoundBtnUI();
+  updateMuteAllBtnUI();
   showToast(soundOn?'Bildirim sesi açık':'Bildirim sesi kapalı');
 }
 function updateSoundBtnUI(){
@@ -4782,6 +4840,58 @@ function updateSoundBtnUI(){
   const label=soundOn?'Bildirim Sesi: Açık':'Bildirim Sesi: Kapalı';
   btn.innerHTML=`<svg class="icon icon-sm"><use href="#${iconId}"/></svg><span>${label}</span>`;
   btn.classList.toggle('active-toggle',soundOn);
+}
+
+/* ── TİTREŞİM aç/kapa ── tüm navigator.vibrate() çağrıları vib() üzerinden
+   geçiyor, bu yüzden burada tek bir yerden hepsi kapatılabiliyor. */
+function vib(pattern){
+  if(vibrateOn&&navigator.vibrate)navigator.vibrate(pattern);
+}
+function loadVibratePref(){
+  try{
+    const v=localStorage.getItem('askbahcem_vibrate');
+    vibrateOn=v===null?true:v==='1';
+  }catch(e){vibrateOn=true}
+}
+function saveVibratePref(){
+  try{localStorage.setItem('askbahcem_vibrate',vibrateOn?'1':'0')}catch(e){}
+}
+function toggleVibrate(){
+  vibrateOn=!vibrateOn;
+  saveVibratePref();
+  updateVibrateBtnUI();
+  updateMuteAllBtnUI();
+  showToast(vibrateOn?'Titreşim açık':'Titreşim kapalı');
+}
+function updateVibrateBtnUI(){
+  const btn=document.getElementById('vibrateToggleBtn');
+  if(!btn)return;
+  const label=vibrateOn?'Titreşim: Açık':'Titreşim: Kapalı';
+  btn.innerHTML=`<span style="font-size:1.05em;width:18px;text-align:center;flex-shrink:0">📳</span><span>${label}</span>`;
+  btn.classList.toggle('active-toggle',vibrateOn);
+}
+
+/* ── SESSİZE AL ── ses + titreşimin ikisini birden tek dokunuşla kapatan/açan
+   kısayol. Ayrı ayrı ses/titreşim ayarlarına dokunmaz, sadece ikisini birlikte
+   kapalı/açık konuma getirir. */
+function toggleMuteAll(){
+  const currentlyMuted=!soundOn&&!vibrateOn;
+  if(currentlyMuted){
+    soundOn=true;vibrateOn=true;
+  }else{
+    soundOn=false;vibrateOn=false;
+  }
+  saveSoundPref();saveVibratePref();
+  updateSoundBtnUI();updateVibrateBtnUI();updateMuteAllBtnUI();
+  showToast(currentlyMuted?'Bildirimler tekrar açıldı':'Sessize alındı (ses + titreşim kapalı)');
+}
+function updateMuteAllBtnUI(){
+  const btn=document.getElementById('muteAllToggleBtn');
+  if(!btn)return;
+  const muted=!soundOn&&!vibrateOn;
+  const label=muted?'Sessize Alındı':'Sessize Al';
+  btn.innerHTML=`<span style="font-size:1.05em;width:18px;text-align:center;flex-shrink:0">${muted?'🔇':'🔕'}</span><span>${label}</span>`;
+  btn.classList.toggle('active-toggle',!muted);
 }
 
 async function requestNotifPermission(){
@@ -4929,7 +5039,7 @@ function notifyIncomingMessage(msg){
   // tarayıcı kuralı gereği sekme/uygulama görünür DEĞİLKEN (arka planda/ekran
   // kapalıyken) çalışmaz — bu JS ile aşılamaz, tarayıcı güvenlik kısıtı. Sekme
   // açık/görünürken titreşim burada normal şekilde çalışır.
-  if(navigator.vibrate)navigator.vibrate([300,120,300,120,400]);
+  vib([300,120,300,120,400]);
   const preview=msg.type==='text'?msg.text:(msg.type==='image'?'Fotoğraf gönderdi':(msg.type==='video'?'Video gönderdi':(msg.type==='voice'?'🎤 Sesli mesaj gönderdi':(msg.type==='file'?`📄 ${msg.fileName||'Dosya'} gönderdi`:(msg.type==='location'?'📍 Konum gönderdi':(msg.type==='liveLocation'?'🔴 Canlı konum':(msg.text||'Arama')))))));
   const senderName=msg.senderName||'Mesaj';
   // Admin, mesajı atan kişinin panelinde olmasa bile toast'a tıklayınca
@@ -4944,7 +5054,7 @@ function notifyIncomingMessage(msg){
 }
 function notifyBomb(fromName,text){
   playNotifSound();
-  if(navigator.vibrate)navigator.vibrate([300,120,300,120,400]);
+  vib([300,120,300,120,400]);
   showToast(`💥 ${esc(fromName||'Aşk Bahçem')}: ${text}`,'info',3200);
   if(document.hidden){
     showSystemNotification(fromName||'Aşk Bahçem',text,'bomb-'+activeRoom);
@@ -4952,7 +5062,7 @@ function notifyBomb(fromName,text){
   }
 }
 function notifyIncomingCall(fromName,fromUid,fromEmoji){
-  if(navigator.vibrate)navigator.vibrate([400,150,400,150,400]);
+  vib([400,150,400,150,400]);
   const onClick=(isAdmin&&fromUid)?()=>selectUser(fromUid,fromName,fromEmoji||'💕'):null;
   showToast(`📹 ${esc(fromName||'Aşk Bahçem')} arıyor…`,'info',3200,onClick);
   if(isAdmin)sendTelegramNotification(`📹 ${fromName||'Biri'} görüntülü arıyor!`);
@@ -5013,6 +5123,13 @@ document.addEventListener('visibilitychange',()=>{
   if(!document.hidden){
     clearUnread();
     if(activeRoom)markIncomingMessagesRead(lastRenderedMsgs);
+    // Arka planda okunmamış sayılıp userUnreadMap'e eklenen mesajlar, sohbet
+    // zaten açıkken uygulama öne gelince sidebar'da "okunmamış" görünmeye
+    // devam etmesin.
+    if(isAdmin&&activePartner&&userUnreadMap[activePartner.id]){
+      userUnreadMap[activePartner.id]=0;
+      renderSidebar(lastPresenceData||{});
+    }
   }
 });
 
@@ -5033,11 +5150,23 @@ function listenCallSignal(){
     if(!snap.exists())return;
     const d=snap.data();
     if(!d.ts)return;
-    if(Date.now()-d.ts>25000)return;
     // Aynı ts tekrar işlenmesin
     const sigKey=d.type+'_'+d.ts;
     if(seenSigDocs.has(sigKey))return;
     seenSigDocs.add(sigKey);
+    const sigAge=Date.now()-d.ts;
+    if(sigAge>25000){
+      // DÜZELTME: bu sohbet zaten "açık" (aktif oda) olsa bile, eğer teklif
+      // 25sn'den daha eskiyse bu demektir ki cihaz o an gerçekte
+      // bakılmıyordu (ekran kapalı/arka plan) ve teklif fark edilmeden
+      // gecikti. Önceden bu durumda hiçbir iz bırakılmadan tamamen
+      // görmezden geliniyordu. Artık en azından "cevapsız arama" kaydı
+      // düşülüyor ki geç açıldığında da haberi olsun.
+      if(d.type==='offer'&&sigAge<=MISSED_CALL_LOG_WINDOW){
+        registerMissedCall(d.fromName||'Sevgilim',d.from,activeRoom);
+      }
+      return;
+    }
     if(d.type==='offer'){
       // Ağ geçişi/ICE yeniden başlatma sırasında karşı taraf (arayan) yeni bir
       // "renegotiate" offer'ı gönderir — bu YENİ bir arama değildir, mevcut
@@ -5141,10 +5270,10 @@ let ringtoneTmr=null;
 let ringVibeTmr=null;
 function playRingtone(){
   // Gelen arama titreşimi de sesle birlikte tekrarlansın — sessiz profilde bile fark edilsin
-  if(navigator.vibrate){
+  if(vibrateOn&&navigator.vibrate){
     navigator.vibrate([500,200,500,200,500]);
     clearInterval(ringVibeTmr);
-    ringVibeTmr=setInterval(()=>navigator.vibrate([500,200,500,200,500]),1900);
+    ringVibeTmr=setInterval(()=>{if(vibrateOn&&navigator.vibrate)navigator.vibrate([500,200,500,200,500])},1900);
   }
   if(!soundOn)return;
   stopRingtone();
@@ -5167,7 +5296,7 @@ function playRingtone(){
   ring();
   ringtoneTmr=setInterval(ring,1400);
 }
-function stopRingtone(){clearInterval(ringtoneTmr);ringtoneTmr=null;clearInterval(ringVibeTmr);ringVibeTmr=null;if(navigator.vibrate)navigator.vibrate(0)}
+function stopRingtone(){clearInterval(ringtoneTmr);ringtoneTmr=null;clearInterval(ringVibeTmr);ringVibeTmr=null;vib(0)}
 
 function minimizeCall(){
   const ov=document.getElementById('callOverlay');
@@ -5874,7 +6003,7 @@ async function startCallRecording(){
     callRecRecorder.start(1000);
     document.getElementById('callRecBtn').classList.add('rec-active');
     document.getElementById('callRecBadge').classList.add('show');
-    if(navigator.vibrate)navigator.vibrate(15);
+    vib(15);
     showToast('Görüşme kaydediliyor…','info');
   }catch(e){
     console.error(e);
@@ -6028,6 +6157,46 @@ function closeCallChat(){
   if(!panel.classList.contains('open'))return;
   panel.classList.remove('open');
 }
+
+/* ── Paneli parmakla aşağı sürükleyerek kapatma ── WhatsApp/Instagram'daki
+   alt sayfa (bottom sheet) davranışı: tutamaç (.ccp-handle) veya panelin üst
+   boş alanından aşağı sürüklenince panel parmağı takip eder; yeterince
+   aşağı çekilirse bırakınca kapanır, çekilmediyse yerine geri yaylanır. */
+function initCallChatPanelSwipe(){
+  const panel=document.getElementById('callChatPanel');
+  const handle=panel&&panel.querySelector('.ccp-handle');
+  if(!panel||!handle)return;
+  const CLOSE_THRESHOLD=70;
+  let dragging=false,startY=0,pid=null;
+  const onDown=ev=>{
+    if(ev.pointerType==='mouse'&&ev.button!==0)return;
+    dragging=true;startY=ev.clientY;pid=ev.pointerId;
+    panel.style.transition='none';
+    try{handle.setPointerCapture(pid)}catch(e){}
+  };
+  const onMove=ev=>{
+    if(!dragging||ev.pointerId!==pid)return;
+    const dy=ev.clientY-startY;
+    if(dy<=0)return; // sadece aşağı sürüklemeyi izle
+    panel.style.transform='translateY('+dy+'px)';
+  };
+  const onUp=ev=>{
+    if(!dragging||(ev&&ev.pointerId!==undefined&&ev.pointerId!==pid))return;
+    dragging=false;
+    panel.style.transition='';
+    const dy=ev.clientY-startY;
+    panel.style.transform='';
+    if(dy>=CLOSE_THRESHOLD){
+      vib(10);
+      closeCallChat();
+    }
+  };
+  handle.addEventListener('pointerdown',onDown);
+  handle.addEventListener('pointermove',onMove);
+  handle.addEventListener('pointerup',onUp);
+  handle.addEventListener('pointercancel',onUp);
+}
+document.addEventListener('DOMContentLoaded',initCallChatPanelSwipe);
 function populateCallChatFromHistory(){
   const list=document.getElementById('callChatList');
   list.innerHTML='';
