@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260707-140730-2496128">
+<html lang="tr" data-build="askbahcem-20260707-142613-26b8aaf">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -1862,7 +1862,26 @@ function startAdaptiveBitrate(pc){
   // Sürekli aynı soruna tekrar tekrar düşüp gereksiz renegotiation
   // yaratmamak için görüşme başına en fazla 2 deneme hakkı var.
   let lowCamFpsTicks=0,camFpsRecoveryAttempts=0;
-  const MAX_CAM_FPS_RECOVERY=2;
+  const MAX_CAM_FPS_RECOVERY=4;
+  // DÜZELTME 7 (kalıcı düşük ışık — asıl donma/kara ekran kaynağı bulundu):
+  // Eskiden 2 deneme hakkı bitince (çözünürlük ~%49'a inmiş olsa bile) hâlâ
+  // hedef fps'e (minFrameRate) ulaşılamıyorsa kod sessizce PES EDİYORDU.
+  // Ama adaptif bitrate/jitter tamponu ve karşı taraftaki "görüntü takıldı"
+  // algılayıcısı (startVideoHealthCheck) hâlâ o cihazın normal 'mid'
+  // hedeflerine (minFrameRate:15, adaptiveMax:900kbps) göre çalışmaya devam
+  // ediyordu — yani KAYNAK (kamera) gerçekten 10-11fps üretebilirken, sistem
+  // hâlâ çok daha yüksek bir hedef bekliyor, karşı taraf bunu "donma" sanıp
+  // durmadan ICE restart deniyor, bu da ekranın kararıp "Yeniden
+  // bağlanılıyor…" göstermesine sebep oluyordu — hâlbuki sorun ağda değil,
+  // kameradaydı, ICE restart bunu hiçbir zaman düzeltemiyordu (sonsuz
+  // döngü). Şimdi: (1) deneme hakkı 2'den 4'e çıkarıldı ve çözünürlük daha
+  // agresif düşürülüyor (0.7 yerine 0.6 kat), (2) en önemlisi, tüm haklar
+  // tükendiği hâlde fps hâlâ hedefin altındaysa DEVICE_TIER'ı bir alt
+  // kademeye (mid→low→verylow) KALICI OLARAK indiriyoruz — böylece hem
+  // adaptif bitrate tavanı hem de karşı taraftaki "beklenen" fps kameranın
+  // gerçekte üretebildiği değerle uyumlu hale geliyor ve gereksiz/etkisiz
+  // ICE restart döngüsü duruyor.
+  const TIER_DOWNGRADE={mid:'low',low:'verylow'};
   async function attemptLowLightFpsRecovery(){
     try{
       if(!localStream)return;
@@ -1870,13 +1889,20 @@ function startAdaptiveBitrate(pc){
       if(!track)return;
       const s=track.getSettings?track.getSettings():{};
       const curW=s.width||q.video.width.ideal,curH=s.height||q.video.height.ideal;
-      const newW=Math.max(240,Math.round(curW*0.7)),newH=Math.max(180,Math.round(curH*0.7));
+      const newW=Math.max(200,Math.round(curW*0.6)),newH=Math.max(150,Math.round(curH*0.6));
       await track.applyConstraints({
         width:{ideal:newW},height:{ideal:newH},
         frameRate:{ideal:q.video.frameRate.ideal,min:q.minFrameRate}
       });
       camFpsRecoveryAttempts++;
       showToast('Işık az görünüyor, akıcılık için çözünürlük düşürüldü','info',3000);
+      if(camFpsRecoveryAttempts>=MAX_CAM_FPS_RECOVERY&&TIER_DOWNGRADE[DEVICE_TIER]){
+        const newTier=TIER_DOWNGRADE[DEVICE_TIER];
+        console.log('[VIDEO-TANI] Kalıcı düşük kamera fps — kademe düşürülüyor:',DEVICE_TIER,'->',newTier);
+        DEVICE_TIER=newTier;
+        camFpsRecoveryAttempts=0; // yeni (daha gerçekçi) kademede tekrar deneme hakkı olsun
+        showToast('Bu ortamda görüntü sınırlı — kalite otomatik ayarlandı','info',3000);
+      }
     }catch(e){}
   }
   adaptiveBrTmr=setInterval(async()=>{
@@ -6384,6 +6410,22 @@ function startVideoHealthCheck(pc){
   clearTimeout(videoHealthTmr);
   let triedRestart=false;
   let prevFramesDecoded=null,stuckTicks=0;
+  // DÜZELTME 8 (asıl "sürekli kara ekran + Yeniden bağlanılıyor" kaynağı):
+  // Bu fonksiyon karşı taraftan gelen görüntü ilerlemiyorsa bunu HER ZAMAN
+  // bir ağ sorunu sanıp restartIce() çağırıyordu. Ama görüntü ilerlememesinin
+  // bir ağ sorunu OLMAYAN bir sebebi de var: karşı tarafın kamerası zaten
+  // çok düşük fps üretiyorsa (ör. düşük ışık — bkz. attemptLowLightFpsRecovery)
+  // bu taraf da zaman zaman "yeni kare yok" görebilir. restartIce() ağ
+  // sorununu çözer ama kamera kaynaklı yavaşlığı ASLA çözemez — bu yüzden
+  // eskiden sorun düzelmeden sonsuza dek her birkaç saniyede bir yeniden
+  // deneniyor, her denemede bağlantı durumu kısa süreliğine sallanıp ekranı
+  // karartıyor ve "Yeniden bağlanılıyor…" banner'ını tekrar tekrar
+  // tetikliyordu. Şimdi otomatik ICE-restart denemesine bir üst sınır
+  // (MAX_AUTO_RESTARTS) kondu; bu sınıra ulaşılınca artık bağlantıyı
+  // sarsmıyoruz — sadece sakin, kalıcı bir bilgi rozeti gösterip normal
+  // akışa (ne kadar akıcıysa o kadar) izin veriyoruz.
+  const MAX_AUTO_RESTARTS=2;
+  let autoRestartCount=0;
   const check=async()=>{
     if(!peerConn||peerConn!==pc)return;
     try{
@@ -6444,8 +6486,19 @@ function startVideoHealthCheck(pc){
           // gönderir). Reattach denemesi ~8-12sn daha işe yaramazsa
           // otomatik olarak ICE'i de yeniden başlatıyoruz.
           if(stuckTicks===4){
-            try{pc.restartIce&&pc.restartIce()}catch(e){}
-            showToast('Görüntü takıldı, yeniden bağlanılıyor…','warn');
+            if(autoRestartCount<MAX_AUTO_RESTARTS){
+              autoRestartCount++;
+              try{pc.restartIce&&pc.restartIce()}catch(e){}
+              showToast('Görüntü takıldı, yeniden bağlanılıyor…','warn');
+            }else{
+              // Art arda restartIce denemeleri işe yaramadı — büyük ihtimalle
+              // sorun ağda değil (karşı tarafın kamerası/ışığı gibi kaynak
+              // tarafında). Artık bağlantıyı sarsmayı bırakıp sakin bir bilgi
+              // veriyoruz; bu da sürekli kararıp "yeniden bağlanılıyor"
+              // göstermesi yerine görüntüyü olduğu (yavaş da olsa) haliyle
+              // akmaya bırakır.
+              showToast('Karşı tarafın görüntüsü ortam/ışık nedeniyle yavaş olabilir','info',3500);
+            }
             stuckTicks=0; // bir sonraki gerçek donmayı da yakalayabilmek için sıfırla
           }
         }else{
