@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260707-095855-cea3349">
+<html lang="tr" data-build="askbahcem-20260707-100643-e0ba2e1">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -1611,22 +1611,27 @@ const ICE=[
   {urls:'turn:openrelay.metered.ca:443?transport=tcp',username:'openrelayproject',credential:'openrelayproject'}
 ];
 
-/* Görüşme kalitesi/performans ayarları. DÜZELTME: önceki 640x480/550kbps
-   sınırı hem kasmayı çözmedi hem de görüntüyü belirgin şekilde bulanık
-   bıraktı — çünkü adaptif sistem devreye girince bitrate 120kbps'e kadar
-   düşebiliyordu, bu çözünürlükte bile ciddi blok/bulanıklık yapar. Hedef
-   çözünürlük ve taban bitrate biraz yükseltildi; asıl kasma/netlik dengesi
-   artık aşağıdaki ADAPTIVE_BR_* sabitleri ve gerçek zamanlı ölçümle
-   sağlanıyor (bkz. startAdaptiveBitrate). */
+/* Görüşme kalitesi/performans ayarları. DÜZELTME 2: Gerçek ölçümde (bkz.
+   ekran içi teşhis rozeti) 960x720 hedefinde HEM WiFi HEM mobil veride
+   fps sabit 8'de tıkanıyordu — ping ve paket kaybı düşük olduğu için bu
+   ağ değil, CİHAZLARIN 720p VP8 ENCODE YÜKÜNÜ kaldıramaması demekti.
+   Çözünürlük 540p'ye düşürülüp encoder'a maxFramerate ile net bir hedef
+   verildi (bkz. capVideoBitrate) — 540p'de encode yükü çok daha az
+   olduğundan fps'in gerçek hedefine (20-24) ulaşması bekleniyor. */
 const CALL_MEDIA_CONSTRAINTS={
-  video:{width:{ideal:960,max:1280},height:{ideal:720,max:720},frameRate:{ideal:24,max:30},facingMode:'user'},
+  video:{width:{ideal:720,max:960},height:{ideal:540,max:540},frameRate:{ideal:24,max:30},facingMode:'user'},
   audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}
 };
 function capVideoBitrate(sender){
   try{
     const params=sender.getParameters();
     if(!params.encodings||!params.encodings.length)params.encodings=[{}];
-    params.encodings[0].maxBitrate=700000; // ~700kbps — 720p hedefinde makul başlangıç netliği
+    params.encodings[0].maxBitrate=600000; // ~600kbps — 540p'de zaten net görüntü için yeterli
+    // DÜZELTME 2: fps'in gerçek darboğaz olduğu ölçümle doğrulandığı için
+    // encoder'a maxFramerate ile açık bir üst hedef veriyoruz — bazı
+    // tarayıcılarda bu değer belirtilmezse encoder kendi iç sezgisiyle çok
+    // daha düşük (ör. 8fps gibi) bir hedefe "kilitlenip" orada kalabiliyor.
+    params.encodings[0].maxFramerate=24;
     // DÜZELTME (kasma/donma): degradationPreference belirtilmezse tarayıcı
     // varsayılan olarak genelde 'balanced' kullanır ve donanım zorlandığında
     // bazen ÇÖZÜNÜRLÜĞÜ korumaya çalışıp KARE HIZINI (fps) düşürür — bu da
@@ -1669,14 +1674,14 @@ function preferStableVideoCodec(pc){
    böylece her bağlantı koşuluna kendini uyarlayan bir video akışı elde
    ediliyor.
 */
-const ADAPTIVE_BR_MIN=300000;   // ~300kbps — 720p'de bile makul netlik için taban yükseltildi
-const ADAPTIVE_BR_MAX=1500000;  // ~1.5Mbps — iyi ağda net 720p görüntüye izin ver
-const ADAPTIVE_BR_STEP=150000;
+const ADAPTIVE_BR_MIN=250000;   // ~250kbps — 540p'de bile makul netlik için taban
+const ADAPTIVE_BR_MAX=1100000;  // ~1.1Mbps — iyi ağda net 540p için tavan (720p'ye göre daha düşük yeterli)
+const ADAPTIVE_BR_STEP=120000;
 let adaptiveBrTmr=null;
-let adaptiveBrCurrent=700000; // başlangıç: eskisinden biraz yüksek, ilk karelerden itibaren daha net
+let adaptiveBrCurrent=600000; // başlangıç: 540p hedefine uygun
 function startAdaptiveBitrate(pc){
   clearInterval(adaptiveBrTmr);
-  adaptiveBrCurrent=700000;
+  adaptiveBrCurrent=600000;
   let lastBytesLost=0,lastPacketsSent=0,haveBaseline=false;
   adaptiveBrTmr=setInterval(async()=>{
     if(!peerConn||peerConn!==pc)return clearInterval(adaptiveBrTmr);
@@ -1724,6 +1729,7 @@ function startAdaptiveBitrate(pc){
         if(!params.encodings||!params.encodings.length)params.encodings=[{}];
         params.encodings[0].maxBitrate=target;
         params.encodings[0].degradationPreference='maintain-framerate';
+        params.encodings[0].maxFramerate=24; // adaptif bitrate ayarı sırasında fps hedefini kaybetme
         sender.setParameters(params).catch(()=>{});
         console.log('[ADAPTIVE-BR] bitrate ayarlandı:',target,'lossRatio:',lossRatio.toFixed(3),'rtt:',rtt);
       }
