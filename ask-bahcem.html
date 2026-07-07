@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-debug-2026-07-07-v4">
+<html lang="tr" data-build="askbahcem-debug-2026-07-07-v5">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -744,6 +744,10 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
 /* ── CALL LOG MESSAGE ── */
 .bubble.call-log{display:flex;align-items:center;gap:7px;background:rgba(255,255,255,.07)!important;color:var(--blush)!important;font-size:.78rem;font-weight:600;padding:8px 13px}
 .bubble.call-log svg{color:var(--rose);flex-shrink:0}
+.call-log-cb-btn{display:flex;align-items:center;gap:4px;margin-left:6px;padding:5px 10px;border-radius:14px;border:none;background:var(--bright);color:#fff;font-family:var(--font-body);font-size:.7rem;font-weight:700;cursor:pointer;flex-shrink:0;transition:background .15s,transform .12s}
+.call-log-cb-btn svg{width:14px;height:14px;color:#fff!important}
+.call-log-cb-btn:hover{background:var(--mid)}
+.call-log-cb-btn:active{transform:scale(.93)}
 
 /* ── LIGHTBOX ── */
 #lightbox{display:none;position:fixed;inset:0;z-index:400;background:rgba(0,0,0,.94);align-items:center;justify-content:center}
@@ -1884,7 +1888,7 @@ function manualInstall(){
    FIREBASE READY
 ═══════════════════════════════════════ */
 window.addEventListener('firebaseReady',()=>{
-  fb=window._fb;console.log('FB ok — BUILD askbahcem-debug-2026-07-07-v4');
+  fb=window._fb;console.log('FB ok — BUILD askbahcem-debug-2026-07-07-v5');
   loadSoundPref();
   loadVibratePref();
   maybeAutoLogin();
@@ -3349,6 +3353,19 @@ function appendBubble(msg,doScroll=true){
     b.classList.add('call-log');
     const iconId=msg.callKind==='missed'?'i-phone-missed':'i-phone-end';
     b.innerHTML=`<svg class="icon icon-sm"><use href="#${iconId}"/></svg><span>${esc(msg.text||'')}</span>`;
+    // "Geri Ara" kısayolu: sadece cevapsız arama ve reddedilen aramalarda
+    // gösterilir (görüşme sona erdi/iptal edildi kayıtlarında değil).
+    // Eski (bu düzeltmeden önce kaydedilmiş) mesajların callKind alanı
+    // olmayabileceğinden, metne göre de eşleştiriyoruz ki geçmiş kayıtlarda
+    // da buton görünsün.
+    const isMissedOrRejected=msg.callKind==='missed'||msg.callKind==='reject'||/reddetti|Cevapsız/i.test(msg.text||'');
+    if(isMissedOrRejected){
+      const cbBtn=document.createElement('button');
+      cbBtn.className='call-log-cb-btn';
+      cbBtn.innerHTML='<svg class="icon"><use href="#i-video"/></svg><span>Geri Ara</span>';
+      cbBtn.onclick=ev=>{ev.stopPropagation();startCall()};
+      b.appendChild(cbBtn);
+    }
   } else if(msg.type==='nudge'){
     b.classList.add('call-log');
     b.innerHTML=`<svg class="icon icon-sm"><use href="#i-buzz"/></svg><span>${esc(msg.text||'')}</span>`;
@@ -5998,7 +6015,7 @@ async function rejectCall(){
   document.getElementById('incomingCall').classList.remove('open');
   stopRingtone();
   await sigSend({type:'reject',to:currentCallData?.from,from:myId});
-  logCallMsg('☎️ Aramayı reddetti');
+  logCallMsg('☎️ Aramayı reddetti','reject');
   currentCallData=null;
 }
 async function missCall(){
