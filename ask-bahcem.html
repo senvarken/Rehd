@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260707-104940-f75d753">
+<html lang="tr" data-build="askbahcem-20260707-105738-ddb40e9">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -1628,22 +1628,22 @@ let DEVICE_TIER='mid';
 const QUALITY_TIERS={
   high:{
     video:{width:{ideal:1280,max:1280},height:{ideal:720,max:720},frameRate:{ideal:30,max:30}},
-    maxBitrate:2000000,maxFramerate:30,
+    maxBitrate:2000000,maxFramerate:30,minFrameRate:20,
     adaptiveMin:600000,adaptiveMax:2600000,startBitrate:1500000
   },
   mid:{
     video:{width:{ideal:720,max:960},height:{ideal:540,max:540},frameRate:{ideal:24,max:30}},
-    maxBitrate:900000,maxFramerate:24,
+    maxBitrate:900000,maxFramerate:24,minFrameRate:15,
     adaptiveMin:250000,adaptiveMax:1300000,startBitrate:600000
   },
   low:{
     video:{width:{ideal:640,max:720},height:{ideal:480,max:540},frameRate:{ideal:20,max:24}},
-    maxBitrate:500000,maxFramerate:20,
+    maxBitrate:500000,maxFramerate:20,minFrameRate:12,
     adaptiveMin:180000,adaptiveMax:800000,startBitrate:400000
   },
   verylow:{
     video:{width:{ideal:480,max:640},height:{ideal:360,max:480},frameRate:{ideal:18,max:20}},
-    maxBitrate:320000,maxFramerate:18,
+    maxBitrate:320000,maxFramerate:18,minFrameRate:10,
     adaptiveMin:120000,adaptiveMax:500000,startBitrate:280000
   }
 };
@@ -1674,13 +1674,46 @@ const ICE=[
    yerine artık getCallMediaConstraints() her görüşme başlangıcında
    DEVICE_TIER'a bakıp o cihaza uygun çözünürlük/fps isteğini üretiyor —
    güçlü cihaz maksimuma yakın, zayıf cihaz gerçekçi bir hedefe göre kamera
-   açıyor. */
-function getCallMediaConstraints(){
+   açıyor.
+   DÜZELTME 4 (kamera kaynaklı fps düşüşü): H264 Baseline + doğru cihaz
+   kademesiyle bile fps hâlâ düşük kalabiliyor (ör. "cihaz:mid codec:H264
+   Baseline" iken 9fps) — bunun sebebi artık encoder değil, KAMERA
+   DONANIMININ KENDİSİ olabilir: birçok Android/iOS kamerası, ortam ışığı
+   yetersizken otomatik pozlama (auto-exposure) algoritmasıyla her karenin
+   pozlama (exposure) süresini uzatıp fps'i KENDİLİĞİNDEN düşürür — bu,
+   WebRTC/JS tarafından görülemeyen, donanım/sürücü seviyesinde bir davranış
+   olduğu için encoder ayarları bunu düzeltemez. Burada frameRate'e "min"
+   sınırı da ekleyip kameraya "fps'ten asla bu kadar aşağı düşme" talimatı
+   veriyoruz (forceMinFps=true); bazı cihaz/tarayıcılarda bu, kameranın daha
+   karanlık ama daha akıcı görüntü üretmesini sağlar. Bu min sınır bazı
+   donanımlarda OverconstrainedError fırlatabileceği için acquireLocalStream()
+   önce bunu dener, başarısız olursa min olmadan tekrar dener. */
+function getCallMediaConstraints(forceMinFps){
   const q=currentQualityTier();
+  const frameRate=forceMinFps&&q.minFrameRate
+    ?{...q.video.frameRate,min:q.minFrameRate}
+    :q.video.frameRate;
   return{
-    video:{...q.video,facingMode:'user'},
+    video:{...q.video,frameRate,facingMode:'user'},
     audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}
   };
+}
+/* Kamerayı önce fps tabanı ZORLANARAK açmayı dener (düşük ışıkta otomatik
+   fps düşüşünü engellemeye çalışır); cihaz bu sınırı karşılayamıyorsa
+   (OverconstrainedError ya da başka bir hata) sınırsız haliyle tekrar
+   dener — böylece hiçbir cihazda görüşme "izin/kısıt hatası" yüzünden hiç
+   başlamaz. Hangi denemenin başarılı olduğunu usedMinFpsConstraint'e yazar,
+   teşhis rozetinde gösterilir. */
+let usedMinFpsConstraint=false;
+async function acquireLocalStream(){
+  try{
+    const s=await navigator.mediaDevices.getUserMedia(getCallMediaConstraints(true));
+    usedMinFpsConstraint=true;
+    return s;
+  }catch(e){
+    usedMinFpsConstraint=false;
+    return await navigator.mediaDevices.getUserMedia(getCallMediaConstraints(false));
+  }
 }
 const CALL_MEDIA_CONSTRAINTS=getCallMediaConstraints(); // geriye dönük uyumluluk için ilk değer; asıl kullanım fonksiyon üzerinden
 function capVideoBitrate(sender){
@@ -1780,7 +1813,7 @@ function startAdaptiveBitrate(pc){
       const sender=pc.getSenders().find(s=>s.track&&s.track.kind==='video');
       if(!sender)return;
       const stats=await pc.getStats();
-      let outbound=null,remoteInbound=null,inbound=null;
+      let outbound=null,remoteInbound=null,inbound=null,mediaSource=null;
       stats.forEach(r=>{
         if(r.type==='outbound-rtp'&&r.kind==='video')outbound=r;
         if(r.type==='remote-inbound-rtp'&&r.kind==='video')remoteInbound=r;
@@ -1791,6 +1824,14 @@ function startAdaptiveBitrate(pc){
         // encode/ağ değil, decode/render tarafındadır (keyframe kaybı,
         // JS ana thread bloklanması, vb.).
         if(r.type==='inbound-rtp'&&r.kind==='video')inbound=r;
+        // DÜZELTME 4: "media-source" istatistiği, KAMERANIN ENCODER'A HİÇ
+        // UĞRAMADAN ürettiği ham fps'i verir. outbound-rtp'deki fps (encoder
+        // çıkışı) buna eşit veya daha düşük olabilir. İkisi de aynı düşük
+        // değerdeyse (ör. ikisi de 9fps) sorun encoder DEĞİL, kameranın
+        // kendisidir (çoğunlukla düşük ışıkta otomatik pozlama/fps düşürme);
+        // media-source yüksek ama outbound düşükse sorun gerçekten encoder/
+        // CPU tarafındadır.
+        if(r.type==='media-source'&&r.kind==='video')mediaSource=r;
       });
       if(!outbound)return;
       // DÜZELTME 3 (codec teşhisi): "H264 tercih edildi" ile "H264 gerçekten
@@ -1812,7 +1853,7 @@ function startAdaptiveBitrate(pc){
       // çözünürlük/fps/bitrate/kayıp oranını görebilsin diye ekrandaki
       // rozeti burada güncelliyoruz — "net değil" şikayetinin sebebi düşük
       // çözünürlük mü, düşük bitrate mi, yoksa paket kaybı mı anlaşılır.
-      updateStatsBadge(outbound,remoteInbound,inbound);
+      updateStatsBadge(outbound,remoteInbound,inbound,mediaSource);
       if(!haveBaseline){
         haveBaseline=true;lastBytesLost=packetsLost;lastPacketsSent=packetsSent;
         return;
@@ -1858,7 +1899,7 @@ function stopAdaptiveBitrate(){
    tarafın bildirdiği paket kaybı yüzdesi, cihaz kademesi ve gerçekte
    negotiate edilen codec/profil. DÜZELTME 3: bu bilgiler önceden sadece
    konsola yazılıyordu — artık hepsi burada, ekranda görünüyor. */
-function updateStatsBadge(outbound,remoteInbound,inbound){
+function updateStatsBadge(outbound,remoteInbound,inbound,mediaSource){
   try{
     const badge=document.getElementById('callStatsBadge');
     if(!badge)return;
@@ -1881,7 +1922,17 @@ function updateStatsBadge(outbound,remoteInbound,inbound){
       line3=`\ndonma:${freezeCount}x  toplam:${freezeDur}s`;
     }
     const tierLine=`\ncihaz:${DEVICE_TIER}${negotiatedCodecLabel?'  codec:'+negotiatedCodecLabel:''}`;
-    badge.textContent=`${w}x${h} @${fps}fps\n${kbps}kbps  kayıp:%${lostPct}  ping:${rttMs}ms${line3}${tierLine}`;
+    // DÜZELTME 4: kamera fps'i (encoder'dan ÖNCEKİ ham değer) ile gönderim
+    // fps'ini (encoder çıkışı) yan yana göster. Bu iki değer birbirine
+    // yakınsa ve ikisi de düşükse darboğaz KAMERADA (çoğunlukla düşük ışık
+    // nedeniyle otomatik fps düşüşü); kamera fps'i yüksek ama gönderim fps'i
+    // düşükse darboğaz encoder/CPU'dadır.
+    let camLine='';
+    if(mediaSource&&mediaSource.framesPerSecond!=null){
+      const camFps=Math.round(mediaSource.framesPerSecond);
+      camLine=`\nkamera:${camFps}fps  gönderim:${fps}fps${usedMinFpsConstraint?' (fps-zorlandı)':''}`;
+    }
+    badge.textContent=`${w}x${h} @${fps}fps\n${kbps}kbps  kayıp:%${lostPct}  ping:${rttMs}ms${line3}${tierLine}${camLine}`;
     badge.classList.add('show');
   }catch(e){}
 }
@@ -6050,7 +6101,7 @@ function setCallConnectedUI(){
 async function startCall(){
   if(!fb||!activeRoom||!activePartner){showToast('Önce bir sohbet seç','warn');return}
   if(peerConn){showToast('Arama devam ediyor','warn');return}
-  try{localStream=await navigator.mediaDevices.getUserMedia(getCallMediaConstraints())}
+  try{localStream=await acquireLocalStream()}
   catch(e){showToast('Kamera/Mikrofon izni gerekli','error');return}
   document.getElementById('localVid').srcObject=localStream;
   applySavedSelfVidPos();
@@ -6084,7 +6135,7 @@ async function startCall(){
 async function acceptCall(){
   document.getElementById('incomingCall').classList.remove('open');
   stopRingtone();
-  try{localStream=await navigator.mediaDevices.getUserMedia(getCallMediaConstraints())}
+  try{localStream=await acquireLocalStream()}
   catch(e){showToast('Kamera/Mikrofon izni gerekli','error');return}
   document.getElementById('localVid').srcObject=localStream;
   applySavedSelfVidPos();
