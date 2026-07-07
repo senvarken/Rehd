@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-debug-2026-07-07-v5">
+<html lang="tr" data-build="askbahcem-20260707-093703-9c38083">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -74,6 +74,50 @@
    yönlendirip sayfayı tazeliyoruz — kullanıcı artık uygulamayı silip
    yeniden kurmak zorunda kalmıyor. */
 (function(){
+  // DÜZELTME (periyodik + meşgulken erteleme): Önceki haliyle kontrol sadece
+  // açılışta ve sekme arka plandan öne gelince yapılıyordu — kullanıcı
+  // sekmeyi hiç kapatmadan/arka plana almadan sürekli önde tutarsa (örn.
+  // masaüstünde link ile açık bırakılmış tarayıcı sekmesi) GitHub Pages'teki
+  // güncelleme hiç fark edilmiyordu. Şimdi sayfa görünürken belirli aralıkla
+  // da kontrol ediliyor. Ayrıca görüşme/kayıt gibi kritik bir işlem sürüyorsa
+  // sessizce yönlendirip kullanıcıyı görüşmeden koparmak yerine küçük bir
+  // "güncelleme hazır" bildirimi gösteriyoruz; kullanıcı işini bitirince veya
+  // bildirime dokununca yenileniyor.
+  let pendingBuild=null;
+  let updateNoticeShown=false;
+  const CHECK_INTERVAL_MS=5*60*1000; // 5 dakikada bir (sayfa açıkken)
+
+  function isBusyRightNow(){
+    try{
+      if(typeof peerConn!=='undefined'&&peerConn)return true; // görüşme aktif
+      if(typeof mediaRecorder!=='undefined'&&mediaRecorder)return true; // ses kaydı sürüyor
+    }catch(e){}
+    return false;
+  }
+
+  function doReload(){
+    location.href=location.pathname+'?_v='+Date.now();
+  }
+
+  function showUpdateToast(deferred){
+    try{
+      const t=document.getElementById('toast');
+      if(!t)return;
+      if(deferred){
+        t.innerHTML='<span>✨ Yeni güncelleme hazır — görüşme bitince yüklenecek</span>';
+      }else{
+        t.innerHTML='<span>✨ Yeni güncelleme yükleniyor…</span>';
+      }
+      t.classList.add('show');
+    }catch(e){}
+  }
+
+  function applyUpdateNow(){
+    console.log('Güncelleme uygulanıyor:',pendingBuild);
+    showUpdateToast(false);
+    setTimeout(doReload,900);
+  }
+
   function checkForUpdate(){
     try{
       fetch(location.pathname+location.search,{cache:'no-store'})
@@ -82,35 +126,49 @@
           const m=html.match(/data-build=["']([^"']+)["']/);
           const serverBuild=m&&m[1];
           const myBuild=document.documentElement.getAttribute('data-build');
-          if(serverBuild&&myBuild&&serverBuild!==myBuild){
-            console.log('Yeni sürüm bulundu:',serverBuild,'(mevcut:',myBuild+') — yenileniyor…');
-            try{
-              const t=document.getElementById('toast');
-              if(t){
-                t.innerHTML='<span>✨ Yeni güncelleme yükleniyor…</span>';
-                t.classList.add('show');
-              }
-            }catch(e){}
-            setTimeout(()=>{
-              location.href=location.pathname+'?_v='+Date.now();
-            },900);
+          if(!serverBuild||!myBuild||serverBuild===myBuild)return;
+          console.log('Yeni sürüm bulundu:',serverBuild,'(mevcut:',myBuild+')');
+          pendingBuild=serverBuild;
+          if(isBusyRightNow()){
+            // Görüşme/kayıt sürüyor — kullanıcıyı koparmadan bekleyelim,
+            // sadece bir kez bilgi balonu gösterelim.
+            if(!updateNoticeShown){updateNoticeShown=true;showUpdateToast(true)}
+          }else{
+            applyUpdateNow();
           }
         })
         .catch(()=>{}); // çevrimdışıysa/ağ hatasında sessizce vazgeç, mevcut sürümle devam
     }catch(e){}
   }
+
+  // Meşgulken ertelenen güncellemeyi, iş bitince (görüşme kapanınca / kayıt
+  // durunca) otomatik uygulamak için periyodik olarak durumu yokluyoruz.
+  function tryApplyPendingIfIdle(){
+    if(pendingBuild&&!isBusyRightNow())applyUpdateNow();
+  }
+
   // Uygulama açılışında bir kez kontrol et…
   if(document.readyState==='complete'||document.readyState==='interactive'){
     setTimeout(checkForUpdate,600);
   }else{
     document.addEventListener('DOMContentLoaded',()=>setTimeout(checkForUpdate,600));
   }
-  // …ve uygulama arka plandan öne her gelişinde (standalone PWA'da kullanıcı
+  // …uygulama arka plandan öne her gelişinde (standalone PWA'da kullanıcı
   // uygulamayı günlerce hiç kapatmayabilir, sadece arka plana alıp geri
-  // dönebilir) tekrar kontrol et.
+  // dönebilir) tekrar kontrol et…
   document.addEventListener('visibilitychange',()=>{
-    if(document.visibilityState==='visible')checkForUpdate();
+    if(document.visibilityState==='visible'){
+      checkForUpdate();
+      tryApplyPendingIfIdle();
+    }
   });
+  // …ve sekme sürekli önde/açık kalsa bile periyodik olarak kontrol et,
+  // böylece "linkten açık bırakılmış tarayıcı sekmesi" de güncellemeyi
+  // GitHub Pages'e her push'tan sonra makul bir sürede yakalar.
+  setInterval(()=>{
+    if(document.visibilityState==='visible')checkForUpdate();
+    tryApplyPendingIfIdle();
+  },CHECK_INTERVAL_MS);
 })();
 </script>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
@@ -5871,6 +5929,32 @@ function createPC(){
     const sender=pc.addTrack(t,localStream);
     if(t.kind==='video')capVideoBitrate(sender);
   });
+  // DÜZELTME (tek yönlü/hiç bağlanmayan video — büyük ekran tablet vb.):
+  // Önceki koddaki toparlanma mantığı SADECE bağlantı önce 'connected' olup
+  // sonra 'disconnected'/'failed'e DÜŞTÜĞÜNDE devreye giriyordu. Ama bazı
+  // ağ/NAT kombinasyonlarında (özellikle simetrik NAT arkasındaki cihazlarla
+  // TURN relay'e düşmesi gereken bir bağlantı) ICE hiçbir zaman 'connected'e
+  // ULAŞAMADAN sonsuza kadar 'checking' durumunda takılı kalabiliyor — bu
+  // durumda kullanıcı ekranda kalıcı siyah/placeholder görür, hiçbir banner
+  // veya toast görmeden, çünkü 'disconnected/failed' hiç tetiklenmiyordu.
+  // Burada 'checking' durumuna girdiğimiz anda bir zaman aşımı kuruyoruz:
+  // makul bir süre içinde 'connected/completed'e geçilmezse ICE'i yeniden
+  // başlatıyoruz ve kullanıcıyı "Yeniden bağlanılıyor…" ile bilgilendiriyoruz.
+  let neverConnectedTmr=null;
+  function armNeverConnectedWatchdog(){
+    clearTimeout(neverConnectedTmr);
+    neverConnectedTmr=setTimeout(()=>{
+      if(!peerConn||peerConn!==pc)return;
+      const st=pc.iceConnectionState;
+      if(st!=='connected'&&st!=='completed'&&st!=='closed'){
+        console.log('[VIDEO-TANI] ICE hiç bağlanamadı, watchdog tetiklendi. state:',st);
+        showReconnectBanner();
+        showToast('Bağlantı kurulamıyor, yeniden deneniyor…','warn');
+        try{pc.restartIce&&pc.restartIce()}catch(e){}
+        armNeverConnectedWatchdog(); // toparlanmazsa tekrar tekrar dene
+      }
+    },12000);
+  }
   pc.ontrack=e=>{
     const vid=document.getElementById('remoteVid');
     if(e.streams&&e.streams[0]){
@@ -5923,7 +6007,11 @@ function createPC(){
   pc.oniceconnectionstatechange=()=>{
     if(!peerConn)return;
     const st=pc.iceConnectionState;
+    if(st==='checking'){
+      armNeverConnectedWatchdog();
+    }
     if(st==='connected'||st==='completed'){
+      clearTimeout(neverConnectedTmr);
       clearTimeout(pc._dcTmr);
       clearInterval(pc._dcRetryInt);
       hideReconnectBanner();
@@ -5962,7 +6050,7 @@ function createPC(){
         }
       },30000);
     }
-    if(st==='closed'){clearTimeout(pc._dcTmr);clearInterval(pc._dcRetryInt)}
+    if(st==='closed'){clearTimeout(neverConnectedTmr);clearTimeout(pc._dcTmr);clearInterval(pc._dcRetryInt)}
   };
   // Bazı Android WebView'lerde iceConnectionState güncellenmesi gecikebiliyor;
   // connectionState'i de aynı mantıkla takip etmek "donmuş gibi görünen" ama
@@ -6259,50 +6347,115 @@ function toggleCam(){
    kamera anlık olarak değişir. */
 let currentFacingMode='user';
 let camSwitching=false;
+// Kamera listesini deviceId ile önbelleğe alır. Samsung (S8 dahil) gibi
+// cihazlarda facingMode etiketleme tutarsız olabiliyor; label metninden
+// ön/arka ayrımı yaparak deviceId eşlemesi çok daha güvenilir çalışıyor.
+let cachedVideoDevices=null;
+async function getVideoInputDevices(force){
+  if(cachedVideoDevices&&!force)return cachedVideoDevices;
+  try{
+    const devices=await navigator.mediaDevices.enumerateDevices();
+    cachedVideoDevices=devices.filter(d=>d.kind==='videoinput');
+  }catch(e){cachedVideoDevices=[]}
+  return cachedVideoDevices;
+}
+function guessFacingFromLabel(label){
+  const l=(label||'').toLowerCase();
+  if(/back|rear|arka|environment/.test(l))return'environment';
+  if(/front|ön|user|face/.test(l))return'user';
+  return null;
+}
 async function switchCamera(){
   if(!localStream||camSwitching)return;
   const oldTrack=localStream.getVideoTracks()[0];
   if(!oldTrack)return;
   camSwitching=true;
   const nextFacing=currentFacingMode==='user'?'environment':'user';
+  // DÜZELTME 3: Bazı cihazlarda (özellikle WebView/App24 ortamındaki
+  // guest telefonlarda) kamera donanımına aynı anda sadece TEK bir akış
+  // erişebiliyor — eski track açık kalmışken yeni kamera isteği yapılırsa
+  // tarayıcı OverconstrainedError/NotReadableError fırlatıp denemelerin
+  // de başarısız olmasına yol açıyor (admin'in cihazı çoklu erişime izin
+  // verdiği için orada sorun görünmüyordu). Önce eski track'i tamamen
+  // durdurup kamerayı serbest bırakıyoruz, sonra yeni kamerayı istiyoruz.
+  const oldLabel=oldTrack.label;
+  oldTrack.stop();
+  localStream.removeTrack(oldTrack);
+  await new Promise(r=>setTimeout(r,150)); // donanımın serbest kalması için kısa bekleme
+
+  // DÜZELTME 4 (Samsung S8 vb.): enumerateDevices izin sonrası (getUserMedia
+  // en az bir kez çağrıldıktan sonra) label bilgisiyle dolu geliyor. label'a
+  // bakarak "şu an kullanılan kamera olmayan diğer kamerayı" doğrudan
+  // deviceId ile seçiyoruz — bu, facingMode etiketlemesinin yanlış/eksik
+  // olduğu Samsung cihazlarında exact/ideal facingMode denemelerinden çok
+  // daha güvenilir. facingMode denemeleri sadece bu bulunamazsa devreye girer.
+  const devices=await getVideoInputDevices(true);
+  let targetDeviceId=null;
+  if(devices.length>1){
+    const notCurrent=devices.filter(d=>d.deviceId&&d.label!==oldLabel);
+    const byFacing=notCurrent.find(d=>guessFacingFromLabel(d.label)===nextFacing);
+    targetDeviceId=(byFacing||notCurrent[0]||{}).deviceId||null;
+  }
+
   let newStream=null;
-  try{
-    newStream=await navigator.mediaDevices.getUserMedia({
-      video:{...CALL_MEDIA_CONSTRAINTS.video,facingMode:{exact:nextFacing}},
-      audio:false
-    });
-  }catch(e){
-    // DÜZELTME: 'exact' constraint bazı cihazlarda (özellikle tek kameralı
-    // tabletler ya da facingMode etiketlemesi farklı/eksik olan cihazlarda)
-    // OverconstrainedError fırlatıp kamera değişimini baştan engelliyordu —
-    // misafirde "Kamera değiştirilemedi" hatası hep buradan geliyordu. Aynı
-    // isteği daha esnek bir şekilde ('ideal') tekrar deniyoruz; tarayıcı o
-    // zaman elindeki en yakın/mevcut kamerayı vermeye çalışır ve hata
-    // fırlatmaz. Bu da başarısız olursa gerçekten değiştirilecek başka
-    // kamera yok demektir.
+  const attempts=[];
+  if(targetDeviceId){
+    attempts.push({video:{...CALL_MEDIA_CONSTRAINTS.video,deviceId:{exact:targetDeviceId}},audio:false});
+  }
+  attempts.push({video:{...CALL_MEDIA_CONSTRAINTS.video,facingMode:{exact:nextFacing}},audio:false});
+  attempts.push({video:{...CALL_MEDIA_CONSTRAINTS.video,facingMode:{ideal:nextFacing}},audio:false});
+  attempts.push({video:{facingMode:{ideal:nextFacing}},audio:false});
+  if(targetDeviceId)attempts.push({video:{deviceId:{ideal:targetDeviceId}},audio:false});
+
+  let lastErr=null;
+  for(const constraints of attempts){
     try{
-      newStream=await navigator.mediaDevices.getUserMedia({
-        video:{...CALL_MEDIA_CONSTRAINTS.video,facingMode:{ideal:nextFacing}},
+      newStream=await navigator.mediaDevices.getUserMedia(constraints);
+      if(newStream)break;
+    }catch(e){lastErr=e}
+  }
+
+  if(!newStream){
+    console.error('switchCamera: tüm denemeler başarısız —',lastErr&&lastErr.name,lastErr&&lastErr.message);
+    // Eski track'i zaten durdurduk (yukarıda) — yeni kamera da açılamadıysa
+    // kullanıcı görüntüsüz kalmasın diye eski kamerayı (currentFacingMode)
+    // geri açmayı deniyoruz, tamamen kamerasız kalmasın.
+    try{
+      const fallbackStream=await navigator.mediaDevices.getUserMedia({
+        video:{facingMode:{ideal:currentFacingMode}},
         audio:false
       });
-    }catch(e2){
-      showToast('Bu cihazda değiştirilecek başka kamera bulunamadı','warn');
-      camSwitching=false;
-      return;
-    }
+      const fbTrack=fallbackStream.getVideoTracks()[0];
+      if(fbTrack){
+        fbTrack.enabled=camOn;
+        if(peerConn){
+          const sender=peerConn.getSenders().find(s=>s.track&&s.track.kind==='video');
+          if(sender){await sender.replaceTrack(fbTrack);capVideoBitrate(sender)}
+        }
+        localStream.addTrack(fbTrack);
+        [document.getElementById('localVid'),document.getElementById('remoteVid')].forEach(el=>{
+          if(el&&el.srcObject===localStream){el.srcObject=null;el.srcObject=localStream;el.play&&el.play().catch(()=>{})}
+        });
+      }
+    }catch(e4){/* eski kamera da geri gelmediyse sessizce bırak */}
+    showToast('Bu cihazda değiştirilecek başka kamera bulunamadı','warn');
+    camSwitching=false;
+    return;
   }
+
   try{
     const newTrack=newStream.getVideoTracks()[0];
     if(!newTrack){camSwitching=false;return}
-    currentFacingMode=nextFacing;
+    // Gerçekte hangi kameraya geçildiğini label'dan doğrula; belirlenemezse
+    // (label boşsa) nextFacing varsayımını koru.
+    const detected=guessFacingFromLabel(newTrack.label);
+    currentFacingMode=detected||nextFacing;
     newTrack.enabled=camOn;
     if(peerConn){
       const sender=peerConn.getSenders().find(s=>s.track&&s.track.kind==='video');
       if(sender){await sender.replaceTrack(newTrack);capVideoBitrate(sender)}
     }
-    localStream.removeTrack(oldTrack);
     localStream.addTrack(newTrack);
-    oldTrack.stop();
     // Video elementi hangi stream'i gösteriyorsa (swap yapılmış olsa bile)
     // onu tazeleyip yeni track'in görünmesini sağla.
     [document.getElementById('localVid'),document.getElementById('remoteVid')].forEach(el=>{
