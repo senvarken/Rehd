@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260707-093703-9c38083">
+<html lang="tr" data-build="askbahcem-20260707-094821-219618a">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -1615,8 +1615,107 @@ function capVideoBitrate(sender){
     const params=sender.getParameters();
     if(!params.encodings||!params.encodings.length)params.encodings=[{}];
     params.encodings[0].maxBitrate=550000; // ~550kbps — kararlı, kasmayan bir üst sınır
+    // DÜZELTME (kasma/donma): degradationPreference belirtilmezse tarayıcı
+    // varsayılan olarak genelde 'balanced' kullanır ve donanım zorlandığında
+    // bazen ÇÖZÜNÜRLÜĞÜ korumaya çalışıp KARE HIZINI (fps) düşürür — bu da
+    // görüntünün "donmuş gibi" takılmasına yol açan asıl etkendir. Video
+    // görüşmede insan gözü, biraz bulanık ama akıcı görüntüyü; net ama
+    // donan görüntüye tercih eder. 'maintain-framerate' tarayıcıya "gerekirse
+    // çözünürlüğü düşür ama fps'i koru" talimatını verir.
+    params.encodings[0].degradationPreference='maintain-framerate';
     sender.setParameters(params).catch(()=>{});
   }catch(e){}
+}
+/* DÜZELTME (kasma/donma — codec): VP9/AV1 gibi codec'ler daha iyi sıkıştırma
+   sağlasa da donanım hızlandırma desteklemeyen (özellikle eski/orta segment
+   Android) cihazlarda YAZILIMSAL decode/encode'a düşer, bu da CPU'yu
+   tüketip kare atlamasına/donmaya sebep olur. VP8 hemen hemen her cihazda
+   donanımsal desteklenir ve daha öngörülebilir/istikrarlı çalışır. Burada
+   sender tarafında VP8'i (varsa) en öne alıyoruz; codec zaten yoksa veya
+   API desteklenmiyorsa sessizce atlanır ve tarayıcı varsayılanı kullanılır. */
+function preferStableVideoCodec(pc){
+  try{
+    if(!('setCodecPreferences' in RTCRtpTransceiver.prototype))return;
+    const transceivers=pc.getTransceivers();
+    transceivers.forEach(tr=>{
+      if(!tr.sender||!tr.sender.track||tr.sender.track.kind!=='video')return;
+      const caps=RTCRtpSender.getCapabilities('video');
+      if(!caps||!caps.codecs)return;
+      const vp8=caps.codecs.filter(c=>/VP8/i.test(c.mimeType));
+      const h264=caps.codecs.filter(c=>/H264/i.test(c.mimeType));
+      const rest=caps.codecs.filter(c=>!/VP8|H264/i.test(c.mimeType));
+      const ordered=[...vp8,...h264,...rest];
+      if(ordered.length)tr.setCodecPreferences(ordered);
+    });
+  }catch(e){}
+}
+/* DÜZELTME (kasma/donma — adaptif bitrate): Sabit 550kbps sınırı, GÜÇLÜ
+   bağlantıda gereksiz yere görüntüyü kısıtlarken, ZAYIF bağlantıda hâlâ
+   ağın kaldıramayacağı kadar yüksek kalabiliyordu (paket kaybı → decoder
+   bozuk kare alıp donuyor). Burada birkaç saniyede bir gerçek paket kaybı
+   ve RTT'yi ölçüp bitrate'i buna göre kademeli düşürüp/yükseltiyoruz —
+   böylece her bağlantı koşuluna kendini uyarlayan bir video akışı elde
+   ediliyor.
+*/
+const ADAPTIVE_BR_MIN=120000;   // ~120kbps — çok kötü ağda bile görüntü akmaya devam etsin
+const ADAPTIVE_BR_MAX=900000;   // ~900kbps — çok iyi ağda daha net görüntü
+const ADAPTIVE_BR_STEP=120000;
+let adaptiveBrTmr=null;
+let adaptiveBrCurrent=550000;
+function startAdaptiveBitrate(pc){
+  clearInterval(adaptiveBrTmr);
+  adaptiveBrCurrent=550000;
+  let lastBytesLost=0,lastPacketsSent=0,haveBaseline=false;
+  adaptiveBrTmr=setInterval(async()=>{
+    if(!peerConn||peerConn!==pc)return clearInterval(adaptiveBrTmr);
+    try{
+      const sender=pc.getSenders().find(s=>s.track&&s.track.kind==='video');
+      if(!sender)return;
+      const stats=await pc.getStats(sender.track);
+      let outbound=null,remoteInbound=null;
+      stats.forEach(r=>{
+        if(r.type==='outbound-rtp'&&r.kind==='video')outbound=r;
+        if(r.type==='remote-inbound-rtp'&&r.kind==='video')remoteInbound=r;
+      });
+      if(!outbound)return;
+      const packetsSent=outbound.packetsSent||0;
+      const packetsLost=(remoteInbound&&remoteInbound.packetsLost)||0;
+      const rtt=(remoteInbound&&remoteInbound.roundTripTime)||0; // saniye
+      if(!haveBaseline){
+        haveBaseline=true;lastBytesLost=packetsLost;lastPacketsSent=packetsSent;
+        return;
+      }
+      const deltaSent=packetsSent-lastPacketsSent;
+      const deltaLost=packetsLost-lastBytesLost;
+      lastBytesLost=packetsLost;lastPacketsSent=packetsSent;
+      if(deltaSent<=0)return;
+      const lossRatio=Math.max(0,deltaLost)/Math.max(1,deltaSent+Math.max(0,deltaLost));
+      // Kayıp oranı yüksek VEYA RTT yüksekse (ağ tıkanık/zayıf) bitrate'i
+      // düşür; ikisi de iyiyse kademeli olarak yükselterek daha iyi
+      // görüntüye izin ver.
+      let target=adaptiveBrCurrent;
+      if(lossRatio>0.05||rtt>0.4){
+        target=Math.max(ADAPTIVE_BR_MIN,adaptiveBrCurrent-ADAPTIVE_BR_STEP*2);
+      }else if(lossRatio>0.02||rtt>0.25){
+        target=Math.max(ADAPTIVE_BR_MIN,adaptiveBrCurrent-ADAPTIVE_BR_STEP);
+      }else if(lossRatio<0.01&&rtt<0.15){
+        target=Math.min(ADAPTIVE_BR_MAX,adaptiveBrCurrent+ADAPTIVE_BR_STEP);
+      }
+      if(target!==adaptiveBrCurrent){
+        adaptiveBrCurrent=target;
+        const params=sender.getParameters();
+        if(!params.encodings||!params.encodings.length)params.encodings=[{}];
+        params.encodings[0].maxBitrate=target;
+        params.encodings[0].degradationPreference='maintain-framerate';
+        sender.setParameters(params).catch(()=>{});
+        console.log('[ADAPTIVE-BR] bitrate ayarlandı:',target,'lossRatio:',lossRatio.toFixed(3),'rtt:',rtt);
+      }
+    }catch(e){}
+  },4000);
+}
+function stopAdaptiveBitrate(){
+  clearInterval(adaptiveBrTmr);
+  adaptiveBrTmr=null;
 }
 
 /* ═══════════════════════════════════════
@@ -5926,9 +6025,16 @@ function createPC(){
   // bağlanma süresini kısaltır ve ilk saniyelerdeki donmayı azaltır.
   const pc=new RTCPeerConnection({iceServers:ICE,bundlePolicy:'max-bundle',rtcpMuxPolicy:'require',iceCandidatePoolSize:6});
   localStream.getTracks().forEach(t=>{
+    // DÜZELTME (kasma/donma): contentHint='motion' encoder'a bu akışın
+    // hareketli görüntü (video görüşme) olduğunu, ekran paylaşımı/statik
+    // içerik gibi keskinlik öncelikli olmadığını söyler — bazı tarayıcılar
+    // bu ipucuna göre daha akıcı (daha az kare atlayan) bir kodlama modu
+    // seçer.
+    if(t.kind==='video'){try{t.contentHint='motion'}catch(e){}}
     const sender=pc.addTrack(t,localStream);
     if(t.kind==='video')capVideoBitrate(sender);
   });
+  preferStableVideoCodec(pc);
   // DÜZELTME (tek yönlü/hiç bağlanmayan video — büyük ekran tablet vb.):
   // Önceki koddaki toparlanma mantığı SADECE bağlantı önce 'connected' olup
   // sonra 'disconnected'/'failed'e DÜŞTÜĞÜNDE devreye giriyordu. Ama bazı
@@ -6017,6 +6123,7 @@ function createPC(){
       hideReconnectBanner();
       setCallConnectedUI();
       startVideoHealthCheck(pc);
+      startAdaptiveBitrate(pc);
     }
     if(st==='failed'){
       showReconnectBanner();
@@ -6276,6 +6383,7 @@ function endCallCleanup(){
   seenSigDocs.clear();
   clearTimeout(missedCallTmr);
   clearTimeout(videoHealthTmr);
+  stopAdaptiveBitrate();
   stopRingtone();
   document.getElementById('callOverlay').classList.remove('open');
   document.getElementById('callOverlay').classList.remove('minimized');
@@ -6451,6 +6559,7 @@ async function switchCamera(){
     const detected=guessFacingFromLabel(newTrack.label);
     currentFacingMode=detected||nextFacing;
     newTrack.enabled=camOn;
+    try{newTrack.contentHint='motion'}catch(e){}
     if(peerConn){
       const sender=peerConn.getSenders().find(s=>s.track&&s.track.kind==='video');
       if(sender){await sender.replaceTrack(newTrack);capVideoBitrate(sender)}
