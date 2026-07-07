@@ -4754,7 +4754,13 @@ async function updateRoomMeta(preview){
       senderEmoji:myEmoji,
       ts:Date.now()
     });
-  }catch(e){console.error('lastMessage RTDB yazma hatası',e)}
+  }catch(e){
+    console.error('lastMessage RTDB yazma hatası',e);
+    // TEŞHİS: Telegram bildirimi neden gelmediğini görebilmek için hatayı
+    // geçici olarak toast ile de gösteriyoruz. Sorun çözülünce bu satırı
+    // kaldırabilirsin.
+    showToast('⚠️ Bildirim kaydı yazılamadı: '+(e&&e.code||e&&e.message||e),'error',6000);
+  }
 }
 
 /* ═══════════════════════════════════════
