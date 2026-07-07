@@ -6286,9 +6286,24 @@ async function switchCamera(){
         audio:false
       });
     }catch(e2){
-      showToast('Bu cihazda değiştirilecek başka kamera bulunamadı','warn');
-      camSwitching=false;
-      return;
+      // DÜZELTME 2: 'ideal' denemesi de bazı Android cihazlarında
+      // width/height/frameRate'teki 'max' sınırlarıyla BİRLİKTE hâlâ
+      // OverconstrainedError verebiliyordu (arka kamera, ön kameranın
+      // desteklediği çözünürlük/fps kombinasyonunu desteklemeyebilir).
+      // Son çare olarak SADECE facingMode isteyip diğer tüm kısıtlamaları
+      // bırakıyoruz — tarayıcı kamerayı kendi varsayılan çözünürlüğüyle
+      // versin, biz sonradan track'i olduğu gibi kullanırız.
+      try{
+        newStream=await navigator.mediaDevices.getUserMedia({
+          video:{facingMode:{ideal:nextFacing}},
+          audio:false
+        });
+      }catch(e3){
+        console.error('switchCamera: üç denemede de başarısız —',e.name,e2.name,e3.name,e3.message);
+        showToast('Bu cihazda değiştirilecek başka kamera bulunamadı','warn');
+        camSwitching=false;
+        return;
+      }
     }
   }
   try{
