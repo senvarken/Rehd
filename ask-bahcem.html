@@ -1332,12 +1332,8 @@ let loveArrowTmr = null;
 /* ★ TELEGRAM BİLDİRİMLERİ ★
    Admine (sana) bir mesaj/titreşim/görüntülü arama geldiğinde, uygulama
    kapalı/arka planda olsa bile Telegram'a bildirim düşsün diye.
-   1) Botunu zaten kurdun, token aşağıda hazır.
-   2) TG_CHAT_ID'yi kendi chat id'inle değiştirmen lazım:
-      - Telegram'da botuna (BotFather'da oluşturduğun bot) "/start" yaz.
-      - Tarayıcıdan şu adresi aç:
-        https://api.telegram.org/bot8370314182:AAGgekb9G0MSqn2eCSFY_YGhjM2IsvpwuRw/getUpdates
-      - Dönen JSON içinde "chat":{"id": ... } kısmındaki sayıyı bul, aşağıya yapıştır. */
+   Token ve chat id artık HTML'e yazılmıyor — GitHub Actions deploy sırasında
+   repo secret'larından (TG_BOT_TOKEN / TG_CHAT_ID) enjekte ediliyor. */
 const TG_BOT_TOKEN = '8370314182:AAGgekb9G0MSqn2eCSFY_YGhjM2IsvpwuRw';
 const TG_CHAT_ID = '7549673640';
 function testTelegramNotification(){
@@ -1352,7 +1348,7 @@ function testTelegramNotification(){
   });
 }
 function sendTelegramNotification(text,cb){
-  if(!TG_CHAT_ID||TG_CHAT_ID.indexOf('BURAYA')===0)return;
+  if(!TG_CHAT_ID||TG_CHAT_ID.indexOf('BURAYA')===0||TG_CHAT_ID.indexOf('__TG_')===0)return;
   try{
     // NOT: Önceki 'no-cors' modu isteğin telegram'a ulaşıp ulaşmadığını asla
     // öğrenemiyordu (opak yanıt) — token yanlışsa/bot engellenmişse/chat_id
@@ -1378,6 +1374,8 @@ function sendTelegramNotification(text,cb){
 
 
 // ★ Cloudinary (fotoğraf/video yükleme) ★
+// Bu ikisi de artık HTML'e yazılmıyor — deploy sırasında GitHub Actions
+// secret'larından (CLOUDINARY_CLOUD_NAME / CLOUDINARY_UPLOAD_PRESET) enjekte ediliyor.
 const CLOUDINARY_CLOUD_NAME = 'vuxazzjx';
 const CLOUDINARY_UPLOAD_PRESET = 'Umitmod';
 
