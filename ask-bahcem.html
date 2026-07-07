@@ -6431,7 +6431,12 @@ function cldOptimizedVideoUrl(url){
     const before=url.slice(0,idx+marker.length);
     const after=url.slice(idx+marker.length);
     if(/^q_auto/.test(after))return url; // zaten dönüştürülmüş
-    return before+'q_auto,f_auto,vc_auto,w_1280,h_1280,c_limit/'+after;
+    // br_1m: telefon kameralarından gelen ham videolar genelde çok yüksek
+    // bitrate'te olur (bazen 20-50 Mbps); q_auto tek başına dosya boyutunu
+    // düşürse de zayıf/yavaş bağlantılarda takılma oluyordu. Bitrate'i
+    // 1 Mbps'e sabitlemek, mobil veri/zayıf wifi'de akıcı oynatmayı
+    // dosya boyutundan daha güvenilir şekilde garanti ediyor.
+    return before+'q_auto,f_auto,vc_auto,br_1m,w_1280,h_1280,c_limit/'+after;
   }catch(e){return url}
 }
 /* Videonun ilk karesini poster (kapak) olarak kullanmak için Cloudinary'den
