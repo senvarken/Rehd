@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260707-130856-dda40df">
+<html lang="tr" data-build="askbahcem-20260707-135155-81addb8">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -214,8 +214,22 @@ window.dispatchEvent(new Event('firebaseReady'));
 /* Zayıf cihaz modu: pahalı blur/animasyonları kapat, GPU yükünü düşür. */
 html.low-end .card,html.low-end .cc-setup,html.low-end #header,html.low-end #sidebar,
 html.low-end #sideOverlay,html.low-end .modal-backdrop,html.low-end #callChatPanel,
-html.low-end #inputBar,html.low-end .cc-btn{
+html.low-end #inputBar,html.low-end .cc-btn,
+html.low-end .call-rec-badge,html.low-end .call-stats-badge,html.low-end .call-reconnect-pill{
   backdrop-filter:none!important;-webkit-backdrop-filter:none!important;
+}
+/* DÜZELTME (görüşmede kasma — asıl kritik nokta): bu rozetler/kontrol
+   çubuğu, CANLI VİDEONUN ÜZERİNDE oturuyor. backdrop-filter:blur, altındaki
+   içerik her değiştiğinde (yani her yeni video karesinde) o alanı YENİDEN
+   bulanıklaştırmak zorunda kalır — zayıf cihazda bu, WebRTC'nin zaten
+   yorduğu GPU/CPU'ya video karesi başına ekstra bir iş yükü daha bindirir.
+   Görüşme ekranındaki tüm blur'lu katmanları (kontrol çubuğu, kayıt/istatistik
+   rozetleri, yeniden bağlanma kartı) zayıf cihazda düz/yarı saydam arkaplana
+   çeviriyoruz — görsel olarak neredeyse aynı, ama her karede video üzerinde
+   yeniden hesaplanan pahalı bir blur katmanı olmadan. */
+html.low-end .cc-btn,html.low-end .call-rec-badge,html.low-end .call-stats-badge,
+html.low-end .call-reconnect-pill{
+  background:rgba(20,6,12,.72)!important;
 }
 html.low-end .hf,html.low-end .logo-mark,html.low-end #loveHeart,html.low-end .dot-on,
 html.low-end .ic-avatar::before,html.low-end .ic-avatar::after,html.low-end .btn-accept,
@@ -1578,17 +1592,93 @@ let roomsMetaMap={}; // uid -> {lastMsg, lastTs(ms), lastSenderId} — sidebar s
 /* Düşük donanımlı telefon/TV kutularında backdrop-filter blur ve bazı
    animasyonlar GPU'yu zorlayıp arayüzü kasıtır. Zayıf cihaz tespit edilirse
    body'e .low-end sınıfı eklenir; CSS tarafında bu sınıf blur'ları kapatır. */
-(function detectLowEndDevice(){
+/* DÜZELTME 3 (cihaza göre otomatik görüşme kalitesi): Önceden TÜM cihazlara
+   sabit 540p/24fps hedefi veriliyordu — bu, güçlü cihazlarda (ör. iPhone 11,
+   yeni tablet) gereksiz yere görüntüyü kısıtlarken, en zayıf cihazda (ör.
+   Samsung A6 — Exynos 7870, 2018, software H264/VP8 encode) hâlâ CPU'nun
+   kaldıramayacağı bir hedefti (ekranda 9fps'te tıkanma buradan kaynaklanıyor).
+   Burada cihazı 4 kademeye (verylow/low/mid/high) ayırıp HER KADEMEYE KENDİ
+   çözünürlük/fps/bitrate hedefini veriyoruz — güçlü cihaz elindeki gücü
+   kullanıp daha net görüntü üretebilirken, zayıf cihaz gerçekçi bir hedefe
+   göre encode ettiği için akıcı kalır. */
+let DEVICE_TIER='mid';
+(function detectDeviceTier(){
   try{
-    const mem=navigator.deviceMemory||8;
-    const cores=navigator.hardwareConcurrency||8;
+    const mem=navigator.deviceMemory||null; // iOS'ta bu API yok -> null döner
+    const cores=navigator.hardwareConcurrency||4;
     const ua=navigator.userAgent||'';
-    const isOldAndroid=/Android\s([0-4]\.|5\.|6\.|7\.|8\.|9\.)/i.test(ua);
+    const isIOS=/iPhone|iPad|iPod/i.test(ua);
+    const isOldAndroidOS=/Android\s([0-4]\.|5\.|6\.|7\.|8\.|9\.)/i.test(ua);
     const reducedMotion=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const isLow=mem<=4||cores<=4||isOldAndroid||reducedMotion;
-    if(isLow)document.documentElement.classList.add('low-end');
+    let tier;
+    if(isIOS&&!isOldAndroidOS){
+      // Apple donanımı (iPhone/iPad) her zaman H264 donanım hızlandırmalı
+      // encode/decode kullanır; navigator.deviceMemory/hardwareConcurrency
+      // burada güvenilir bir zayıflık göstergesi değildir, o yüzden iOS'u
+      // düşük kademeye düşürmüyoruz.
+      tier='high';
+    }else if(isOldAndroidOS||(mem!==null&&mem<=2)||cores<=4){
+      // "verylow": eski Android sürümü VEYA çok düşük RAM/çekirdek —
+      // Samsung A6 (Exynos 7870, 4 çekirdek, genelde 2-3GB RAM) tam burada.
+      tier=(mem!==null&&mem<=2)||cores<=4?'verylow':'low';
+    }else if(mem!==null&&mem>=6&&cores>=8){
+      tier='high';
+    }else if(reducedMotion){
+      tier='low';
+    }else{
+      tier='mid';
+    }
+    DEVICE_TIER=tier;
+    if(tier==='low'||tier==='verylow')document.documentElement.classList.add('low-end');
+    // Not: bu bilgi artık konsol yerine görüşme sırasında ekrandaki teşhis
+    // rozetinde (updateStatsBadge) gösteriliyor.
   }catch(e){}
 })();
+/* Her kademe için: video constraints (getUserMedia hedefi), encoder üst
+   sınırı (maxBitrate/maxFramerate) ve adaptif bitrate'in taban/tavan/başlangıç
+   değerleri. "high" kademesi artık 540p'de SABİT KALMIYOR — 720p'ye kadar
+   çıkabiliyor; "verylow" ise A6 gibi cihazların gerçekten kaldırabileceği
+   360p civarına iniyor. */
+const QUALITY_TIERS={
+  // DÜZELTME (kritik — asıl donma nedeni bulundu): Her kademenin kendi
+  // "maxBitrate" alanı, o cihaz/ağ profili için GÜVENLİ üst sınır olarak
+  // tasarlanmıştı, ama adaptif algoritmanın gerçekten kullandığı tavan
+  // (adaptiveMax) yanlışlıkla bundan yüksek tutulmuştu (ör. mid: maxBitrate
+  // 900kbps ama adaptiveMax 1300kbps — %44 daha yüksek). Sonuç: ağ biraz
+  // iyi göründüğü an algoritma bitrate'i tasarlanan güvenli tavanın ÜSTÜNE
+  // çıkarıyor, bu da tıkanıklık/paket kaybına (ör. %5.2) ve dolayısıyla
+  // donmaya yol açıyordu — cihaz veya ağ zayıf olduğu için değil, algoritma
+  // kendi güvenli sınırını aşıp sıkıştırdığı için. Şimdi adaptiveMax hiçbir
+  // kademede kendi maxBitrate'ini AŞMIYOR.
+  high:{
+    video:{width:{ideal:1280,max:1280},height:{ideal:720,max:720},frameRate:{ideal:30,max:30}},
+    maxBitrate:2000000,maxFramerate:30,minFrameRate:20,
+    adaptiveMin:600000,adaptiveMax:2000000,startBitrate:1500000
+  },
+  mid:{
+    video:{width:{ideal:720,max:960},height:{ideal:540,max:540},frameRate:{ideal:24,max:30}},
+    maxBitrate:900000,maxFramerate:24,minFrameRate:15,
+    adaptiveMin:250000,adaptiveMax:900000,startBitrate:550000
+  },
+  low:{
+    video:{width:{ideal:640,max:720},height:{ideal:480,max:540},frameRate:{ideal:20,max:24}},
+    maxBitrate:500000,maxFramerate:20,minFrameRate:12,
+    adaptiveMin:180000,adaptiveMax:500000,startBitrate:380000
+  },
+  verylow:{
+    // DÜZELTME (en zayıf cihazda maksimum akıcılık): Bu kademe artık "kabul
+    // edilebilir görüntü" hedeflemiyor, doğrudan "hiç donmasın" hedefliyor.
+    // Çözünürlük bilerek 240p'ye çekildi (encode/CPU maliyetinin ana kaynağı
+    // piksel sayısıdır — çözünürlüğü yarıya indirmek encode yükünü ~4'e
+    // böler); bu payla en zayıf Exynos/eski Android encoder'ı bile 15-16fps'i
+    // rahatça karşılayabilir. fps hedefi de düşürüldü (max 16) ki encoder
+    // asla "yetişemiyorum" durumuna düşüp kare atlamasın/donmasın.
+    video:{width:{ideal:320,max:400},height:{ideal:240,max:320},frameRate:{ideal:15,max:16}},
+    maxBitrate:180000,maxFramerate:16,minFrameRate:8,
+    adaptiveMin:70000,adaptiveMax:180000,startBitrate:140000
+  }
+};
+function currentQualityTier(){return QUALITY_TIERS[DEVICE_TIER]||QUALITY_TIERS.mid}
 let soundOn=true;
 let vibrateOn=true;
 let notifPermission='default';
@@ -1611,27 +1701,60 @@ const ICE=[
   {urls:'turn:openrelay.metered.ca:443?transport=tcp',username:'openrelayproject',credential:'openrelayproject'}
 ];
 
-/* Görüşme kalitesi/performans ayarları. DÜZELTME 2: Gerçek ölçümde (bkz.
-   ekran içi teşhis rozeti) 960x720 hedefinde HEM WiFi HEM mobil veride
-   fps sabit 8'de tıkanıyordu — ping ve paket kaybı düşük olduğu için bu
-   ağ değil, CİHAZLARIN 720p VP8 ENCODE YÜKÜNÜ kaldıramaması demekti.
-   Çözünürlük 540p'ye düşürülüp encoder'a maxFramerate ile net bir hedef
-   verildi (bkz. capVideoBitrate) — 540p'de encode yükü çok daha az
-   olduğundan fps'in gerçek hedefine (20-24) ulaşması bekleniyor. */
-const CALL_MEDIA_CONSTRAINTS={
-  video:{width:{ideal:720,max:960},height:{ideal:540,max:540},frameRate:{ideal:24,max:30},facingMode:'user'},
-  audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}
-};
+/* Görüşme kalitesi/performans ayarları. DÜZELTME 3: Sabit tek bir hedef
+   yerine artık getCallMediaConstraints() her görüşme başlangıcında
+   DEVICE_TIER'a bakıp o cihaza uygun çözünürlük/fps isteğini üretiyor —
+   güçlü cihaz maksimuma yakın, zayıf cihaz gerçekçi bir hedefe göre kamera
+   açıyor.
+   DÜZELTME 4 (kamera kaynaklı fps düşüşü): H264 Baseline + doğru cihaz
+   kademesiyle bile fps hâlâ düşük kalabiliyor (ör. "cihaz:mid codec:H264
+   Baseline" iken 9fps) — bunun sebebi artık encoder değil, KAMERA
+   DONANIMININ KENDİSİ olabilir: birçok Android/iOS kamerası, ortam ışığı
+   yetersizken otomatik pozlama (auto-exposure) algoritmasıyla her karenin
+   pozlama (exposure) süresini uzatıp fps'i KENDİLİĞİNDEN düşürür — bu,
+   WebRTC/JS tarafından görülemeyen, donanım/sürücü seviyesinde bir davranış
+   olduğu için encoder ayarları bunu düzeltemez. Burada frameRate'e "min"
+   sınırı da ekleyip kameraya "fps'ten asla bu kadar aşağı düşme" talimatı
+   veriyoruz (forceMinFps=true); bazı cihaz/tarayıcılarda bu, kameranın daha
+   karanlık ama daha akıcı görüntü üretmesini sağlar. Bu min sınır bazı
+   donanımlarda OverconstrainedError fırlatabileceği için acquireLocalStream()
+   önce bunu dener, başarısız olursa min olmadan tekrar dener. */
+function getCallMediaConstraints(forceMinFps){
+  const q=currentQualityTier();
+  const frameRate=forceMinFps&&q.minFrameRate
+    ?{...q.video.frameRate,min:q.minFrameRate}
+    :q.video.frameRate;
+  return{
+    video:{...q.video,frameRate,facingMode:'user'},
+    audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}
+  };
+}
+/* Kamerayı önce fps tabanı ZORLANARAK açmayı dener (düşük ışıkta otomatik
+   fps düşüşünü engellemeye çalışır); cihaz bu sınırı karşılayamıyorsa
+   (OverconstrainedError ya da başka bir hata) sınırsız haliyle tekrar
+   dener — böylece hiçbir cihazda görüşme "izin/kısıt hatası" yüzünden hiç
+   başlamaz. Hangi denemenin başarılı olduğunu usedMinFpsConstraint'e yazar,
+   teşhis rozetinde gösterilir. */
+let usedMinFpsConstraint=false;
+async function acquireLocalStream(){
+  try{
+    const s=await navigator.mediaDevices.getUserMedia(getCallMediaConstraints(true));
+    usedMinFpsConstraint=true;
+    return s;
+  }catch(e){
+    usedMinFpsConstraint=false;
+    return await navigator.mediaDevices.getUserMedia(getCallMediaConstraints(false));
+  }
+}
+const CALL_MEDIA_CONSTRAINTS=getCallMediaConstraints(); // geriye dönük uyumluluk için ilk değer; asıl kullanım fonksiyon üzerinden
 function capVideoBitrate(sender){
   try{
+    const q=currentQualityTier();
     const params=sender.getParameters();
     if(!params.encodings||!params.encodings.length)params.encodings=[{}];
-    params.encodings[0].maxBitrate=600000; // ~600kbps — 540p'de zaten net görüntü için yeterli
-    // DÜZELTME 2: fps'in gerçek darboğaz olduğu ölçümle doğrulandığı için
-    // encoder'a maxFramerate ile açık bir üst hedef veriyoruz — bazı
-    // tarayıcılarda bu değer belirtilmezse encoder kendi iç sezgisiyle çok
-    // daha düşük (ör. 8fps gibi) bir hedefe "kilitlenip" orada kalabiliyor.
-    params.encodings[0].maxFramerate=24;
+    // DÜZELTME 3: 600kbps/24fps sabiti kalktı — kademeye göre üst sınır.
+    params.encodings[0].maxBitrate=q.startBitrate;
+    params.encodings[0].maxFramerate=q.maxFramerate;
     // DÜZELTME (kasma/donma): degradationPreference belirtilmezse tarayıcı
     // varsayılan olarak genelde 'balanced' kullanır ve donanım zorlandığında
     // bazen ÇÖZÜNÜRLÜĞÜ korumaya çalışıp KARE HIZINI (fps) düşürür — bu da
@@ -1651,7 +1774,14 @@ function capVideoBitrate(sender){
    24fps'e rahat ulaşabiliyor — yani sorun ağ değil, bu codec+cihaz
    kombinasyonu). H264 ise Android'de (Exynos dahil) neredeyse her zaman
    MediaCodec ile DONANIMSAL hızlandırılır ve çok daha az CPU tüketir.
-   Bu yüzden H264'ü artık VP8'İN ÖNÜNE alıyoruz. */
+   Bu yüzden H264'ü artık VP8'İN ÖNÜNE alıyoruz.
+   DÜZELTME 3 (Baseline profile): H264'ün "High Profile" (profile-level-id
+   64xx) varyantı bazı düşük/orta segment Exynos'larda donanım kapsamı
+   dışında kalıp yine yazılıma düşebiliyor. "Baseline Profile"
+   (profile-level-id 42e01f) neredeyse TÜM Android MediaCodec donanım
+   encoder'larında desteklenen en yaygın profil olduğu için H264 seçenekleri
+   içinde ÖNCE Baseline'ı, sonra kalan H264 varyantlarını, en son VP8/diğer
+   codec'leri deniyoruz. */
 function preferStableVideoCodec(pc){
   try{
     if(!('setCodecPreferences' in RTCRtpTransceiver.prototype))return;
@@ -1660,10 +1790,12 @@ function preferStableVideoCodec(pc){
       if(!tr.sender||!tr.sender.track||tr.sender.track.kind!=='video')return;
       const caps=RTCRtpSender.getCapabilities('video');
       if(!caps||!caps.codecs)return;
-      const h264=caps.codecs.filter(c=>/H264/i.test(c.mimeType));
+      const allH264=caps.codecs.filter(c=>/H264/i.test(c.mimeType));
+      const h264Baseline=allH264.filter(c=>/42e01f/i.test(c.sdpFmtpLine||''));
+      const h264Rest=allH264.filter(c=>!/42e01f/i.test(c.sdpFmtpLine||''));
       const vp8=caps.codecs.filter(c=>/VP8/i.test(c.mimeType));
       const rest=caps.codecs.filter(c=>!/VP8|H264/i.test(c.mimeType));
-      const ordered=[...h264,...vp8,...rest];
+      const ordered=[...h264Baseline,...h264Rest,...vp8,...rest];
       if(ordered.length)tr.setCodecPreferences(ordered);
     });
   }catch(e){}
@@ -1675,23 +1807,58 @@ function preferStableVideoCodec(pc){
    ve RTT'yi ölçüp bitrate'i buna göre kademeli düşürüp/yükseltiyoruz —
    böylece her bağlantı koşuluna kendini uyarlayan bir video akışı elde
    ediliyor.
-*/
-const ADAPTIVE_BR_MIN=250000;   // ~250kbps — 540p'de bile makul netlik için taban
-const ADAPTIVE_BR_MAX=1100000;  // ~1.1Mbps — iyi ağda net 540p için tavan (720p'ye göre daha düşük yeterli)
-const ADAPTIVE_BR_STEP=120000;
+   DÜZELTME 3: taban/tavan/adım artık sabit değil, DEVICE_TIER'a göre
+   currentQualityTier()'dan okunuyor — güçlü cihaz çok daha yükseğe
+   çıkabilirken zayıf cihaz kendi gerçekçi tavanının üzerine hiç çıkmıyor. */
 let adaptiveBrTmr=null;
-let adaptiveBrCurrent=600000; // başlangıç: 540p hedefine uygun
+let adaptiveBrCurrent=600000;
+let negotiatedCodecLabel=''; // teşhis rozetinde gösterilecek, konsol yerine ekrana yazılır
+/* H264 profile-level-id'yi ("42e01f" gibi) okunur bir etikete çevirir —
+   Baseline/Main/High. Hangi profilin negotiate edildiğini bilmek, bir
+   cihazda hâlâ düşük fps varsa "donanım hızlanan Baseline mi yoksa
+   yazılıma düşen High mı kullanılıyor" sorusunu ekran başında cevaplar. */
+function describeCodec(mimeType,fmtpLine){
+  let label=(mimeType||'?').replace('video/','');
+  if(/H264/i.test(mimeType)&&fmtpLine){
+    const m=/profile-level-id=([0-9a-fA-F]{6})/.exec(fmtpLine);
+    if(m){
+      const pid=m[1].toLowerCase();
+      if(pid.startsWith('42'))label+=' Baseline';
+      else if(pid.startsWith('4d'))label+=' Main';
+      else if(pid.startsWith('64'))label+=' High';
+      else label+=' '+pid.slice(0,2);
+    }
+  }
+  return label;
+}
 function startAdaptiveBitrate(pc){
   clearInterval(adaptiveBrTmr);
-  adaptiveBrCurrent=600000;
+  const q=currentQualityTier();
+  const ADAPTIVE_BR_MIN=q.adaptiveMin,ADAPTIVE_BR_MAX=q.adaptiveMax,ADAPTIVE_BR_STEP=Math.round(q.startBitrate*0.2);
+  adaptiveBrCurrent=q.startBitrate;
+  negotiatedCodecLabel='';
+  currentJitterBufferMs=150;
+  renderStallCount=0;
   let lastBytesLost=0,lastPacketsSent=0,haveBaseline=false;
+  // DÜZELTME 5 (donma — gelen akış tarafı): "kayıp:%0.0 ping:9ms" gibi iyi
+  // değerlere rağmen donma olabiliyor çünkü o değerler SENİN GÖNDERDİĞİN
+  // akışın (karşı tarafın raporladığı) kalitesini gösteriyor — SENİN
+  // ALDIĞIN (decode edip ekrana bastığın) akışın kaybı/jitter'ı hiç ayrı
+  // gösterilmiyordu. Burada inbound-rtp'den gelen akışın kendi kaybı ve
+  // jitter'ını da okuyup rozete ekliyoruz; ayrıca donma sayısı arttıkça
+  // (karşıdan gelen akış kesintili/dalgalıysa) alıcı jitter tamponunu
+  // kademeli büyütüyoruz (150ms→400ms) — bu, küçük ağ dalgalanmalarının
+  // donma yerine biraz daha fazla ama fark edilmeyecek gecikmeyle
+  // yutulmasını sağlar; donma bir süre tekrarlanmazsa tamponu yavaşça
+  // 150ms'e geri indiririz (gereksiz gecikme birikmesin).
+  let lastFreezeCount=null,cleanTicksInARow=0,goodLossTicksInARow=0;
   adaptiveBrTmr=setInterval(async()=>{
     if(!peerConn||peerConn!==pc)return clearInterval(adaptiveBrTmr);
     try{
       const sender=pc.getSenders().find(s=>s.track&&s.track.kind==='video');
       if(!sender)return;
       const stats=await pc.getStats();
-      let outbound=null,remoteInbound=null,inbound=null;
+      let outbound=null,remoteInbound=null,inbound=null,mediaSource=null;
       stats.forEach(r=>{
         if(r.type==='outbound-rtp'&&r.kind==='video')outbound=r;
         if(r.type==='remote-inbound-rtp'&&r.kind==='video')remoteInbound=r;
@@ -1702,8 +1869,28 @@ function startAdaptiveBitrate(pc){
         // encode/ağ değil, decode/render tarafındadır (keyframe kaybı,
         // JS ana thread bloklanması, vb.).
         if(r.type==='inbound-rtp'&&r.kind==='video')inbound=r;
+        // DÜZELTME 4: "media-source" istatistiği, KAMERANIN ENCODER'A HİÇ
+        // UĞRAMADAN ürettiği ham fps'i verir. outbound-rtp'deki fps (encoder
+        // çıkışı) buna eşit veya daha düşük olabilir. İkisi de aynı düşük
+        // değerdeyse (ör. ikisi de 9fps) sorun encoder DEĞİL, kameranın
+        // kendisidir (çoğunlukla düşük ışıkta otomatik pozlama/fps düşürme);
+        // media-source yüksek ama outbound düşükse sorun gerçekten encoder/
+        // CPU tarafındadır.
+        if(r.type==='media-source'&&r.kind==='video')mediaSource=r;
       });
       if(!outbound)return;
+      // DÜZELTME 3 (codec teşhisi): "H264 tercih edildi" ile "H264 gerçekten
+      // kullanılıyor" aynı şey değil — karşı taraf desteklemiyorsa negotiation
+      // başka codec'e düşebilir. Görüşme başında bir kez, gerçekte hangi
+      // codec/profilin negotiate edildiğini konsola yazıyoruz; A6 gibi bir
+      // cihazda hâlâ fps düşükse buradan hangi codec'e düştüğü görülebilir.
+      if(!negotiatedCodecLabel&&outbound.codecId){
+        const codecStat=stats.get(outbound.codecId);
+        // DÜZELTME 3: konsol yerine ekrandaki teşhis rozetinde gösteriliyor
+        // ("H264 tercih edildi" ile "gerçekten kullanılan codec/profil" aynı
+        // şey olmayabilir — burada gerçekte negotiate edilen görülür).
+        if(codecStat)negotiatedCodecLabel=describeCodec(codecStat.mimeType,codecStat.sdpFmtpLine);
+      }
       const packetsSent=outbound.packetsSent||0;
       const packetsLost=(remoteInbound&&remoteInbound.packetsLost)||0;
       const rtt=(remoteInbound&&remoteInbound.roundTripTime)||0; // saniye
@@ -1711,7 +1898,36 @@ function startAdaptiveBitrate(pc){
       // çözünürlük/fps/bitrate/kayıp oranını görebilsin diye ekrandaki
       // rozeti burada güncelliyoruz — "net değil" şikayetinin sebebi düşük
       // çözünürlük mü, düşük bitrate mi, yoksa paket kaybı mı anlaşılır.
-      updateStatsBadge(outbound,remoteInbound,inbound);
+      updateStatsBadge(outbound,remoteInbound,inbound,mediaSource);
+      // Donma sayısı bu tick'te arttıysa (karşıdan gelen akış kesintiye
+      // uğradıysa) jitter tamponunu büyüt; birkaç tick temiz geçerse
+      // yavaşça eski haline indir.
+      let emergencyCut=false;
+      if(inbound&&inbound.freezeCount!=null){
+        const fc=inbound.freezeCount;
+        if(lastFreezeCount!==null&&fc>lastFreezeCount){
+          const freezesThisTick=fc-lastFreezeCount;
+          cleanTicksInARow=0;
+          // DÜZELTME (arka arkaya/patlama halinde donma): tek tikte 2+ yeni
+          // donma varsa ağ o an gerçekten kötü demektir — +50ms'lik yavaş
+          // artışı beklemek yerine tamponu doğrudan üst sınıra (600ms)
+          // sıçratıyoruz ve aşağıda bitrate'i de bir sonraki periyodik
+          // kontrolü beklemeden ANINDA tabana çekiyoruz (emergencyCut).
+          if(freezesThisTick>=2){
+            adjustJitterBuffer(pc,600);
+            emergencyCut=true;
+          }else{
+            adjustJitterBuffer(pc,Math.min(600,currentJitterBufferMs+80));
+          }
+        }else{
+          cleanTicksInARow++;
+          if(cleanTicksInARow>=3&&currentJitterBufferMs>150){
+            cleanTicksInARow=0;
+            adjustJitterBuffer(pc,Math.max(150,currentJitterBufferMs-50));
+          }
+        }
+        lastFreezeCount=fc;
+      }
       if(!haveBaseline){
         haveBaseline=true;lastBytesLost=packetsLost;lastPacketsSent=packetsSent;
         return;
@@ -1725,12 +1941,31 @@ function startAdaptiveBitrate(pc){
       // düşür; ikisi de iyiyse kademeli olarak yükselterek daha iyi
       // görüntüye izin ver.
       let target=adaptiveBrCurrent;
-      if(lossRatio>0.05||rtt>0.4){
+      if(emergencyCut){
+        // Donma patlaması az önce tespit edildi: periyodik kademeli düşüşü
+        // beklemeden bitrate'i doğrudan tabana çekiyoruz. Ağ birkaç tik
+        // temiz geçerse zaten yukarıdaki normal kurallar tekrar yükseltir.
+        target=ADAPTIVE_BR_MIN;
+        goodLossTicksInARow=0;
+      }else if(lossRatio>0.035||rtt>0.35){
         target=Math.max(ADAPTIVE_BR_MIN,adaptiveBrCurrent-ADAPTIVE_BR_STEP*2);
-      }else if(lossRatio>0.02||rtt>0.25){
+        goodLossTicksInARow=0;
+      }else if(lossRatio>0.015||rtt>0.2){
         target=Math.max(ADAPTIVE_BR_MIN,adaptiveBrCurrent-ADAPTIVE_BR_STEP);
-      }else if(lossRatio<0.01&&rtt<0.15){
-        target=Math.min(ADAPTIVE_BR_MAX,adaptiveBrCurrent+ADAPTIVE_BR_STEP);
+        goodLossTicksInARow=0;
+      }else if(lossRatio<0.008&&rtt<0.15){
+        // DÜZELTME (aşırı iyimser yükseltme → tekrar tıkanma döngüsü): tek
+        // temiz tikte hemen yükseltmek, ağ biraz iyi göründüğü an bitrate'i
+        // tekrar tıkanma sınırına itip az önce düşürdüğümüz kaybı yeniden
+        // yaratıyordu. Şimdi art arda birkaç (3) temiz tik istiyoruz —
+        // yaklaşık 6 saniyelik istikrar görülmeden yükseltme yapılmıyor.
+        goodLossTicksInARow++;
+        if(goodLossTicksInARow>=3){
+          goodLossTicksInARow=0;
+          target=Math.min(ADAPTIVE_BR_MAX,adaptiveBrCurrent+ADAPTIVE_BR_STEP);
+        }
+      }else{
+        goodLossTicksInARow=0;
       }
       if(target!==adaptiveBrCurrent){
         adaptiveBrCurrent=target;
@@ -1738,12 +1973,29 @@ function startAdaptiveBitrate(pc){
         if(!params.encodings||!params.encodings.length)params.encodings=[{}];
         params.encodings[0].maxBitrate=target;
         params.encodings[0].degradationPreference='maintain-framerate';
-        params.encodings[0].maxFramerate=24; // adaptif bitrate ayarı sırasında fps hedefini kaybetme
+        params.encodings[0].maxFramerate=q.maxFramerate; // adaptif bitrate ayarı sırasında fps hedefini kaybetme
         sender.setParameters(params).catch(()=>{});
-        console.log('[ADAPTIVE-BR] bitrate ayarlandı:',target,'lossRatio:',lossRatio.toFixed(3),'rtt:',rtt);
+        // Not: bitrate değişimi artık konsola değil, rozetteki kbps değerine
+        // yansıyor (her tick'te updateStatsBadge zaten günceller).
       }
     }catch(e){}
-  },4000);
+  },2000);
+}
+/* Alıcı tarafın jitter tamponunu (receiver.jitterBufferTarget) çalışma
+   zamanında değiştirir. Tarayıcı desteklemiyorsa (playoutDelayHint'e
+   düşer) sorunsuzca yoksayar. */
+let currentJitterBufferMs=150;
+function adjustJitterBuffer(pc,ms){
+  try{
+    const receiver=pc.getReceivers().find(r=>r.track&&r.track.kind==='video');
+    if(!receiver)return;
+    if('jitterBufferTarget' in receiver){
+      receiver.jitterBufferTarget=ms;
+    }else if('playoutDelayHint' in receiver){
+      receiver.playoutDelayHint=ms/1000;
+    }
+    currentJitterBufferMs=ms;
+  }catch(e){}
 }
 function stopAdaptiveBitrate(){
   clearInterval(adaptiveBrTmr);
@@ -1752,9 +2004,11 @@ function stopAdaptiveBitrate(){
   if(badge)badge.classList.remove('show');
 }
 /* Ekrandaki küçük teşhis rozetini gerçek gönderim istatistikleriyle
-   doldurur: gönderilen çözünürlük, fps, mevcut bitrate hedefi ve karşı
-   tarafın bildirdiği paket kaybı yüzdesi. */
-function updateStatsBadge(outbound,remoteInbound,inbound){
+   doldurur: gönderilen çözünürlük, fps, mevcut bitrate hedefi, karşı
+   tarafın bildirdiği paket kaybı yüzdesi, cihaz kademesi ve gerçekte
+   negotiate edilen codec/profil. DÜZELTME 3: bu bilgiler önceden sadece
+   konsola yazılıyordu — artık hepsi burada, ekranda görünüyor. */
+function updateStatsBadge(outbound,remoteInbound,inbound,mediaSource){
   try{
     const badge=document.getElementById('callStatsBadge');
     if(!badge)return;
@@ -1776,7 +2030,32 @@ function updateStatsBadge(outbound,remoteInbound,inbound){
     if(freezeCount!=null){
       line3=`\ndonma:${freezeCount}x  toplam:${freezeDur}s`;
     }
-    badge.textContent=`${w}x${h} @${fps}fps\n${kbps}kbps  kayıp:%${lostPct}  ping:${rttMs}ms${line3}`;
+    const tierLine=`\ncihaz:${DEVICE_TIER}${negotiatedCodecLabel?'  codec:'+negotiatedCodecLabel:''}`;
+    // DÜZELTME 4: kamera fps'i (encoder'dan ÖNCEKİ ham değer) ile gönderim
+    // fps'ini (encoder çıkışı) yan yana göster. Bu iki değer birbirine
+    // yakınsa ve ikisi de düşükse darboğaz KAMERADA (çoğunlukla düşük ışık
+    // nedeniyle otomatik fps düşüşü); kamera fps'i yüksek ama gönderim fps'i
+    // düşükse darboğaz encoder/CPU'dadır.
+    let camLine='';
+    if(mediaSource&&mediaSource.framesPerSecond!=null){
+      const camFps=Math.round(mediaSource.framesPerSecond);
+      camLine=`\nkamera:${camFps}fps  gönderim:${fps}fps${usedMinFpsConstraint?' (fps-zorlandı)':''}`;
+    }
+    // DÜZELTME 5: gelen (senin izlediğin) akışın kendi kaybı/jitter'ı — bu,
+    // "kayıp:%" satırındaki (SENİN GÖNDERDİĞİN akışın kaybı) değerinden
+    // FARKLI bir yöndür. Donma varken bu satır yüksekse sebep ağ/jitter'dır;
+    // düşükse sebep muhtemelen render/JS ana thread tarafıdır.
+    let inLine='';
+    if(inbound){
+      const inLostPct=inbound.packetsLost!=null&&inbound.packetsReceived!=null
+        ?((inbound.packetsLost/Math.max(1,inbound.packetsReceived+inbound.packetsLost))*100).toFixed(1)
+        :null;
+      const jitterMs=inbound.jitter!=null?Math.round(inbound.jitter*1000):null;
+      if(inLostPct!=null||jitterMs!=null){
+        inLine=`\ngelen kayıp:%${inLostPct!=null?inLostPct:'?'}  jitter:${jitterMs!=null?jitterMs:'?'}ms  tampon:${currentJitterBufferMs}ms`;
+      }
+    }
+    badge.textContent=`${w}x${h} @${fps}fps\n${kbps}kbps  kayıp:%${lostPct}  ping:${rttMs}ms${line3}${tierLine}${camLine}${inLine}${renderStallCount>0?`\nekran donması:${renderStallCount}x`:''}`;
     badge.classList.add('show');
   }catch(e){}
 }
@@ -2048,8 +2327,17 @@ function revealRealLogin(){
   const SPAWN_MS=lowEnd?4200:2100;
   let petalCount=0;
   let spawnTmr=null;
+  // DÜZELTME (video görüşmede kasma): #callOverlay tam ekran ve opak olduğu
+  // için bu kalp yaprakları görüşme sırasında zaten GÖRÜNMÜYOR, ama arka
+  // planda spawn olup animasyona devam ediyorlardı — yani zayıf cihazda tam
+  // da WebRTC encode/decode'un CPU/GPU'ya en çok ihtiyaç duyduğu anda,
+  // ekranda hiç görünmeyen bir animasyon için compositor katmanı/JS zamanı
+  // harcanıyordu. Şimdi görüşme açılır açılmaz üretimi durduruyoruz ve
+  // ekrandaki mevcut yaprakları da kaldırıyoruz; görüşme bitince kaldığı
+  // yerden devam ediyor.
+  let pausedForCall=false;
   function mk(){
-    if(document.hidden||petalCount>=MAX_PETALS)return;
+    if(document.hidden||pausedForCall||petalCount>=MAX_PETALS)return;
     petalCount++;
     const e=document.createElement('div');e.className='hf';
     e.innerHTML='<svg width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor" style="stroke:none" xmlns="http://www.w3.org/2000/svg"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>';
@@ -2061,8 +2349,20 @@ function revealRealLogin(){
   spawnTmr=setInterval(mk,SPAWN_MS);
   document.addEventListener('visibilitychange',()=>{
     if(document.hidden){clearInterval(spawnTmr)}
-    else{spawnTmr=setInterval(mk,SPAWN_MS)}
+    else if(!pausedForCall){spawnTmr=setInterval(mk,SPAWN_MS)}
   });
+  window.pauseHeartsBgForCall=function(){
+    if(pausedForCall)return;
+    pausedForCall=true;
+    clearInterval(spawnTmr);
+    bg.innerHTML='';
+    petalCount=0;
+  };
+  window.resumeHeartsBgAfterCall=function(){
+    if(!pausedForCall)return;
+    pausedForCall=false;
+    if(!document.hidden)spawnTmr=setInterval(mk,SPAWN_MS);
+  };
 })();
 
 /* ═══════════════════════════════════════
@@ -5945,10 +6245,11 @@ function setCallConnectedUI(){
 async function startCall(){
   if(!fb||!activeRoom||!activePartner){showToast('Önce bir sohbet seç','warn');return}
   if(peerConn){showToast('Arama devam ediyor','warn');return}
-  try{localStream=await navigator.mediaDevices.getUserMedia(CALL_MEDIA_CONSTRAINTS)}
+  try{localStream=await acquireLocalStream()}
   catch(e){showToast('Kamera/Mikrofon izni gerekli','error');return}
   document.getElementById('localVid').srcObject=localStream;
   applySavedSelfVidPos();
+  if(window.pauseHeartsBgForCall)window.pauseHeartsBgForCall();
   currentCallSessionId='s_'+Date.now()+'_'+Math.random().toString(36).slice(2);
   callPeerId=activePartner.id;
   iAmCaller=true;
@@ -5979,10 +6280,11 @@ async function startCall(){
 async function acceptCall(){
   document.getElementById('incomingCall').classList.remove('open');
   stopRingtone();
-  try{localStream=await navigator.mediaDevices.getUserMedia(CALL_MEDIA_CONSTRAINTS)}
+  try{localStream=await acquireLocalStream()}
   catch(e){showToast('Kamera/Mikrofon izni gerekli','error');return}
   document.getElementById('localVid').srcObject=localStream;
   applySavedSelfVidPos();
+  if(window.pauseHeartsBgForCall)window.pauseHeartsBgForCall();
   currentCallSessionId=currentCallData.sessionId||('s_'+Date.now());
   callPeerId=currentCallData.from;
   iAmCaller=false;
@@ -6032,9 +6334,14 @@ async function flushPendingIce(){
    ICE'i yeniden başlatarak (yeni bir keyframe/negotiation tetikler)
    kendiliğinden düzelme ihtimalini deniyoruz. */
 let videoHealthTmr=null;
+let renderStallCount=0; // teşhis rozetinde gösterilir — WebRTC'nin kendi
+// "donma" metriğinden (inbound.freezeCount) BAĞIMSIZ bir kontrol: gerçekten
+// decode edilen kare sayısı zaman içinde ilerliyor mu, ilerlemiyorsa bu
+// başka türden bir "ekran donması"dır (ör. video elementi/render tarafı).
 function startVideoHealthCheck(pc){
   clearTimeout(videoHealthTmr);
   let triedRestart=false;
+  let prevFramesDecoded=null,stuckTicks=0;
   const check=async()=>{
     if(!peerConn||peerConn!==pc)return;
     try{
@@ -6056,6 +6363,54 @@ function startVideoHealthCheck(pc){
       if(hasFrames&&ph&&!ph.classList.contains('hide')){
         ph.classList.add('hide');
       }
+      // DÜZELTME 6 ("karşı tarafın görüntüsü açıldığı anda kalıyor"):
+      // inbound.freezeCount, tarayıcının KENDİ tanımına göre yeterince uzun
+      // ve belirgin donmaları sayar — bazı durumlarda (ör. görüntü ilk
+      // açıldığında tek bir kare gelip TAKILI KALMASI, ama tarayıcının bunu
+      // "freeze" olarak saymaması) bu metrik 0 kalırken kullanıcı gerçekten
+      // donuk bir görüntü görebiliyor. Burada framesDecoded'ın ZAMANLA
+      // İLERLEYİP İLERLEMEDİĞİNİ kendimiz takip ediyoruz — bağlantı
+      // "connected" olduğu hâlde art arda birkaç kontrolde hiç yeni kare
+      // decode edilmemişse (video gerçekten ekranda donmuş demektir),
+      // hem sayaç artırıyoruz (rozette görünür) hem de basit bir kurtarma
+      // denemesi yapıyoruz: video elementinin srcObject'ini kısa süreliğine
+      // koparıp yeniden bağlamak, bazı tarayıcılarda takılı kalan decode/
+      // render pipeline'ını sıfırlayıp yeni bir anahtar kare isteğini
+      // tetikleyebiliyor.
+      if(hasFrames&&inbound&&inbound.framesDecoded!=null){
+        const fd=inbound.framesDecoded;
+        if(prevFramesDecoded!==null&&fd<=prevFramesDecoded){
+          stuckTicks++;
+          if(stuckTicks===2){ // ~4-6sn boyunca hiç yeni kare yok
+            renderStallCount++;
+            try{
+              const s=vid.srcObject;
+              vid.srcObject=null;
+              requestAnimationFrame(()=>{vid.srcObject=s;vid.play().catch(()=>{})});
+            }catch(e){}
+          }
+          // DÜZELTME 7 (asıl kök neden — "karşı tarafın görüntüsü hiç
+          // gelmiyor/donuk kalıyor" şikayeti): paketler ağdan sorunsuz
+          // akmaya devam edebilir (gelen kayıp/jitter düşük görünür) ama
+          // DECODER bir bozuk/eksik kareden sonra tıkanıp yeni kare
+          // üretemeyebilir — bu, yukarıdaki srcObject söküp-takma (render
+          // pipeline sıfırlama) ile düzelmez, çünkü sorun render
+          // katmanında değil decode katmanındadır. Decoder'ın kurtulması
+          // için TAZE BİR ANAHTAR KARE (keyframe) şart; bunu JS'den
+          // tetiklemenin elimizdeki tek güvenilir yolu ICE restart'tır
+          // (SSRC/negotiation'ı yeniler, karşı taraf yeni bir keyframe
+          // gönderir). Reattach denemesi ~8-12sn daha işe yaramazsa
+          // otomatik olarak ICE'i de yeniden başlatıyoruz.
+          if(stuckTicks===4){
+            try{pc.restartIce&&pc.restartIce()}catch(e){}
+            showToast('Görüntü takıldı, yeniden bağlanılıyor…','warn');
+            stuckTicks=0; // bir sonraki gerçek donmayı da yakalayabilmek için sıfırla
+          }
+        }else{
+          stuckTicks=0;
+        }
+        prevFramesDecoded=fd;
+      }
       if(!hasFrames){
         if(!triedRestart){
           triedRestart=true;
@@ -6072,12 +6427,9 @@ function startVideoHealthCheck(pc){
         // takılı kalmadığından emin olmak için.
         videoHealthTmr=setTimeout(check,4000);
       }
-      console.log('[VIDEO-TANI]',JSON.stringify({
-        role:iAmCaller?'ARAYAN(caller)':'ARANAN(callee)',
-        hasFrames,framesDecoded:inbound?.framesDecoded,bytesReceived:inbound?.bytesReceived,
-        placeholderHiddenNow:ph?.classList.contains('hide')
-      }));
-    }catch(e){console.error('[VIDEO-TANI] stats error',e)}
+      // Not: bu bilgiler artık konsola değil, görüşme sırasında ekrandaki
+      // teşhis rozetine (renderStallCount üzerinden) yansıyor.
+    }catch(e){}
   };
   videoHealthTmr=setTimeout(check,2000);
 }
@@ -6492,6 +6844,7 @@ function endCallCleanup(){
   // Swap durumunu sıfırla
   vidSwapped=false;
   document.getElementById('remoteVid').onclick=null;
+  if(window.resumeHeartsBgAfterCall)window.resumeHeartsBgAfterCall();
 }
 async function sigSend(payload){
   if(!fb||!activeRoom)return;
@@ -6583,10 +6936,10 @@ async function switchCamera(){
   let newStream=null;
   const attempts=[];
   if(targetDeviceId){
-    attempts.push({video:{...CALL_MEDIA_CONSTRAINTS.video,deviceId:{exact:targetDeviceId}},audio:false});
+    attempts.push({video:{...getCallMediaConstraints().video,deviceId:{exact:targetDeviceId}},audio:false});
   }
-  attempts.push({video:{...CALL_MEDIA_CONSTRAINTS.video,facingMode:{exact:nextFacing}},audio:false});
-  attempts.push({video:{...CALL_MEDIA_CONSTRAINTS.video,facingMode:{ideal:nextFacing}},audio:false});
+  attempts.push({video:{...getCallMediaConstraints().video,facingMode:{exact:nextFacing}},audio:false});
+  attempts.push({video:{...getCallMediaConstraints().video,facingMode:{ideal:nextFacing}},audio:false});
   attempts.push({video:{facingMode:{ideal:nextFacing}},audio:false});
   if(targetDeviceId)attempts.push({video:{deviceId:{ideal:targetDeviceId}},audio:false});
 
