@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260707-102008-b7a4d4c">
+<html lang="tr" data-build="askbahcem-20260707-102950-d03eac2">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -1643,13 +1643,15 @@ function capVideoBitrate(sender){
     sender.setParameters(params).catch(()=>{});
   }catch(e){}
 }
-/* DÜZELTME (kasma/donma — codec): VP9/AV1 gibi codec'ler daha iyi sıkıştırma
-   sağlasa da donanım hızlandırma desteklemeyen (özellikle eski/orta segment
-   Android) cihazlarda YAZILIMSAL decode/encode'a düşer, bu da CPU'yu
-   tüketip kare atlamasına/donmaya sebep olur. VP8 hemen hemen her cihazda
-   donanımsal desteklenir ve daha öngörülebilir/istikrarlı çalışır. Burada
-   sender tarafında VP8'i (varsa) en öne alıyoruz; codec zaten yoksa veya
-   API desteklenmiyorsa sessizce atlanır ve tarayıcı varsayılanı kullanılır. */
+/* DÜZELTME 2 (kasma — codec, ölçümle doğrulandı): Önceki varsayım VP8'in
+   her cihazda donanımsal hızlandığıydı, ama gerçek ölçüm bunu çürüttü —
+   Samsung A6 (Exynos 7870, 2018) gibi giriş/orta segment cihazlarda VP8
+   YAZILIMSAL (libvpx) encode'a düşüyor ve CPU 540p@24fps'i kaldıramayıp
+   sabit ~8fps'te tıkanıyor (aynı ağda başka bir tablet aynı ayarlarla
+   24fps'e rahat ulaşabiliyor — yani sorun ağ değil, bu codec+cihaz
+   kombinasyonu). H264 ise Android'de (Exynos dahil) neredeyse her zaman
+   MediaCodec ile DONANIMSAL hızlandırılır ve çok daha az CPU tüketir.
+   Bu yüzden H264'ü artık VP8'İN ÖNÜNE alıyoruz. */
 function preferStableVideoCodec(pc){
   try{
     if(!('setCodecPreferences' in RTCRtpTransceiver.prototype))return;
@@ -1658,10 +1660,10 @@ function preferStableVideoCodec(pc){
       if(!tr.sender||!tr.sender.track||tr.sender.track.kind!=='video')return;
       const caps=RTCRtpSender.getCapabilities('video');
       if(!caps||!caps.codecs)return;
-      const vp8=caps.codecs.filter(c=>/VP8/i.test(c.mimeType));
       const h264=caps.codecs.filter(c=>/H264/i.test(c.mimeType));
+      const vp8=caps.codecs.filter(c=>/VP8/i.test(c.mimeType));
       const rest=caps.codecs.filter(c=>!/VP8|H264/i.test(c.mimeType));
-      const ordered=[...vp8,...h264,...rest];
+      const ordered=[...h264,...vp8,...rest];
       if(ordered.length)tr.setCodecPreferences(ordered);
     });
   }catch(e){}
