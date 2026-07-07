@@ -3566,11 +3566,25 @@ function startDictation(){
       if(r.isFinal){
         const t=r[0].transcript.trim();
         if(!t)continue;
-        // Android'de aynı cümle bazen art arda 2 ayrı "final" sonuç olarak
-        // gelebiliyor (motorun kendi iç segmentasyon hatası) — bir öncekiyle
-        // birebir aynıysa (büyük/küçük harf farkı gözetmeksizin) atla.
         const prev=finals[finals.length-1];
-        if(prev&&prev.toLowerCase()===t.toLowerCase())continue;
+        if(prev){
+          const prevLower=prev.toLowerCase();
+          const tLower=t.toLowerCase();
+          if(prevLower===tLower)continue; // birebir aynı, atla
+          // DÜZELTME (ASIL SEBEP): Android'de aynı session içindeki 'final'
+          // sonuçlar bazen birbirinden AYRI cümleler değil, AYNI cümlenin
+          // kelime kelime BÜYÜYEN versiyonlarıdır — örn. önce "Niye" sonra
+          // "Niye iki" sonra "Niye iki kere yazıyorsun" gibi art arda gelir.
+          // Eskiden bunların HEPSİ ayrı cümle sayılıp yan yana eklendiği için
+          // metin "Niye Niye iki Niye iki kere yazıyorsun…" şeklinde
+          // katlanarak tekrarlanıyordu. Yeni sonuç öncekinin TAMAMINI baştan
+          // içeriyorsa (üzerine kelime eklenmişse) önceki parçayı atıp sadece
+          // en güncel/en uzun hâlini tutuyoruz.
+          if(tLower.startsWith(prevLower)){finals[finals.length-1]=t;continue}
+          // Tam tersi durum: yeni sonuç önceki metnin kısaltılmış bir alt
+          // kümesiyse, yeni olanı yok sayıp önceki (daha tam) metni koru.
+          if(prevLower.startsWith(tLower))continue;
+        }
         finals.push(t);
       }else interim+=r[0].transcript;
     }
