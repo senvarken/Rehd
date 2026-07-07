@@ -39,13 +39,13 @@ import{getAuth,signInWithCustomToken}from'https://www.gstatic.com/firebasejs/10.
 
 // ★ KENDİ FIREBASE AYARLARINIZI GİRİN ★
 const firebaseConfig={
-  apiKey:"AIzaSyCBdprWfvUUXjCDrD-HikeU6l1ZS-sTfU8",
-  authDomain:"haremodambenim.firebaseapp.com",
-  databaseURL:"https://haremodambenim-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId:"haremodambenim",
-  storageBucket:"haremodambenim.firebasestorage.app",
-  messagingSenderId:"334941592865",
-  appId:"1:334941592865:web:b8960e15acc1ba0083f260"
+  apiKey:"__FB_API_KEY__",
+  authDomain:"__FB_AUTH_DOMAIN__",
+  databaseURL:"__FB_DATABASE_URL__",
+  projectId:"__FB_PROJECT_ID__",
+  storageBucket:"__FB_STORAGE_BUCKET__",
+  messagingSenderId:"__FB_MESSAGING_SENDER_ID__",
+  appId:"__FB_APP_ID__"
 };
 
 const app=initializeApp(firebaseConfig);
@@ -1384,7 +1384,7 @@ const ADMIN_PASSWORD = 'admin123'; // ← Değiştir!
 
 // ★ Eski misafir girişi (Cloudflare Worker) — artık sadece yedek/fallback olarak kullanılıyor.
 //   Yeni kullanıcılar admin panelinden (Firestore) eklenir; buradaki Worker'a dokunulmadı. ★
-const AUTH_WORKER_URL = 'https://askbahcem.umitm0d.workers.dev/';
+const AUTH_WORKER_URL = '__AUTH_WORKER_URL__';
 
 /* ═══════════════════════════════════════
    STATE
@@ -1392,6 +1392,10 @@ const AUTH_WORKER_URL = 'https://askbahcem.umitm0d.workers.dev/';
 let fb=null;
 let isAdmin=false;
 let myId='';
+// Admin oturumu boyunca hafızada tutulur, sadece Worker'ın createGuest
+// action'ını yetkilendirmek için kullanılır. localStorage'a YAZILMAZ,
+// sayfa yenilendiğinde/logout'ta kaybolur.
+let sessionAdminPassword=null;
 let myName='';
 let myEmoji='🌹';
 let activeRoom='';
@@ -1912,6 +1916,7 @@ async function doLogin(){
       myId=data.uid;
       myName=data.name;
       myEmoji=data.emoji||(isAdmin?'👑':'💕');
+      if(isAdmin)sessionAdminPassword=upass;
       saveRememberedLogin(remember,uname,upass);
       document.getElementById('login').style.display='none';
       if(isAdmin){enterAppAsAdmin()}else{enterAppAsGuest()}
@@ -2032,6 +2037,7 @@ function buildHdMoreMenu(role){
 function doLogout(){
   if(!confirm('Oturumu kapatmak istediğine emin misin?'))return;
   const wasAdmin=isAdmin;
+  sessionAdminPassword=null;
   // Aktif dinleyicileri kapat ki çıkış yaptıktan sonra arka planda gereksiz
   // Firestore/RTDB okuması devam etmesin.
   [unsubMsg,unsubPresence,unsubCallSig,unsubCallIce,unsubBomb,unsubNudge,
@@ -2264,13 +2270,25 @@ async function createUser(){
   const upass=document.getElementById('newUserPass').value;
   if(!uname||!dname||!upass){showToast('Tüm alanları doldur','warn');return}
   if(uname===ADMIN_ID){showToast('Bu kullanıcı adı ayrılmış','error');return}
+  if(!sessionAdminPassword){showToast('Oturum bilgisi eksik, tekrar giriş yap','error');return}
   try{
-    const {db,doc,getDoc,setDoc,serverTimestamp}=fb;
-    const existing=await getDoc(doc(db,'users',uname));
-    if(existing.exists()){showToast('Bu kullanıcı adı zaten var','error');return}
-    await setDoc(doc(db,'users',uname),{
-      name:dname,password:upass,emoji:'💕',createdAt:serverTimestamp()
+    const res=await fetch(AUTH_WORKER_URL,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        action:'createGuest',
+        adminPassword:sessionAdminPassword,
+        username:uname,name:dname,password:upass
+      })
     });
+    const data=await res.json();
+    if(!data.success){
+      const msg=data.error==='username_taken'?'Bu kullanıcı adı zaten var':
+                 data.error==='unauthorized'?'Yetkisiz — tekrar giriş yap':
+                 'Kullanıcı eklenemedi';
+      showToast(msg,'error');
+      return;
+    }
     showToast(dname+' eklendi','success');
     document.getElementById('newUserName').value='';
     document.getElementById('newUserDisplay').value='';
@@ -2290,9 +2308,19 @@ function closeEditUser(){document.getElementById('editUserModal').classList.remo
 async function saveEditUser(){
   const upass=document.getElementById('editUserPass').value;
   if(!upass||!editingUserId){showToast('Şifre gir','warn');return}
+  if(!sessionAdminPassword){showToast('Oturum bilgisi eksik, tekrar giriş yap','error');return}
   try{
-    const {db,doc,updateDoc}=fb;
-    await updateDoc(doc(db,'users',editingUserId),{password:upass});
+    const res=await fetch(AUTH_WORKER_URL,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        action:'updateGuestPassword',
+        adminPassword:sessionAdminPassword,
+        username:editingUserId,password:upass
+      })
+    });
+    const data=await res.json();
+    if(!data.success){showToast('Güncellenemedi','error');return}
     showToast('Şifre güncellendi','success');
     closeEditUser();
   }catch(e){console.error(e);showToast('Güncellenemedi','error')}
