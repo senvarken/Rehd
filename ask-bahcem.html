@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260707-100643-e0ba2e1">
+<html lang="tr" data-build="askbahcem-20260707-102008-b7a4d4c">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -1688,11 +1688,18 @@ function startAdaptiveBitrate(pc){
     try{
       const sender=pc.getSenders().find(s=>s.track&&s.track.kind==='video');
       if(!sender)return;
-      const stats=await pc.getStats(sender.track);
-      let outbound=null,remoteInbound=null;
+      const stats=await pc.getStats();
+      let outbound=null,remoteInbound=null,inbound=null;
       stats.forEach(r=>{
         if(r.type==='outbound-rtp'&&r.kind==='video')outbound=r;
         if(r.type==='remote-inbound-rtp'&&r.kind==='video')remoteInbound=r;
+        // DÜZELTME (ara sıra tam donma teşhisi): freezeCount/totalFreezesDuration
+        // SADECE ALICI tarafında (inbound-rtp) tutulur — bu, KARŞI TARAFIN
+        // bizim gönderdiğimiz görüntüde kaç kez ve ne kadar süre donma
+        // yaşadığını gösterir. fps yeterli olsa bile bu sayı artıyorsa sorun
+        // encode/ağ değil, decode/render tarafındadır (keyframe kaybı,
+        // JS ana thread bloklanması, vb.).
+        if(r.type==='inbound-rtp'&&r.kind==='video')inbound=r;
       });
       if(!outbound)return;
       const packetsSent=outbound.packetsSent||0;
@@ -1702,7 +1709,7 @@ function startAdaptiveBitrate(pc){
       // çözünürlük/fps/bitrate/kayıp oranını görebilsin diye ekrandaki
       // rozeti burada güncelliyoruz — "net değil" şikayetinin sebebi düşük
       // çözünürlük mü, düşük bitrate mi, yoksa paket kaybı mı anlaşılır.
-      updateStatsBadge(outbound,remoteInbound);
+      updateStatsBadge(outbound,remoteInbound,inbound);
       if(!haveBaseline){
         haveBaseline=true;lastBytesLost=packetsLost;lastPacketsSent=packetsSent;
         return;
@@ -1745,7 +1752,7 @@ function stopAdaptiveBitrate(){
 /* Ekrandaki küçük teşhis rozetini gerçek gönderim istatistikleriyle
    doldurur: gönderilen çözünürlük, fps, mevcut bitrate hedefi ve karşı
    tarafın bildirdiği paket kaybı yüzdesi. */
-function updateStatsBadge(outbound,remoteInbound){
+function updateStatsBadge(outbound,remoteInbound,inbound){
   try{
     const badge=document.getElementById('callStatsBadge');
     if(!badge)return;
@@ -1756,7 +1763,18 @@ function updateStatsBadge(outbound,remoteInbound){
       ?((remoteInbound.packetsLost/Math.max(1,outbound.packetsSent))*100).toFixed(1)
       :'0.0';
     const rttMs=remoteInbound&&remoteInbound.roundTripTime!=null?Math.round(remoteInbound.roundTripTime*1000):'?';
-    badge.textContent=`${w}x${h} @${fps}fps\n${kbps}kbps  kayıp:%${lostPct}  ping:${rttMs}ms`;
+    // Karşı tarafın bizim akışımızda yaşadığı donma sayısı/süresi — bu satır
+    // sadece karşı taraf bu bilgiyi paylaştıysa (kendi inbound-rtp'si) dolu
+    // olur; kendi ekranımda kendi gönderdiğim akışın decode'unu göremem,
+    // bu değer aslında BENİM ALDIĞIM (karşı taraftan gelen) akışın donma
+    // bilgisidir.
+    const freezeCount=inbound&&inbound.freezeCount!=null?inbound.freezeCount:null;
+    const freezeDur=inbound&&inbound.totalFreezesDuration!=null?inbound.totalFreezesDuration.toFixed(1):null;
+    let line3='';
+    if(freezeCount!=null){
+      line3=`\ndonma:${freezeCount}x  toplam:${freezeDur}s`;
+    }
+    badge.textContent=`${w}x${h} @${fps}fps\n${kbps}kbps  kayıp:%${lostPct}  ping:${rttMs}ms${line3}`;
     badge.classList.add('show');
   }catch(e){}
 }
@@ -6111,6 +6129,18 @@ function createPC(){
     }else{
       if(!vid.srcObject||!(vid.srcObject instanceof MediaStream)){vid.srcObject=new MediaStream()}
       vid.srcObject.addTrack(e.track);
+    }
+    // DÜZELTME (ara sıra tam donma): alıcı receiver'ın jitter buffer'ını
+    // biraz büyütüyoruz. Varsayılan (genelde ~0ms hedef/otomatik) küçük ağ
+    // dalgalanmalarında kareyi hemen "kayıp" sayıp donmaya sebep olabiliyor;
+    // playoutDelayHint ile ~150ms'lik bir tampon payı vererek küçük
+    // gecikme/jitter'ların donma yerine küçük bir ek gecikmeyle
+    // yutulmasını sağlıyoruz. Görüşmede 150ms fark edilmez ama ara sıra
+    // donmaları belirgin şekilde azaltabilir.
+    if(e.receiver&&'jitterBufferTarget' in e.receiver){
+      try{e.receiver.jitterBufferTarget=150}catch(err){}
+    }else if(e.receiver&&'playoutDelayHint' in e.receiver){
+      try{e.receiver.playoutDelayHint=0.15}catch(err){}
     }
     // Mobil autoplay policy: ses için muted=false + explicit play() şart
     vid.muted=false;
