@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260707-135155-81addb8">
+<html lang="tr" data-build="askbahcem-20260707-140730-2496128">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -1852,6 +1852,33 @@ function startAdaptiveBitrate(pc){
   // yutulmasını sağlar; donma bir süre tekrarlanmazsa tamponu yavaşça
   // 150ms'e geri indiririz (gereksiz gecikme birikmesin).
   let lastFreezeCount=null,cleanTicksInARow=0,goodLossTicksInARow=0;
+  // DÜZELTME 6 (kamera kaynaklı düşük fps kurtarma — düşük ışık): kamera:X
+  // ile gönderim:X rozette BİRBİRİNE EŞİT ve kademe hedefinin (minFrameRate)
+  // belirgin altında kalıyorsa darboğaz encoder/ağ değil, kameranın kendisi
+  // — encoder/bitrate ayarlarının hiçbiri bunu düzeltemez, kaynak zaten az
+  // kare üretiyor. Çoğu mobil kamera sensörü daha düşük çözünürlükte piksel
+  // binning yaparak tek pikselin topladığı ışığı artırır; bu da otomatik
+  // pozlama süresini kısaltıp fps'in geri toparlanmasını sağlayabilir.
+  // Sürekli aynı soruna tekrar tekrar düşüp gereksiz renegotiation
+  // yaratmamak için görüşme başına en fazla 2 deneme hakkı var.
+  let lowCamFpsTicks=0,camFpsRecoveryAttempts=0;
+  const MAX_CAM_FPS_RECOVERY=2;
+  async function attemptLowLightFpsRecovery(){
+    try{
+      if(!localStream)return;
+      const track=localStream.getVideoTracks()[0];
+      if(!track)return;
+      const s=track.getSettings?track.getSettings():{};
+      const curW=s.width||q.video.width.ideal,curH=s.height||q.video.height.ideal;
+      const newW=Math.max(240,Math.round(curW*0.7)),newH=Math.max(180,Math.round(curH*0.7));
+      await track.applyConstraints({
+        width:{ideal:newW},height:{ideal:newH},
+        frameRate:{ideal:q.video.frameRate.ideal,min:q.minFrameRate}
+      });
+      camFpsRecoveryAttempts++;
+      showToast('Işık az görünüyor, akıcılık için çözünürlük düşürüldü','info',3000);
+    }catch(e){}
+  }
   adaptiveBrTmr=setInterval(async()=>{
     if(!peerConn||peerConn!==pc)return clearInterval(adaptiveBrTmr);
     try{
@@ -1899,6 +1926,21 @@ function startAdaptiveBitrate(pc){
       // rozeti burada güncelliyoruz — "net değil" şikayetinin sebebi düşük
       // çözünürlük mü, düşük bitrate mi, yoksa paket kaybı mı anlaşılır.
       updateStatsBadge(outbound,remoteInbound,inbound,mediaSource);
+      // DÜZELTME 6 (devamı): kamera fps'i kademe hedefinin (minFrameRate)
+      // belirgin altında (%70'inden az) ise ve bu art arda 3 tick (~6sn)
+      // sürüyorsa, tek seferlik bir dalgalanma değil kalıcı bir durum demektir
+      // — çözünürlüğü düşürüp fps kurtarmayı dene (en fazla 2 kez).
+      if(mediaSource&&mediaSource.framesPerSecond!=null){
+        if(mediaSource.framesPerSecond<q.minFrameRate*0.7){
+          lowCamFpsTicks++;
+          if(lowCamFpsTicks>=3&&camFpsRecoveryAttempts<MAX_CAM_FPS_RECOVERY){
+            lowCamFpsTicks=0;
+            attemptLowLightFpsRecovery();
+          }
+        }else{
+          lowCamFpsTicks=0;
+        }
+      }
       // Donma sayısı bu tick'te arttıysa (karşıdan gelen akış kesintiye
       // uğradıysa) jitter tamponunu büyüt; birkaç tick temiz geçerse
       // yavaşça eski haline indir.
