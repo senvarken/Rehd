@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260708-162219-4400e4d">
+<html lang="tr" data-build="askbahcem-20260708-165011-6dd733c">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -539,6 +539,12 @@ svg#loveArrow{width:26px!important;height:14px!important;display:block!important
 
 /* ── 1/2 KEZ GÖRÜNTÜLEME ("bomba") MEDYA ── */
 .burn-media-card{display:flex;align-items:center;gap:11px;padding:13px 15px;border-radius:14px;cursor:pointer;background:rgba(0,0,0,.16);min-width:190px;max-width:230px;user-select:none}
+#vanishBtn{transition:transform .15s,filter .15s;filter:grayscale(1) opacity(.55)}
+#vanishBtn.active{filter:none;transform:scale(1.08)}
+#inputBar.vanish-mode #msgInputWrap{box-shadow:0 0 0 1.5px rgba(147,197,253,.55) inset}
+.vanish-banner{display:none;align-items:center;gap:6px;font-size:.68rem;font-weight:700;color:#93c5fd;padding:4px 14px;letter-spacing:.02em}
+.vanish-banner.show{display:flex}
+.vanished-msg{display:flex;align-items:center;gap:6px;font-size:.78rem;opacity:.65;font-style:italic}
 .burn-media-card.consumed{cursor:default;opacity:.62}
 .burn-media-icon{font-size:1.5rem;flex-shrink:0;line-height:1}
 .burn-media-info{min-width:0}
@@ -1193,6 +1199,9 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
   <button class="react-btn" onclick="sendBomb('cry','Seni özledim!')"><span class="emoji-ico">🥺</span><span>Özledim</span></button>
 </div>
 
+<!-- ═══ KAYBOLAN MESAJ MODU BİLDİRİM ÇUBUĞU ═══ -->
+<div class="vanish-banner" id="vanishBanner">👻 Kaybolan mesajlar açık · karşı taraf okuyunca birkaç saniye içinde silinir</div>
+
 <!-- ═══ CEVAPLA (REPLY) ÖNİZLEME ÇUBUĞU ═══ -->
 <div id="replyBar">
   <div class="rb-line"></div>
@@ -1231,6 +1240,7 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
     <button onclick="document.getElementById('docIn').click();closeAttachMenu()"><span class="llm-ico">📄</span>Dosya (PDF, APK, vb.)</button>
   </div>
   <button class="sm-btn" id="cameraBtn" onclick="event.stopPropagation();toggleCameraMenu()"><svg class="icon"><use href="#i-camera"/></svg></button>
+  <button class="sm-btn" id="vanishBtn" onclick="event.stopPropagation();toggleVanishMode()" title="Kaybolan mesaj modu">👻</button>
   <input type="file" id="cameraPhotoIn" accept="image/*" capture="environment" style="display:none" onchange="sendCameraMedia(this,false)"/>
   <input type="file" id="cameraVideoIn" accept="video/*" capture="environment" style="display:none" onchange="sendCameraMedia(this,true)"/>
   <div id="cameraMenu">
@@ -3206,6 +3216,10 @@ function listenMessages(){
     }
     msgs.forEach(m=>deletedStateMap.set(m.id,!!m.deleted));
     msgs.forEach(m=>{ if(m.viewLimit)viewCountStateMap.set(m.id,m.viewCount||0) });
+    // Kaybolan mesaj: karşı taraf okuduysa (read:true) ama henüz kaybolmadıysa,
+    // hangi taraf açıksa o zamanlayıcıyı kurar — böylece okuyan taraf uygulamayı
+    // kapatsa bile mesaj planlandığı gibi kaybolur.
+    msgs.forEach(m=>{ if(m.vanish&&m.read&&!m.deleted)scheduleVanish(m.id) });
     // Sarı tik → yeşil: karşı tarafın bizim mesajlarımızı okuyup okumadığını
     // ekrandaki tiklere yansıt (mesaj listesi her güncellendiğinde çalışır,
     // böylece karşı taraf mesajı okuduğu an tik anında yeşile döner).
@@ -3352,6 +3366,22 @@ function markIncomingMessagesRead(msgs){
   },350);
 }
 
+const _vanishScheduled=new Set();
+function scheduleVanish(msgId){
+  if(_vanishScheduled.has(msgId))return;
+  _vanishScheduled.add(msgId);
+  setTimeout(async()=>{
+    if(!fb||!activeRoom){_vanishScheduled.delete(msgId);return}
+    try{
+      const {db,doc,updateDoc}=fb;
+      await updateDoc(doc(db,`rooms/${activeRoom}/messages`,msgId),{
+        deleted:true,vanished:true,deletedAt:Date.now()
+      });
+    }catch(e){}
+    _vanishScheduled.delete(msgId);
+  },4000); // okunduktan 4 saniye sonra kaybolur
+}
+
 let lastRenderDate='';
 let lastGroupSender='';
 let revealedDeleted=new Set(); // hangi silinmiş mesajların bu oturumda "dokunup gösterildiğini" tutar
@@ -3440,25 +3470,46 @@ function appendBubble(msg,doScroll=true){
   if(isPlaceholderDeleted){
     b.classList.add('deleted-bubble');
     if(!isAdmin)b.classList.add('deleted-bubble-locked'); // guest için tıklanamaz görünüm
-    const who=isMe?'Sen':(msg.senderName||'Karşı taraf');
-    const label=msg.type==='image'?'bir fotoğrafı':(msg.type==='video'?'bir videoyu':(msg.type==='voice'?'bir sesli mesajı':(msg.type==='file'?'bir dosyayı':'bir mesajı')));
     const dmsg=document.createElement('div');dmsg.className='deleted-msg';
-    // Guest'e "görmek için dokun" ipucu bile gösterilmiyor — o içeriği
-    // hiçbir şekilde göremez.
-    dmsg.innerHTML=`<svg class="icon icon-sm"><use href="#i-trash"/></svg><span>${esc(who)} ${label} sildi${isAdmin?' · görmek için dokun':''}</span>`;
-    if(isAdmin)dmsg.onclick=(ev)=>{ev.stopPropagation();revealDeletedMsg(msg.id)};
+    if(msg.vanished){
+      // Kaybolan mesaj: normal "sildi" bildiriminden farklı, kimse
+      // silmedi — okunduktan sonra kendiliğinden kayboldu.
+      dmsg.innerHTML=`<span>👻</span><span>Mesaj kayboldu${isAdmin?' · görmek için dokun':''}</span>`;
+      if(isAdmin)dmsg.onclick=(ev)=>{ev.stopPropagation();revealDeletedMsg(msg.id)};
+    }else{
+      const who=isMe?'Sen':(msg.senderName||'Karşı taraf');
+      const label=msg.type==='image'?'bir fotoğrafı':(msg.type==='video'?'bir videoyu':(msg.type==='voice'?'bir sesli mesajı':(msg.type==='file'?'bir dosyayı':'bir mesajı')));
+      // Guest'e "görmek için dokun" ipucu bile gösterilmiyor — o içeriği
+      // hiçbir şekilde göremez.
+      dmsg.innerHTML=`<svg class="icon icon-sm"><use href="#i-trash"/></svg><span>${esc(who)} ${label} sildi${isAdmin?' · görmek için dokun':''}</span>`;
+      if(isAdmin)dmsg.onclick=(ev)=>{ev.stopPropagation();revealDeletedMsg(msg.id)};
+    }
     b.appendChild(dmsg);
   }
   else if(msg.type==='text'){
     const tspan=document.createElement('span');tspan.textContent=msg.text;b.appendChild(tspan);
+    // Kaybolan mesaj modu ile gönderilmiş ama henüz okunmamış/kaybolmamış
+    // mesajlarda küçük bir 👻 ipucu gösterilir.
+    if(msg.vanish&&!msg.deleted){
+      const vTag=document.createElement('span');
+      vTag.textContent=' 👻';
+      vTag.title='Bu mesaj okunduktan sonra kaybolacak';
+      vTag.style.cssText='font-size:.75em;opacity:.7;margin-left:3px';
+      b.appendChild(vTag);
+    }
     // Mesaj gönderildikten sonra düzenlendiyse küçük "(düzenlendi)" etiketi
     // gösterilir; dokununca tüm düzenleme geçmişi (sınırsız kayıt) açılır.
     if(msg.edited){
       const editedTag=document.createElement('span');
       editedTag.className='msg-edited-tag';
       editedTag.textContent=' (düzenlendi)';
-      editedTag.style.cssText='font-size:.68em;opacity:.6;cursor:pointer;margin-left:4px;font-style:italic';
-      editedTag.onclick=(ev)=>{ev.stopPropagation();viewEditHistory(msg.id)};
+      // Düzenleme geçmişi sadece admin'e gösterilir; misafir için tıklanamaz.
+      if(isAdmin){
+        editedTag.style.cssText='font-size:.68em;opacity:.6;cursor:pointer;margin-left:4px;font-style:italic';
+        editedTag.onclick=(ev)=>{ev.stopPropagation();viewEditHistory(msg.id)};
+      }else{
+        editedTag.style.cssText='font-size:.68em;opacity:.6;cursor:default;margin-left:4px;font-style:italic';
+      }
       b.appendChild(editedTag);
     }
   }
@@ -3777,6 +3828,7 @@ async function saveEditedMessage(){
 }
 /* Balonda "(düzenlendi)" etiketine dokununca düzenleme geçmişini salt-okunur gösterir. */
 function viewEditHistory(msgId){
+  if(!isAdmin)return; // misafir düzenleme geçmişini göremez
   const msg=(lastRenderedMsgs||[]).find(m=>m.id===msgId);
   if(!msg)return;
   openEditMsgModal(msgId);
@@ -3826,6 +3878,14 @@ async function deleteChatRoom(uid,name){
   }catch(e){console.error(e);showToast('Sohbet silinemedi','error')}
 }
 
+let vanishMode=false;
+function toggleVanishMode(){
+  vanishMode=!vanishMode;
+  document.getElementById('vanishBtn').classList.toggle('active',vanishMode);
+  document.getElementById('inputBar').classList.toggle('vanish-mode',vanishMode);
+  document.getElementById('vanishBanner').classList.toggle('show',vanishMode);
+  document.getElementById('msgInput').placeholder=vanishMode?'Kaybolan mesaj yaz…':'Bir şeyler yaz tatlım…';
+}
 async function sendTextMessage(text){
   if(!text||!fb||!activeRoom)return;
   clearTyping();
@@ -3833,9 +3893,10 @@ async function sendTextMessage(text){
   const {db,collection,addDoc,serverTimestamp}=fb;
   await addDoc(collection(db,`rooms/${activeRoom}/messages`),{
     type:'text',text,senderId:myId,senderName:myName,senderEmoji:myEmoji,ts:serverTimestamp(),read:false,
+    ...(vanishMode?{vanish:true}:{}),
     ...(replyTo?{replyTo:{id:replyTo.id,text:replySnippet(replyTo),senderName:replyTo.senderName||'',senderId:replyTo.senderId||''}}:{})
   });
-  updateRoomMeta(text);
+  updateRoomMeta(vanishMode?'👻 Kaybolan mesaj':text);
 }
 async function sendMsg(){
   const inp=document.getElementById('msgInput');
