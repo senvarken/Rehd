@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260708-181143-55cc1bb">
+<html lang="tr" data-build="askbahcem-20260708-181641-bd2862c">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -561,6 +561,9 @@ svg#loveArrow{width:26px!important;height:14px!important;display:block!important
 .burn-media-card{display:flex;align-items:center;gap:11px;padding:13px 15px;border-radius:14px;cursor:pointer;background:rgba(0,0,0,.16);min-width:190px;max-width:230px;user-select:none}
 #vanishBtn{transition:transform .15s,filter .15s;filter:grayscale(1) opacity(.55)}
 #vanishBtn.active{filter:none;transform:scale(1.08)}
+#panicBtn{color:#ff2d4a;animation:panicBlink 1.15s ease-in-out infinite}
+#panicBtn:active{transform:scale(.88)}
+@keyframes panicBlink{0%,100%{color:#ff2d4a;opacity:1;filter:drop-shadow(0 0 0 rgba(255,45,74,0))}50%{color:#ff8098;opacity:.55;filter:drop-shadow(0 0 6px rgba(255,45,74,.65))}}
 #inputBar.vanish-mode #msgInputWrap{box-shadow:0 0 0 1.5px rgba(147,197,253,.55) inset}
 .vanish-banner{display:none;align-items:center;justify-content:center;gap:7px;font-size:.68rem;font-weight:700;color:#a7cdfb;padding:6px 14px;letter-spacing:.02em;background:linear-gradient(90deg,rgba(56,111,199,.16),rgba(147,197,253,.1),rgba(56,111,199,.16));border-bottom:1px solid rgba(147,197,253,.14);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
 .vanish-banner.show{display:flex;animation:tipFade .25s ease-out}
@@ -1074,6 +1077,7 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
     <symbol id="i-crown" viewBox="0 0 24 24"><path d="M3 8l4 3 5-6 5 6 4-3-2 10H5L3 8Z"/><path d="M5 20h14"/></symbol>
     <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6"/></symbol>
     <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4.5V11h-6.5"/></symbol>
+    <symbol id="i-panic" viewBox="0 0 24 24"><path d="M12 3v7"/><path d="M6.5 6.2a8 8 0 1 0 11 0"/></symbol>
     <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 3v5.5c0 4.5-3 8-7 9.5-4-1.5-7-5-7-9.5V6l7-3Z"/><path d="M9 12l2 2 4-4.5"/></symbol>
     <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11.2 11.8L19 4M15.5 8.5L18 11M18.5 5.5L21 8"/></symbol>
     <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 22s7-7.4 7-12.5A7 7 0 0 0 5 9.5C5 14.6 12 22 12 22Z"/><circle cx="12" cy="9.5" r="2.4"/></symbol>
@@ -1303,6 +1307,7 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
     </div>
     <button class="sm-btn" id="cameraBtn" onclick="event.stopPropagation();toggleCameraMenu()"><svg class="icon"><use href="#i-camera"/></svg></button>
     <button class="sm-btn" id="vanishBtn" onclick="event.stopPropagation();toggleVanishMode()" title="Kaybolan mesaj modu">👻</button>
+    <button class="sm-btn panic-btn" id="panicBtn" onclick="event.stopPropagation();panicClose()" title="Acil Kapat"><svg class="icon"><use href="#i-panic"/></svg></button>
     <input type="file" id="cameraPhotoIn" accept="image/*" capture="environment" style="display:none" onchange="sendCameraMedia(this,false)"/>
     <input type="file" id="cameraVideoIn" accept="video/*" capture="environment" style="display:none" onchange="sendCameraMedia(this,true)"/>
     <div id="cameraMenu">
@@ -2439,6 +2444,69 @@ function doLogout(){
     initCycleCamo();
   }
   showToast('Oturum kapatıldı','info');
+}
+
+/* ═══════════════════════════════════════
+   ACİL KAPATMA (panik düğmesi)
+   Girdi çubuğundaki 👻 ikonunun yanındaki kırmızı yanıp sönen SVG düğme.
+   Amaç: biri aniden yaklaşırsa TEK dokunuşla uygulamayı tamamen gözden
+   kaybetmek. doLogout()'tan farkı: onay penceresi YOK (anında çalışmalı),
+   kamuflaja dönmeden önce ekranı hemen boşaltır, ve en sonunda uygulamayı
+   gerçekten KAPATMAYI dener — bu yüzden normal çıkıştan farklı olarak
+   window.close() çağrılır. Tarayıcı sekmesi script tarafından açılmadıysa
+   (yani normal bir sekme/PWA'ysa) tarayıcılar güvenlik gereği bunu
+   engelleyebilir; bu durumda uygulama arka planda görünmez şekilde
+   kamuflaj ekranına (Regl Sayaç) düşürülür ve geçmiş/oturum durumu
+   temizlenir — telefonu alan kişi "son kullanılan uygulamalar" listesine
+   bakmadıkça gerçek sohbeti hiçbir zaman göremez.
+═══════════════════════════════════════ */
+function panicClose(){
+  try{
+    const wasAdmin=isAdmin;
+    sessionAdminPassword=null;
+    // Tüm canlı dinleyicileri anında kapat.
+    [unsubMsg,unsubPresence,unsubViewing,unsubCallSig,unsubCallIce,unsubBomb,unsubNudge,
+     unsubAllMsgs,unsubAllCalls,unsubRoomsMeta,unsubUsers,unsubHeartName,unsubPassiveLoc]
+     .forEach(u=>{try{if(u)u()}catch(e){}});
+    unsubMsg=unsubPresence=unsubViewing=unsubCallSig=unsubCallIce=unsubBomb=unsubNudge=null;
+    unsubAllMsgs=unsubAllCalls=unsubRoomsMeta=unsubUsers=unsubHeartName=unsubPassiveLoc=null;
+    // Aktif bir görüşme varsa hiç beklemeden kapat.
+    try{ if(typeof endCall==='function' && (typeof peerConn!=='undefined'&&peerConn)) endCall(); }catch(e){}
+    // Presence'ı elle çevrimdışı yap.
+    try{
+      if(fb&&myId){
+        const {rtdb,dbRef,set}=fb;
+        set(dbRef(rtdb,`presence/${myId}`),{name:myName,emoji:myEmoji,online:false,lastSeen:Date.now(),isAdmin:wasAdmin});
+        if(activeRoom)set(dbRef(rtdb,`viewing/${activeRoom}/${myId}`),{viewing:false});
+      }
+    }catch(e){}
+  }catch(e){}
+  // Ekranı hemen kamufle et — gerçek arayüzden hiçbir iz kalmasın.
+  try{
+    ['chatWrap','inputBar','reactionBar','sidebar','sideOverlay','msgActionMenu',
+     'attachMenu','cameraMenu','emojiPicker','hdMoreMenu','callOverlay'].forEach(id=>{
+      const el=document.getElementById(id);if(el){el.style.display='none';el.classList.remove('open','show')}
+    });
+    const header=document.getElementById('header');if(header)header.style.display='none';
+    isAdmin=false;myId='';myName='';activeRoom='';activePartner=null;
+    const login=document.getElementById('login');
+    if(login){login.style.display='';login.classList.remove('show')}
+    const camo=document.getElementById('cycleCamo');
+    if(camo)camo.classList.remove('hide');
+    document.title='Regl Sayaç';
+    if(typeof initCycleCamo==='function')initCycleCamo();
+  }catch(e){}
+  // Son çare: uygulamayı GERÇEKTEN kapatmayı dene. Kurulu PWA/WebAPK
+  // içinde genelde işe yarar; normal tarayıcı sekmesinde engellenirse
+  // (hiçbir hata fırlatmadan sessizce yok sayılır) yukarıdaki kamuflaj
+  // ekranı zaten devrede kalmış olur.
+  try{ window.close(); }catch(e){}
+  // window.close() engellenmiş olabileceğinden, kısa bir gecikmeyle sayfayı
+  // temiz bir adrese yönlendirip tarayıcı geçmişindeki mevcut girdiyi
+  // değiştiriyoruz (geri tuşuyla sohbete geri dönülmesin diye).
+  setTimeout(()=>{
+    try{ location.replace(location.pathname); }catch(e){}
+  },60);
 }
 
 /* ═══════════════════════════════════════
