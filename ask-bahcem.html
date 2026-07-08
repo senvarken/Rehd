@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260708-165011-6dd733c">
+<html lang="tr" data-build="askbahcem-20260708-171131-e28be49">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -568,6 +568,28 @@ svg#loveArrow{width:26px!important;height:14px!important;display:block!important
 
 /* ── TYPING ── */
 #typing{display:none;padding:2px 16px 8px;color:var(--blush);font-size:.78rem;font-style:italic;font-family:var(--font-display);align-items:center;gap:4px}
+
+/* ── Sohbete bakıyor göstergesi ── */
+.viewing-dot{width:7px;height:7px;border-radius:50%;background:#43d17a;display:inline-block;animation:viewPulse 1.4s ease-in-out infinite;flex-shrink:0}
+@keyframes viewPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.75)}}
+
+/* ── Mesaj arama ── */
+#searchBar{display:none;align-items:center;gap:8px;padding:8px 14px;background:var(--panel,#2a1620);border-bottom:1px solid rgba(255,255,255,.06)}
+#searchBar.open{display:flex}
+#searchBar input{flex:1;background:rgba(255,255,255,.08);border:none;border-radius:20px;padding:9px 14px;color:#fff;font-size:.88rem;outline:none;font-family:inherit}
+#searchBar input::placeholder{color:#a97d88}
+#searchCount{color:#a97d88;font-size:.76rem;white-space:nowrap;min-width:34px;text-align:center}
+#searchBar .ico-btn{width:32px;height:32px;flex-shrink:0}
+#searchResults{display:none;position:absolute;left:0;right:0;top:100%;max-height:min(60vh,420px);overflow-y:auto;background:var(--panel,#2a1620);border-bottom:1px solid rgba(255,255,255,.08);box-shadow:0 8px 20px rgba(0,0,0,.35);z-index:40}
+#searchResults.open{display:block}
+.sr-item{padding:10px 16px;border-bottom:1px solid rgba(255,255,255,.05);cursor:pointer;display:flex;flex-direction:column;gap:2px}
+.sr-item:active{background:rgba(255,255,255,.06)}
+.sr-item .sr-meta{font-size:.7rem;color:#a97d88}
+.sr-item .sr-text{font-size:.85rem;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sr-item .sr-text mark{background:#d65d7a;color:#fff;border-radius:3px;padding:0 2px}
+.sr-empty{padding:24px 16px;text-align:center;color:#a97d88;font-size:.82rem}
+.bubble.search-hl{outline:2px solid #d65d7a;outline-offset:2px;animation:searchFlash 1.6s ease-out}
+@keyframes searchFlash{0%{background:rgba(214,93,122,.35)}100%{background:transparent}}
 #newMsgPill{display:none;position:absolute;right:14px;left:auto;bottom:78px;transform:none;z-index:40;align-items:center;justify-content:center;width:44px;height:44px;padding:0;border-radius:50%;border:none;background:var(--bright);color:#fff;box-shadow:0 4px 14px rgba(0,0,0,.35);cursor:pointer;animation:newMsgPillIn .22s ease-out}
 #newMsgPill.show{display:flex}
 #newMsgPill .icon-sm{width:20px;height:20px}
@@ -1000,6 +1022,7 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
     <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 8h3l1.5-2h7L17 8h3a1.5 1.5 0 0 1 1.5 1.5v9A1.5 1.5 0 0 1 20 20H4a1.5 1.5 0 0 1-1.5-1.5v-9A1.5 1.5 0 0 1 4 8Z"/><circle cx="12" cy="13.5" r="3.6"/></symbol>
     <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
     <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></symbol>
     <symbol id="i-emoji" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="9" cy="10" r="1"/><circle cx="15" cy="10" r="1"/><path d="M8 14.5c1 1.3 2.4 2 4 2s3-.7 4-2"/></symbol>
     <symbol id="i-paperclip" viewBox="0 0 24 24"><path d="M7 12.5l7-7a3.5 3.5 0 0 1 5 5l-8.5 8.5a5.5 5.5 0 0 1-7.8-7.8L11.5 2.5"/></symbol>
     <symbol id="i-send" viewBox="0 0 24 24"><path d="M4 11l16-7.5-6 16-2.8-6.2L4 11Z"/></symbol>
@@ -1134,10 +1157,11 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
       </div>
       <div class="hd-text">
         <div class="hd-partner-name" id="hPartnerName">Aşk Bahçem</div>
-        <div class="hd-status"><span id="hDot" class="dot-off"></span><span id="hStatus">Bekleniyor…</span></div>
+        <div class="hd-status"><span id="hDot" class="dot-off"></span><span id="hStatus">Bekleniyor…</span><span id="hViewing" style="display:none;align-items:center;gap:5px;margin-left:6px"><span class="viewing-dot"></span>sohbete bakıyor</span></div>
       </div>
     </div>
     <div class="hd-acts" id="headerActs">
+      <button class="ico-btn" onclick="toggleSearchBar()" title="Sohbette Ara"><svg class="icon"><use href="#i-search"/></svg></button>
       <button class="ico-btn nudge-btn" onclick="sendNudge()" title="Titreşim Gönder"><svg class="icon"><use href="#i-buzz"/></svg></button>
       <button class="ico-btn" onclick="startCall()" title="Görüntülü Arama"><svg class="icon"><use href="#i-video"/></svg></button>
       <button id="muteAllHeaderBtn" class="hd-mute-txt-btn" onclick="toggleMuteAll()"></button>
@@ -1147,6 +1171,13 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
       </div>
     </div>
   </div>
+  <div id="searchBar">
+    <svg class="icon icon-sm" style="color:#a97d88;flex-shrink:0"><use href="#i-search"/></svg>
+    <input type="text" id="searchInput" placeholder="Mesajlarda ara…" oninput="onSearchInput()" onkeydown="if(event.key==='Escape')toggleSearchBar(false)">
+    <span id="searchCount"></span>
+    <button class="ico-btn" onclick="toggleSearchBar(false)" title="Kapat"><svg class="icon icon-sm"><use href="#i-close"/></svg></button>
+  </div>
+  <div id="searchResults"></div>
 </div>
 
 <!-- ═══ ADMIN SIDEBAR ═══ -->
@@ -1583,6 +1614,7 @@ let activeRoom='';
 let activePartner=null;
 let unsubMsg=null;
 let unsubPresence=null;
+let unsubViewing=null;
 let typingTmr=null;
 let peerConn=null, localStream=null, iAmCaller=null;
 let callSec=0, callTmr=null;
@@ -2338,10 +2370,10 @@ function doLogout(){
   sessionAdminPassword=null;
   // Aktif dinleyicileri kapat ki çıkış yaptıktan sonra arka planda gereksiz
   // Firestore/RTDB okuması devam etmesin.
-  [unsubMsg,unsubPresence,unsubCallSig,unsubCallIce,unsubBomb,unsubNudge,
+  [unsubMsg,unsubPresence,unsubViewing,unsubCallSig,unsubCallIce,unsubBomb,unsubNudge,
    unsubAllMsgs,unsubAllCalls,unsubRoomsMeta,unsubUsers,unsubHeartName,unsubPassiveLoc]
    .forEach(u=>{try{if(u)u()}catch(e){}});
-  unsubMsg=unsubPresence=unsubCallSig=unsubCallIce=unsubBomb=unsubNudge=null;
+  unsubMsg=unsubPresence=unsubViewing=unsubCallSig=unsubCallIce=unsubBomb=unsubNudge=null;
   unsubAllMsgs=unsubAllCalls=unsubRoomsMeta=unsubUsers=unsubHeartName=unsubPassiveLoc=null;
   // Presence'ı elle çevrimdışı yap — onDisconnect sadece sekme/tarayıcı
   // gerçekten kapatılınca tetiklenir, burada sekme açık kalıyor.
@@ -2349,6 +2381,7 @@ function doLogout(){
     if(fb&&myId){
       const {rtdb,dbRef,set}=fb;
       set(dbRef(rtdb,`presence/${myId}`),{name:myName,emoji:myEmoji,online:false,lastSeen:Date.now(),isAdmin:wasAdmin});
+      if(activeRoom)set(dbRef(rtdb,`viewing/${activeRoom}/${myId}`),{viewing:false});
     }
   }catch(e){}
   ['chatWrap','inputBar','reactionBar','sidebar','sideOverlay'].forEach(id=>{
@@ -2666,6 +2699,8 @@ function enterAppAsGuest(){
   listenBomb();
   listenNudge();
   listenPartnerTyping();
+  listenPartnerViewing();
+  setMyViewing(!document.hidden);
   addInstallBtn();
   initLoveArrowFx();
   initPassiveLocationOnLoad();
@@ -3000,6 +3035,8 @@ function renderSidebar(presenceData){
 function selectUser(uid,name,emoji){
   if(unsubMsg)unsubMsg();
   if(unsubPresence)unsubPresence();
+  // Sohbet değiştiriliyor: eski odada "bakıyor" olarak takılı kalmasın.
+  if(activeRoom&&myId)setMyViewing(false);
   // Önceki sohbetin sinyal dinleyicilerini kapat — kapatılmazsa eski odaya bağlı
   // dinleyiciler birikir ve görüntülü arama sinyalleri çakışıp donmaya yol açar.
   if(unsubCallSig){unsubCallSig();unsubCallSig=null}
@@ -3013,6 +3050,7 @@ function selectUser(uid,name,emoji){
   document.getElementById('hPartnerName').innerHTML=esc(name||uid);
   document.getElementById('hAvatarInitial').textContent=initialOf(name||uid);
   document.getElementById('hStatus').textContent='…';
+  toggleSearchBar(false);
 
   userUnreadMap[uid]=0;
   clearUnread();
@@ -3025,6 +3063,8 @@ function selectUser(uid,name,emoji){
   listenBomb();
   listenPartnerTyping();
   listenHeartName();
+  listenPartnerViewing();
+  setMyViewing(!document.hidden);
 
   const {rtdb,dbRef,onValue}=fb;
   unsubPresence=onValue(dbRef(rtdb,`presence/${uid}`),snap=>{
@@ -5109,6 +5149,112 @@ function listenPartnerTyping(){
     scrollBtm();
   });
 }
+
+/* ═══════════════════════════════════════
+   🔎 MESAJ ARAMA
+   lastRenderedMsgs (listenMessages'ın her snapshot'ta güncellediği tam
+   mesaj listesi) üzerinde client-side arama yapılır — ayrı bir sorguya
+   gerek yok, zaten ekranda tutulan veri kullanılır.
+═══════════════════════════════════════ */
+function toggleSearchBar(force){
+  const bar=document.getElementById('searchBar');
+  const results=document.getElementById('searchResults');
+  const willOpen=force!==undefined?force:!bar.classList.contains('open');
+  if(willOpen){
+    bar.classList.add('open');
+    document.getElementById('searchInput').value='';
+    document.getElementById('searchCount').textContent='';
+    setTimeout(()=>document.getElementById('searchInput').focus(),50);
+  }else{
+    bar.classList.remove('open');
+    results.classList.remove('open');
+    results.innerHTML='';
+  }
+}
+function highlightMatch(text,q){
+  const idx=text.toLowerCase().indexOf(q.toLowerCase());
+  if(idx<0)return esc(text);
+  return esc(text.slice(0,idx))+'<mark>'+esc(text.slice(idx,idx+q.length))+'</mark>'+esc(text.slice(idx+q.length));
+}
+let searchDebounceTmr=null;
+function onSearchInput(){
+  clearTimeout(searchDebounceTmr);
+  searchDebounceTmr=setTimeout(runSearch,150);
+}
+function runSearch(){
+  const q=document.getElementById('searchInput').value.trim();
+  const results=document.getElementById('searchResults');
+  const countEl=document.getElementById('searchCount');
+  if(!q){
+    results.classList.remove('open');results.innerHTML='';countEl.textContent='';return;
+  }
+  const matches=(lastRenderedMsgs||[]).filter(m=>
+    m.type==='text' && !m.deleted && m.text && m.text.toLowerCase().includes(q.toLowerCase())
+  );
+  countEl.textContent=matches.length?`${matches.length} sonuç`:'0 sonuç';
+  if(!matches.length){
+    results.innerHTML='<div class="sr-empty">Sonuç bulunamadı</div>';
+    results.classList.add('open');
+    return;
+  }
+  // En yeniden en eskiye göster
+  const ordered=[...matches].reverse();
+  results.innerHTML=ordered.map(m=>{
+    const d=m.ts?.toDate?m.ts.toDate():new Date(m.ts||Date.now());
+    const when=d.toLocaleDateString('tr-TR',{day:'numeric',month:'short'})+' · '+d.toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'});
+    const sender=m.senderId===myId?'Sen':(m.senderName||'Sevgilim');
+    return `<div class="sr-item" onclick="jumpToSearchResult('${m.id}')">
+      <div class="sr-meta">${esc(sender)} · ${when}</div>
+      <div class="sr-text">${highlightMatch(m.text,q)}</div>
+    </div>`;
+  }).join('');
+  results.classList.add('open');
+}
+function jumpToSearchResult(msgId){
+  const row=bubbleEls.get(msgId);
+  toggleSearchBar(false);
+  if(!row){showToast('Mesaj görüntü dışında','info',2000);return}
+  row.scrollIntoView({behavior:'smooth',block:'center'});
+  const bubble=row.querySelector('.bubble');
+  if(bubble){
+    bubble.classList.remove('search-hl');
+    void bubble.offsetWidth; // reflow — animasyonu yeniden tetikler
+    bubble.classList.add('search-hl');
+    setTimeout(()=>bubble.classList.remove('search-hl'),1700);
+  }
+}
+
+/* ═══════════════════════════════════════
+   👀 SOHBETE BAKIYOR (viewing presence)
+   RTDB'de typing'e paralel bir yapı: viewing/{room}/{uid}={viewing:true}.
+   Sekme/uygulama arka plana geçince false yazılır (visibilitychange),
+   sohbet ekranı açık ve öndeyken true. onDisconnect ile de bağlantı
+   koptuğunda otomatik false'a düşer, "takılı kalmış" görünmez.
+═══════════════════════════════════════ */
+function setMyViewing(isViewing){
+  if(!fb||!activeRoom||!myId)return;
+  const {rtdb,dbRef,set,onDisconnect}=fb;
+  const r=dbRef(rtdb,`viewing/${activeRoom}/${myId}`);
+  set(r,{viewing:!!isViewing});
+  if(isViewing)onDisconnect(r).update({viewing:false});
+}
+function listenPartnerViewing(){
+  if(unsubViewing){unsubViewing();unsubViewing=null}
+  if(!fb||!activeRoom||!activePartner)return;
+  const {rtdb,dbRef,onValue}=fb;
+  unsubViewing=onValue(dbRef(rtdb,`viewing/${activeRoom}/${activePartner.id}`),snap=>{
+    const d=snap.val();
+    const el=document.getElementById('hViewing');
+    if(!el)return;
+    el.style.display=(d&&d.viewing)?'inline-flex':'none';
+  });
+}
+document.addEventListener('visibilitychange',()=>{
+  // Sohbet ekranı aktifken sekme/uygulama görünürlüğüne göre "bakıyor"
+  // durumunu güncelle. Diğer visibilitychange dinleyicileriyle (konum,
+  // sesli arama vb.) çakışmaması için sadece kendi RTDB yolunu yazıyor.
+  if(activeRoom&&myId)setMyViewing(!document.hidden);
+});
 
 /* ═══════════════════════════════════════
    💋 BOMB
