@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260708-171131-e28be49">
+<html lang="tr" data-build="askbahcem-20260708-172146-823949b">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -637,7 +637,9 @@ svg#loveArrow{width:26px!important;height:14px!important;display:block!important
 .ccp-send{width:36px;height:36px;border-radius:50%;border:none;background:linear-gradient(135deg,var(--bright),var(--mid));color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 
 /* ── INPUT BAR ── */
-#inputBar{flex-shrink:0;background:rgba(23,8,16,.9);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-top:1px solid rgba(242,196,206,.09);padding:10px 11px;padding-bottom:max(10px,env(safe-area-inset-bottom));display:none;align-items:flex-end;gap:7px;z-index:10;position:relative}
+#inputBar{flex-shrink:0;background:rgba(23,8,16,.9);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-top:1px solid rgba(242,196,206,.09);padding:10px 11px;padding-bottom:max(10px,env(safe-area-inset-bottom));display:none;flex-direction:column;align-items:stretch;gap:7px;z-index:10;position:relative}
+#quickActionsRow{display:flex;align-items:center;gap:7px;flex-shrink:0}
+#composerRow{display:flex;align-items:flex-end;gap:7px;width:100%}
 .sm-btn{width:38px;height:38px;border-radius:50%;border:none;cursor:pointer;background:rgba(255,255,255,.06);color:var(--blush);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .18s}
 
 /* ── Canlı Konum ── */
@@ -645,7 +647,7 @@ svg#loveArrow{width:26px!important;height:14px!important;display:block!important
 #liveLocMenu.open{display:flex;flex-direction:column}
 #liveLocMenu button{display:flex;align-items:center;gap:10px;padding:12px 16px;background:none;border:none;color:#fff;font-size:.86rem;text-align:left;cursor:pointer;white-space:nowrap}
 #liveLocMenu button:active{background:rgba(255,255,255,.08)}
-#cameraMenu{display:none;position:absolute;bottom:64px;left:92px;background:rgba(30,10,18,.97);border:1px solid rgba(242,196,206,.15);border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.4);overflow:hidden;z-index:20;backdrop-filter:blur(14px)}
+#cameraMenu{display:none;position:absolute;bottom:109px;left:92px;background:rgba(30,10,18,.97);border:1px solid rgba(242,196,206,.15);border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.4);overflow:hidden;z-index:20;backdrop-filter:blur(14px)}
 #cameraMenu.open{display:flex;flex-direction:column}
 #cameraMenu button{display:flex;align-items:center;gap:10px;padding:12px 16px;background:none;border:none;color:#fff;font-size:.86rem;text-align:left;cursor:pointer;white-space:nowrap}
 #cameraMenu button:active{background:rgba(255,255,255,.08)}
@@ -712,7 +714,8 @@ svg#loveArrow{width:26px!important;height:14px!important;display:block!important
 @keyframes lockChevBounce{0%,100%{transform:rotate(180deg) translateY(0)}50%{transform:rotate(180deg) translateY(-4px)}}
 
 /* ── Dikte aktifken input çubuğu WhatsApp gibi tam genişlikte büyür ── */
-#inputBar.dictating>.sm-btn,#inputBar.dictating #sendBtn,#inputBar.dictating #voiceMicBtn{display:none!important}
+#inputBar.dictating #quickActionsRow{display:none!important}
+#inputBar.dictating #sendBtn,#inputBar.dictating #voiceMicBtn{display:none!important}
 #inputBar.dictating #locBtn{display:none!important}
 #inputBar.dictating #msgInput{max-height:150px;padding-right:44px}
 
@@ -762,7 +765,7 @@ svg#loveArrow{width:26px!important;height:14px!important;display:block!important
 .voice-speed{width:auto!important;height:22px!important;min-width:30px;padding:0 7px;border-radius:11px!important;font-size:.66rem;font-weight:700;background:rgba(255,255,255,.14)!important;flex-shrink:0}
 
 /* ── EMOJI PICKER ── */
-#emojiPicker{display:none;position:absolute;bottom:66px;left:10px;background:#2b0f1c;border:1px solid rgba(242,196,206,.16);border-radius:16px;padding:11px;z-index:60;flex-wrap:wrap;gap:4px;max-width:280px;max-height:240px;overflow-y:auto;box-shadow:var(--shadow-lg)}
+#emojiPicker{display:none;position:absolute;bottom:111px;left:10px;background:#2b0f1c;border:1px solid rgba(242,196,206,.16);border-radius:16px;padding:11px;z-index:60;flex-wrap:wrap;gap:4px;max-width:280px;max-height:240px;overflow-y:auto;box-shadow:var(--shadow-lg)}
 #emojiPicker.open{display:flex}
 #emojiPicker span{font-size:1.3rem;cursor:pointer;padding:5px;border-radius:8px;transition:background .15s;line-height:1}
 #emojiPicker span:hover{background:rgba(255,255,255,.1)}
@@ -974,7 +977,7 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
 .file-dl-btn .icon{width:15px;height:15px}
 
 /* ── EK (ATTACH) MENÜSÜ ── */
-#attachMenu{display:none;position:absolute;bottom:66px;left:44px;background:#2b0f1c;border:1px solid rgba(242,196,206,.16);border-radius:16px;padding:7px;z-index:60;flex-direction:column;gap:2px;min-width:190px;box-shadow:var(--shadow-lg)}
+#attachMenu{display:none;position:absolute;bottom:111px;left:44px;background:#2b0f1c;border:1px solid rgba(242,196,206,.16);border-radius:16px;padding:7px;z-index:60;flex-direction:column;gap:2px;min-width:190px;box-shadow:var(--shadow-lg)}
 #attachMenu.open{display:flex}
 #attachMenu button{display:flex;align-items:center;gap:10px;background:none;border:none;color:#fff;font-family:var(--font-body);font-size:.85rem;font-weight:600;padding:10px 11px;border-radius:11px;cursor:pointer;text-align:left}
 #attachMenu button:active{background:rgba(255,255,255,.1)}
@@ -1262,43 +1265,47 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
 
 <!-- ═══ INPUT BAR ═══ -->
 <div id="inputBar">
-  <button class="sm-btn" onclick="toggleEmoji()"><svg class="icon"><use href="#i-emoji"/></svg></button>
-  <button class="sm-btn" id="attachBtn" onclick="event.stopPropagation();toggleAttachMenu()"><svg class="icon"><use href="#i-paperclip"/></svg></button>
-  <input type="file" id="fileIn" accept="image/*,video/*" style="display:none" onchange="sendMedia(this)"/>
-  <input type="file" id="docIn" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.json,.zip,.rar,.7z,.apk,.mp3,.m4a,.wav,application/pdf,application/vnd.android.package-archive" style="display:none" onchange="sendDocument(this)"/>
-  <div id="attachMenu">
-    <button onclick="document.getElementById('fileIn').click();closeAttachMenu()"><span class="llm-ico">🖼️</span>Fotoğraf / Video</button>
-    <button onclick="document.getElementById('docIn').click();closeAttachMenu()"><span class="llm-ico">📄</span>Dosya (PDF, APK, vb.)</button>
+  <div id="quickActionsRow">
+    <button class="sm-btn" onclick="toggleEmoji()"><svg class="icon"><use href="#i-emoji"/></svg></button>
+    <button class="sm-btn" id="attachBtn" onclick="event.stopPropagation();toggleAttachMenu()"><svg class="icon"><use href="#i-paperclip"/></svg></button>
+    <input type="file" id="fileIn" accept="image/*,video/*" style="display:none" onchange="sendMedia(this)"/>
+    <input type="file" id="docIn" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.json,.zip,.rar,.7z,.apk,.mp3,.m4a,.wav,application/pdf,application/vnd.android.package-archive" style="display:none" onchange="sendDocument(this)"/>
+    <div id="attachMenu">
+      <button onclick="document.getElementById('fileIn').click();closeAttachMenu()"><span class="llm-ico">🖼️</span>Fotoğraf / Video</button>
+      <button onclick="document.getElementById('docIn').click();closeAttachMenu()"><span class="llm-ico">📄</span>Dosya (PDF, APK, vb.)</button>
+    </div>
+    <button class="sm-btn" id="cameraBtn" onclick="event.stopPropagation();toggleCameraMenu()"><svg class="icon"><use href="#i-camera"/></svg></button>
+    <button class="sm-btn" id="vanishBtn" onclick="event.stopPropagation();toggleVanishMode()" title="Kaybolan mesaj modu">👻</button>
+    <input type="file" id="cameraPhotoIn" accept="image/*" capture="environment" style="display:none" onchange="sendCameraMedia(this,false)"/>
+    <input type="file" id="cameraVideoIn" accept="video/*" capture="environment" style="display:none" onchange="sendCameraMedia(this,true)"/>
+    <div id="cameraMenu">
+      <button onclick="document.getElementById('cameraPhotoIn').click();closeCameraMenu()"><span class="llm-ico">📷</span>Fotoğraf çek</button>
+      <button onclick="document.getElementById('cameraVideoIn').click();closeCameraMenu()"><span class="llm-ico">🎥</span>Video çek</button>
+    </div>
   </div>
-  <button class="sm-btn" id="cameraBtn" onclick="event.stopPropagation();toggleCameraMenu()"><svg class="icon"><use href="#i-camera"/></svg></button>
-  <button class="sm-btn" id="vanishBtn" onclick="event.stopPropagation();toggleVanishMode()" title="Kaybolan mesaj modu">👻</button>
-  <input type="file" id="cameraPhotoIn" accept="image/*" capture="environment" style="display:none" onchange="sendCameraMedia(this,false)"/>
-  <input type="file" id="cameraVideoIn" accept="video/*" capture="environment" style="display:none" onchange="sendCameraMedia(this,true)"/>
-  <div id="cameraMenu">
-    <button onclick="document.getElementById('cameraPhotoIn').click();closeCameraMenu()"><span class="llm-ico">📷</span>Fotoğraf çek</button>
-    <button onclick="document.getElementById('cameraVideoIn').click();closeCameraMenu()"><span class="llm-ico">🎥</span>Video çek</button>
-  </div>
-  <div id="msgInputWrap">
-    <textarea id="msgInput" placeholder="Bir şeyler yaz tatlım…" rows="1"
-      oninput="autoResize(this);onTyping();toggleSendMicBtn()"
-      onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMsg()}"></textarea>
-    <button class="mi-btn" id="locBtn" onclick="sendLocation()"
-      onpointerdown="locBtnPointerDown()" onpointerup="locBtnPointerUp()" onpointerleave="locBtnPointerUp()"
-      title="Konum Gönder (basılı tut: Canlı Konum)">📍</button>
-    <button class="mi-btn" id="dictateBtn" onclick="toggleDictation()"
-      title="Konuşarak yaz (metne çevir)"><svg class="icon"><use href="#i-dictate"/></svg></button>
-  </div>
-  <div id="liveLocMenu">
-    <button onclick="sendLocation();closeLiveLocMenu()"><span class="llm-ico">📍</span>Tek seferlik konum gönder</button>
-    <button onclick="startLiveLocation();closeLiveLocMenu()"><span class="llm-ico">🔴</span>Canlı konum paylaş</button>
-  </div>
-  <button class="send-btn" id="sendBtn" onclick="sendMsg()"><svg class="icon"><use href="#i-send"/></svg></button>
-  <button class="send-btn" id="voiceMicBtn"
-    onpointerdown="micPointerDown(event)" onpointerup="micPointerUp(event)" onpointerleave="micPointerCancel(event)" onpointercancel="micPointerCancel(event)"
-    title="Basılı tut: Sesli mesaj kaydet"><svg class="icon"><use href="#i-mic"/></svg></button>
-  <div class="mic-lock-pill" id="micLockPill">
-    <svg class="icon lock-ico"><use href="#i-lock"/></svg>
-    <svg class="icon chev"><use href="#i-chevron-down"/></svg>
+  <div id="composerRow">
+    <div id="msgInputWrap">
+      <textarea id="msgInput" placeholder="Bir şeyler yaz tatlım…" rows="1"
+        oninput="autoResize(this);onTyping();toggleSendMicBtn()"
+        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMsg()}"></textarea>
+      <button class="mi-btn" id="locBtn" onclick="sendLocation()"
+        onpointerdown="locBtnPointerDown()" onpointerup="locBtnPointerUp()" onpointerleave="locBtnPointerUp()"
+        title="Konum Gönder (basılı tut: Canlı Konum)">📍</button>
+      <button class="mi-btn" id="dictateBtn" onclick="toggleDictation()"
+        title="Konuşarak yaz (metne çevir)"><svg class="icon"><use href="#i-dictate"/></svg></button>
+    </div>
+    <div id="liveLocMenu">
+      <button onclick="sendLocation();closeLiveLocMenu()"><span class="llm-ico">📍</span>Tek seferlik konum gönder</button>
+      <button onclick="startLiveLocation();closeLiveLocMenu()"><span class="llm-ico">🔴</span>Canlı konum paylaş</button>
+    </div>
+    <button class="send-btn" id="sendBtn" onclick="sendMsg()"><svg class="icon"><use href="#i-send"/></svg></button>
+    <button class="send-btn" id="voiceMicBtn"
+      onpointerdown="micPointerDown(event)" onpointerup="micPointerUp(event)" onpointerleave="micPointerCancel(event)" onpointercancel="micPointerCancel(event)"
+      title="Basılı tut: Sesli mesaj kaydet"><svg class="icon"><use href="#i-mic"/></svg></button>
+    <div class="mic-lock-pill" id="micLockPill">
+      <svg class="icon lock-ico"><use href="#i-lock"/></svg>
+      <svg class="icon chev"><use href="#i-chevron-down"/></svg>
+    </div>
   </div>
 </div>
 
