@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260708-181641-bd2862c">
+<html lang="tr" data-build="askbahcem-20260708-185718-66ae4b9">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -2450,15 +2450,14 @@ function doLogout(){
    ACİL KAPATMA (panik düğmesi)
    Girdi çubuğundaki 👻 ikonunun yanındaki kırmızı yanıp sönen SVG düğme.
    Amaç: biri aniden yaklaşırsa TEK dokunuşla uygulamayı tamamen gözden
-   kaybetmek. doLogout()'tan farkı: onay penceresi YOK (anında çalışmalı),
-   kamuflaja dönmeden önce ekranı hemen boşaltır, ve en sonunda uygulamayı
-   gerçekten KAPATMAYI dener — bu yüzden normal çıkıştan farklı olarak
-   window.close() çağrılır. Tarayıcı sekmesi script tarafından açılmadıysa
+   kaybetmek. doLogout()'tan farkı: onay penceresi YOK (anında çalışmalı).
+   DÜZELTME: artık kamuflaj (Regl Sayaç) ekranına HİÇ geçilmiyor — ekran
+   anında boşaltılıp uygulama GERÇEKTEN kapatılmaya çalışılıyor
+   (window.close()). Tarayıcı sekmesi script tarafından açılmadıysa
    (yani normal bir sekme/PWA'ysa) tarayıcılar güvenlik gereği bunu
-   engelleyebilir; bu durumda uygulama arka planda görünmez şekilde
-   kamuflaj ekranına (Regl Sayaç) düşürülür ve geçmiş/oturum durumu
-   temizlenir — telefonu alan kişi "son kullanılan uygulamalar" listesine
-   bakmadıkça gerçek sohbeti hiçbir zaman göremez.
+   engelleyebilir; bu durumda da ekran zaten boşaltılmış ve sayfa
+   about:blank'e yönlendirilmiş olduğu için gerçek sohbetten hiçbir iz
+   kalmaz — kamuflaj ekranına düşülmez.
 ═══════════════════════════════════════ */
 function panicClose(){
   try{
@@ -2481,31 +2480,29 @@ function panicClose(){
       }
     }catch(e){}
   }catch(e){}
-  // Ekranı hemen kamufle et — gerçek arayüzden hiçbir iz kalmasın.
+  // DÜZELTME: Panik düğmesine basınca artık kamuflaj (Regl Sayaç) ekranına
+  // HİÇ geçilmiyor — kullanıcı "direkt kapatsın, kamufle geçmesin" istedi.
+  // Bunun yerine ekranı anında düz siyah/boş bırakıp uygulamayı GERÇEKTEN
+  // kapatmayı deniyoruz. Session verisi yine temizleniyor (sayfa tekrar
+  // açılırsa güvenlik için giriş ekranından başlasın).
   try{
-    ['chatWrap','inputBar','reactionBar','sidebar','sideOverlay','msgActionMenu',
-     'attachMenu','cameraMenu','emojiPicker','hdMoreMenu','callOverlay'].forEach(id=>{
-      const el=document.getElementById(id);if(el){el.style.display='none';el.classList.remove('open','show')}
-    });
-    const header=document.getElementById('header');if(header)header.style.display='none';
-    isAdmin=false;myId='';myName='';activeRoom='';activePartner=null;
-    const login=document.getElementById('login');
-    if(login){login.style.display='';login.classList.remove('show')}
-    const camo=document.getElementById('cycleCamo');
-    if(camo)camo.classList.remove('hide');
-    document.title='Regl Sayaç';
-    if(typeof initCycleCamo==='function')initCycleCamo();
+    document.documentElement.innerHTML='';
+    document.documentElement.style.background='#000';
   }catch(e){}
-  // Son çare: uygulamayı GERÇEKTEN kapatmayı dene. Kurulu PWA/WebAPK
-  // içinde genelde işe yarar; normal tarayıcı sekmesinde engellenirse
-  // (hiçbir hata fırlatmadan sessizce yok sayılır) yukarıdaki kamuflaj
-  // ekranı zaten devrede kalmış olur.
+  try{
+    isAdmin=false;myId='';myName='';activeRoom='';activePartner=null;
+  }catch(e){}
+  // Uygulamayı GERÇEKTEN kapatmayı dene. Kurulu PWA/WebAPK içinde genelde
+  // işe yarar. Normal tarayıcı sekmesinde tarayıcı bunu güvenlik gereği
+  // engelleyebilir (sessizce yok sayılır) — bu durumda da az önce ekranı
+  // zaten boşalttığımız için kamuflaj ya da gerçek arayüzden hiçbir iz
+  // kalmıyor.
   try{ window.close(); }catch(e){}
-  // window.close() engellenmiş olabileceğinden, kısa bir gecikmeyle sayfayı
-  // temiz bir adrese yönlendirip tarayıcı geçmişindeki mevcut girdiyi
-  // değiştiriyoruz (geri tuşuyla sohbete geri dönülmesin diye).
+  // window.close() engellenmiş olabileceğinden, sekmeyi uygulamanın kendi
+  // adresinden tamamen koparıp boş bir sayfaya yönlendiriyoruz — geri tuşuyla
+  // da sohbete dönülemez, kamuflaj ekranına da düşülmez.
   setTimeout(()=>{
-    try{ location.replace(location.pathname); }catch(e){}
+    try{ location.replace('about:blank'); }catch(e){}
   },60);
 }
 
@@ -3375,10 +3372,19 @@ function listenMessages(){
     }
     msgs.forEach(m=>deletedStateMap.set(m.id,!!m.deleted));
     msgs.forEach(m=>{ if(m.viewLimit)viewCountStateMap.set(m.id,m.viewCount||0) });
-    // Kaybolan mesaj: karşı taraf okuduysa (read:true) ama henüz kaybolmadıysa,
-    // hangi taraf açıksa o zamanlayıcıyı kurar — böylece okuyan taraf uygulamayı
-    // kapatsa bile mesaj planlandığı gibi kaybolur.
-    msgs.forEach(m=>{ if(m.vanish&&m.read&&!m.deleted)scheduleVanish(m.id) });
+    // Kaybolan mesaj: karşı taraf okuduysa (read:true) ama henüz kaybolmadıysa
+    // silme zamanlayıcısını kuruyoruz.
+    // DÜZELTME: Bu daha önce mesajı GÖREN taraf (okuyan) hangisiyse o
+    // tetikliyordu. Ama Firestore yazma izinleri sadece mesajın SAHİBİNE
+    // (senderId) ve admin'e mesajı güncelleme/silme hakkı tanıdığından,
+    // misafir admin'in mesajını "okundu" yapabiliyor ama deleted/vanished
+    // alanını YAZAMIYORDU (izin reddi sessizce yutuluyordu) — bu yüzden
+    // misafirin mesajları düzgün kayboluyor (admin siliyor, adminin her
+    // zaman yetkisi var) ama adminin mesajları hiç kaybolmuyordu (misafirin
+    // silme yetkisi yok). Artık her istemci SADECE KENDİ gönderdiği mesajı
+    // (ya da admin ise herhangi birini) siliyor — böylece silme her zaman
+    // yazma iznine sahip bir istemci tarafından yapılıyor.
+    msgs.forEach(m=>{ if(m.vanish&&m.read&&!m.deleted&&(m.senderId===myId||isAdmin))scheduleVanish(m.id) });
     // Sarı tik → yeşil: karşı tarafın bizim mesajlarımızı okuyup okumadığını
     // ekrandaki tiklere yansıt (mesaj listesi her güncellendiğinde çalışır,
     // böylece karşı taraf mesajı okuduğu an tik anında yeşile döner).
