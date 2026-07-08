@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260708-190339-192c954">
+<html lang="tr" data-build="askbahcem-20260708-221225-cd736fc">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -484,6 +484,8 @@ svg#loveArrow{width:26px!important;height:14px!important;display:block!important
 .msg-row.me .bwrap{align-items:flex-end}
 .msg-row.them .bwrap{align-items:flex-start}
 .bubble{padding:10px 14px;border-radius:20px;font-size:.9rem;line-height:1.48;word-break:break-word;font-weight:500;position:relative;isolation:isolate;transition:box-shadow .2s,transform .2s}
+.bubble.tts-speaking{box-shadow:0 0 0 2px rgba(232,87,126,.65),0 0 14px rgba(232,87,126,.45)}
+.bubble.tts-speaking::after{content:'🔊';position:absolute;top:-9px;right:-6px;font-size:.72rem;background:#e8577e;border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,.35)}
 .bubble::before{content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:-1;background-repeat:repeat;background-size:16px 16px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Cpath d='M8 13.2s-4.8-3-4.8-6.3C3.2 4.9 4.7 3.8 6.1 3.8c.9 0 1.8.5 1.9 1.6.1-1.1 1-1.6 1.9-1.6 1.4 0 2.9 1.1 2.9 3.1 0 3.3-4.8 6.3-4.8 6.3z' fill='white'/%3E%3C/svg%3E")}
 .bubble.me::before{opacity:.06}
 .bubble.them::before{opacity:.09;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Cpath d='M8 13.2s-4.8-3-4.8-6.3C3.2 4.9 4.7 3.8 6.1 3.8c.9 0 1.8.5 1.9 1.6.1-1.1 1-1.6 1.9-1.6 1.4 0 2.9 1.1 2.9 3.1 0 3.3-4.8 6.3-4.8 6.3z' fill='%23c0395a'/%3E%3C/svg%3E")}
@@ -2214,6 +2216,30 @@ function withTimeout_(promise,ms,label){
   ]);
 }
 
+// DÜZELTME: Uygulama arka plana alınıp (ör. telefon kilitlenip, başka bir
+// uygulamaya geçilip ya da panik/kapatma tuşuna basılıp) tam giriş isteği
+// sürerken tekrar öne getirildiğinde, mobil tarayıcılar arka plandayken
+// setTimeout/fetch zamanlayıcılarını kısıtlayabiliyor (throttling) — bu
+// yüzden aşağıdaki 8sn'lik AbortController zaman aşımı hiç tetiklenmeden
+// giriş düğmesi "Kontrol ediliyor…" yazısında sonsuza kadar takılı
+// kalabiliyordu. Bu iki değişken bir giriş isteğinin ne zaman başladığını
+// tutar; sayfa tekrar görünür olduğunda çok uzun süredir asılı kalmış bir
+// istek varsa aşağıdaki dinleyici düğmeyi zorla eski haline döndürür.
+let loginRequestActive=false;
+let loginRequestStartedAt=0;
+function resetStuckLoginButtonIfNeeded(){
+  if(!loginRequestActive)return;
+  if(Date.now()-loginRequestStartedAt<9000)return; // henüz normal süre içinde, dokunma
+  loginRequestActive=false;
+  const btn=document.querySelector('.btn-enter');
+  if(btn){btn.disabled=false;btn.innerHTML='<svg class="icon icon-sm" viewBox="0 0 24 24" fill="currentColor" style="stroke:none" xmlns="http://www.w3.org/2000/svg"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>Bahçeye Gir'}
+  showToast('Bağlantı zaman aşımına uğradı, tekrar dene','warn');
+}
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible')resetStuckLoginButtonIfNeeded() });
+// bfcache'den (geri/ileri önbelleği) geri dönüşleri de yakala — bu durumda
+// visibilitychange bazı tarayıcılarda tetiklenmeyebiliyor.
+window.addEventListener('pageshow',resetStuckLoginButtonIfNeeded);
+
 async function doLogin(){
   console.log('doLogin: BAŞLADI');
   const uname=document.getElementById('uname').value.trim();
@@ -2232,6 +2258,7 @@ async function doLogin(){
   // sayfa yenilemesinde otomatik dolduruluyor ve kullanıcı fark etmeden aynı
   // yanlış şifreyle sürekli "hatalı" hatası almaya devam ediyordu.
 
+  loginRequestActive=true;loginRequestStartedAt=Date.now();
   if(btn){btn.disabled=true;btn.innerHTML='<svg class="icon icon-sm"><use href="#i-refresh"/></svg>Kontrol ediliyor…'}
   console.log('doLogin: Cloudflare Worker\'a soruluyor (admin + misafir tek noktadan)…');
 
@@ -2296,6 +2323,7 @@ async function doLogin(){
     document.getElementById('upass').value='';
     showToast('Kullanıcı adı veya şifre hatalı','error');
   }finally{
+    loginRequestActive=false;
     if(btn){btn.disabled=false;btn.innerHTML='<svg class="icon icon-sm" viewBox="0 0 24 24" fill="currentColor" style="stroke:none" xmlns="http://www.w3.org/2000/svg"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>Bahçeye Gir'}
   }
 }
@@ -2450,14 +2478,21 @@ function doLogout(){
    ACİL KAPATMA (panik düğmesi)
    Girdi çubuğundaki 👻 ikonunun yanındaki kırmızı yanıp sönen SVG düğme.
    Amaç: biri aniden yaklaşırsa TEK dokunuşla uygulamayı tamamen gözden
-   kaybetmek. doLogout()'tan farkı: onay penceresi YOK (anında çalışmalı).
-   DÜZELTME: artık kamuflaj (Regl Sayaç) ekranına HİÇ geçilmiyor — ekran
-   anında boşaltılıp uygulama GERÇEKTEN kapatılmaya çalışılıyor
-   (window.close()). Tarayıcı sekmesi script tarafından açılmadıysa
-   (yani normal bir sekme/PWA'ysa) tarayıcılar güvenlik gereği bunu
-   engelleyebilir; bu durumda da ekran zaten boşaltılmış ve sayfa
-   about:blank'e yönlendirilmiş olduğu için gerçek sohbetten hiçbir iz
-   kalmaz — kamuflaj ekranına düşülmez.
+   kaybetmek. doLogout()'tan farkı: onay penceresi YOK (anında çalışmalı),
+   kamuflaj (Regl Sayaç) ekranına HİÇ geçilmez.
+   DÜZELTME: Önceki sürüm document.documentElement.innerHTML='' ile TÜM
+   sayfayı (head dahil) siliyor, sonra location.replace('about:blank') ile
+   yönlendiriyordu. Bazı kurulu PWA/WebAPK ortamlarında bu, uygulamanın
+   GERÇEKTEN kapanmasını sağlamıyor — sekme/görev arka planda donmuş halde
+   kalıyor, kullanıcı uygulamayı bir sonraki açışında ya bu donmuş kopyayı
+   (ör. tam da bir giriş denemesi sırasında yakalanmışsa "Kontrol
+   ediliyor…" yazısında asılı kalmış halde) buluyor, ya da üstüne bambaşka
+   YENİ bir kopya daha açılıp görev listesinde çoğalmaya (ard arda birden
+   fazla kopya) yol açıyordu. Artık sayfa içeriği YOK EDİLMİYOR ve zorla
+   başka bir adrese YÖNLENDİRİLMİYOR — sadece düz siyah bir katman arayüzün
+   üstüne kapatılıp uygulama gerçekten kapatılmaya çalışılıyor. Bu daha
+   güvenli: script tarafından açılmamış sekmelerde window.close() sessizce
+   yok sayılsa bile sayfa tutarlı/canlı kalıyor, donma ya da çoğalma olmuyor.
 ═══════════════════════════════════════ */
 function panicClose(){
   try{
@@ -2479,31 +2514,24 @@ function panicClose(){
         if(activeRoom)set(dbRef(rtdb,`viewing/${activeRoom}/${myId}`),{viewing:false});
       }
     }catch(e){}
-  }catch(e){}
-  // DÜZELTME: Panik düğmesine basınca artık kamuflaj (Regl Sayaç) ekranına
-  // HİÇ geçilmiyor — kullanıcı "direkt kapatsın, kamufle geçmesin" istedi.
-  // Bunun yerine ekranı anında düz siyah/boş bırakıp uygulamayı GERÇEKTEN
-  // kapatmayı deniyoruz. Session verisi yine temizleniyor (sayfa tekrar
-  // açılırsa güvenlik için giriş ekranından başlasın).
-  try{
-    document.documentElement.innerHTML='';
-    document.documentElement.style.background='#000';
-  }catch(e){}
-  try{
     isAdmin=false;myId='';myName='';activeRoom='';activePartner=null;
   }catch(e){}
+  // Ekranı sayfayı bozmadan düz siyah bir katmanla anında örtüyoruz — gerçek
+  // arayüzden hiçbir iz kalmaz, kamuflaj ekranına da geçilmez.
+  try{
+    let blk=document.getElementById('panicBlackout');
+    if(!blk){
+      blk=document.createElement('div');
+      blk.id='panicBlackout';
+      blk.style.cssText='position:fixed;inset:0;background:#000;z-index:2147483647';
+      document.body.appendChild(blk);
+    }
+  }catch(e){}
   // Uygulamayı GERÇEKTEN kapatmayı dene. Kurulu PWA/WebAPK içinde genelde
-  // işe yarar. Normal tarayıcı sekmesinde tarayıcı bunu güvenlik gereği
-  // engelleyebilir (sessizce yok sayılır) — bu durumda da az önce ekranı
-  // zaten boşalttığımız için kamuflaj ya da gerçek arayüzden hiçbir iz
-  // kalmıyor.
+  // işe yarar; normal tarayıcı sekmesinde tarayıcı bunu güvenlik gereği
+  // engelleyebilir (hiçbir hata fırlatmadan sessizce yok sayılır) — bu
+  // durumda da yukarıdaki siyah katman zaten devrede kalır.
   try{ window.close(); }catch(e){}
-  // window.close() engellenmiş olabileceğinden, sekmeyi uygulamanın kendi
-  // adresinden tamamen koparıp boş bir sayfaya yönlendiriyoruz — geri tuşuyla
-  // da sohbete dönülemez, kamuflaj ekranına da düşülmez.
-  setTimeout(()=>{
-    try{ location.replace('about:blank'); }catch(e){}
-  },60);
 }
 
 /* ═══════════════════════════════════════
@@ -3157,6 +3185,7 @@ function renderSidebar(presenceData){
 function selectUser(uid,name,emoji){
   if(unsubMsg)unsubMsg();
   if(unsubPresence)unsubPresence();
+  stopReadAloud(); // başka sohbete geçilirken önceki mesajın sesli okunması kesilir
   // Sohbet değiştiriliyor: eski odada "bakıyor" olarak takılı kalmasın.
   if(activeRoom&&myId)setMyViewing(false);
   // Önceki sohbetin sinyal dinleyicilerini kapat — kapatılmazsa eski odaya bağlı
@@ -3967,6 +3996,15 @@ function openMsgMenu(msg,isMe){
   if(isMe&&msg.type==='text'){
     html+=`<button onclick="openEditMsgModal('${msg.id}')"><svg class="icon"><use href="#i-edit"/></svg>Düzenle</button>`;
   }
+  // "Sesli Oku" (TTS): metin mesajlarında mesajın kendisini, sesli
+  // mesajlarda ise (varsa) otomatik çıkarılmış yazıya dökülmüş metni
+  // tarayıcının yerleşik SpeechSynthesis motoruyla okur. Uygun içerik
+  // yoksa (ör. transkriptsiz sesli mesaj, fotoğraf, konum vs.) seçenek
+  // menüde hiç görünmez.
+  const ttsText=msg.type==='text'?(msg.text||'').trim():(msg.type==='voice'?(msg.transcript||'').trim():'');
+  if(ttsText&&typeof window.speechSynthesis!=='undefined'){
+    html+=`<button onclick="readMsgAloud('${msg.id}');closeMsgMenu()"><svg class="icon"><use href="#i-sound-on"/></svg>Sesli Oku</button>`;
+  }
   html+=`<button onclick="deleteForMe()"><svg class="icon"><use href="#i-trash"/></svg>Benden Sil</button>`;
   if(isMe){
     html+=`<button class="danger" onclick="deleteForEveryone()"><svg class="icon"><use href="#i-trash"/></svg>Herkesten Sil</button>`;
@@ -3990,6 +4028,48 @@ function closeMsgMenu(){
   document.getElementById('msgActionOverlay').classList.remove('open');
   msgMenuTarget=null;
 }
+
+/* ── SESLİ OKU (TTS): tarayıcının yerleşik SpeechSynthesis motoruyla
+   mesajı yüksek sesle okur. Aynı anda en fazla bir mesaj okunur — yeni
+   bir okuma başlatılırsa öncekini iptal ederiz. Okunan balonun üstünde
+   küçük bir "okunuyor" rozeti gösterip bitince/iptal edilince kaldırırız
+   ki kullanıcı hangi mesajın o an okunduğunu görsün. ── */
+let ttsCurrentMsgId=null;
+function stopReadAloud(){
+  try{window.speechSynthesis&&window.speechSynthesis.cancel()}catch(e){}
+  if(ttsCurrentMsgId){
+    const row=bubbleEls.get(ttsCurrentMsgId);
+    const b=row&&row.querySelector('.bubble');
+    if(b)b.classList.remove('tts-speaking');
+  }
+  ttsCurrentMsgId=null;
+}
+function readMsgAloud(msgId){
+  if(typeof window.speechSynthesis==='undefined'){showToast('Bu cihaz/tarayıcı sesli okumayı desteklemiyor','error');return}
+  const msg=(lastRenderedMsgs||[]).find(m=>m.id===msgId);
+  if(!msg)return;
+  const text=msg.type==='text'?(msg.text||'').trim():(msg.transcript||'').trim();
+  if(!text){showToast('Okunacak metin yok','warn');return}
+  // Aynı mesaja tekrar dokunulduysa (okunuyorken) sadece durdur.
+  if(ttsCurrentMsgId===msgId){stopReadAloud();return}
+  stopReadAloud();
+  try{
+    const u=new SpeechSynthesisUtterance(text);
+    u.lang='tr-TR';
+    const trVoice=(window.speechSynthesis.getVoices()||[]).find(v=>/^tr/i.test(v.lang));
+    if(trVoice)u.voice=trVoice;
+    u.onend=()=>{ if(ttsCurrentMsgId===msgId)stopReadAloud() };
+    u.onerror=()=>{ if(ttsCurrentMsgId===msgId)stopReadAloud() };
+    ttsCurrentMsgId=msgId;
+    const row=bubbleEls.get(msgId);
+    const b=row&&row.querySelector('.bubble');
+    if(b)b.classList.add('tts-speaking');
+    window.speechSynthesis.speak(u);
+  }catch(e){console.error(e);showToast('Sesli okuma başlatılamadı','error');ttsCurrentMsgId=null}
+}
+// Sohbet değiştirilirken veya sayfa arka plana alınırken okumayı kesiyoruz
+// ki kapanan/gizlenen bir sohbetin sesi karşı sohbette çalmaya devam etmesin.
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState!=='visible')stopReadAloud() });
 async function deleteForMe(){
   if(!msgMenuTarget)return;
   addHidden(activeRoom,msgMenuTarget.id);
