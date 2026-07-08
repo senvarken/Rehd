@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260707-152432-b6e20e1">
+<html lang="tr" data-build="askbahcem-20260708-154823-6fb0c30">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -2517,14 +2517,17 @@ async function refreshManageUserList(){
     manageUsersCache.forEach(u=>{
       const row=document.createElement('div');
       row.className='manage-row';
+      const online=!!(lastPresenceData&&lastPresenceData[u.uid]&&lastPresenceData[u.uid].online);
       row.innerHTML=`
-        <div class="ui-av">${initialOf(u.name||u.uid)}</div>
+        <div class="ui-av" title="${online?'Çevrimiçi':'Çevrimdışı'}">${initialOf(u.name||u.uid)}<span class="ui-ondot" style="background:${online?'#43d17a':'#5c4048'}"></span></div>
         <div class="manage-row-name">${esc(u.name||u.uid)}</div>
         <div class="ui-actions">
+          <button class="ui-action-btn" title="Mesaj Gönder"><svg class="icon icon-sm"><use href="#i-chat"/></svg></button>
           <button class="ui-action-btn" title="Şifre değiştir"><svg class="icon icon-sm"><use href="#i-edit"/></svg></button>
           <button class="ui-action-btn" title="Kullanıcıyı sil"><svg class="icon icon-sm"><use href="#i-trash"/></svg></button>
         </div>`;
-      const [editBtn,delBtn]=row.querySelectorAll('.ui-action-btn');
+      const [msgBtn,editBtn,delBtn]=row.querySelectorAll('.ui-action-btn');
+      msgBtn.onclick=()=>{closeUserManage();selectUser(u.uid,u.name||u.uid,u.emoji||'💕')};
       editBtn.onclick=()=>openEditUser(u.uid,u.name||u.uid);
       delBtn.onclick=()=>deleteUser(u.uid,u.name||u.uid);
       list.appendChild(row);
