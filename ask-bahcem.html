@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260708-221225-cd736fc">
+<html lang="tr" data-build="askbahcem-20260708-222207-0cc2e3d">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -493,6 +493,12 @@ svg#loveArrow{width:26px!important;height:14px!important;display:block!important
 .bubble.them{background:var(--bubble-them);color:var(--ink);border-bottom-left-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,.1),0 1px 2px rgba(0,0,0,.06)}
 .bubble img,.bubble video{max-width:220px;max-height:180px;border-radius:14px;display:block;cursor:pointer;object-fit:cover;margin-top:2px}
 .bubble video{max-height:160px}
+.bubble.gif-bubble{padding:4px}
+.bubble.gif-bubble img{margin-top:0;object-fit:contain;background:rgba(0,0,0,.15)}
+.bubble.gif-bubble::before{display:none}
+.bubble.sticker-bubble{padding:0;background:none!important;box-shadow:none!important}
+.bubble.sticker-bubble::before{display:none}
+.bubble.sticker-bubble img{margin-top:0;width:132px;max-width:132px;height:132px;max-height:132px;object-fit:contain;border-radius:0;background:none}
 
 /* ── Kaybolan mesaj "puf" animasyonu ── */
 @keyframes msgPoof{
@@ -801,6 +807,22 @@ svg#loveArrow{width:26px!important;height:14px!important;display:block!important
 #emojiPicker span{font-size:1.3rem;cursor:pointer;padding:5px;border-radius:8px;transition:background .15s;line-height:1}
 #emojiPicker span:hover{background:rgba(255,255,255,.1)}
 
+/* ── GIF / ÇIKARTMA PICKER ── */
+#gifPicker{display:none;flex-direction:column;position:absolute;bottom:111px;left:10px;right:10px;max-width:360px;height:340px;background:#2b0f1c;border:1px solid rgba(242,196,206,.16);border-radius:16px;z-index:60;box-shadow:var(--shadow-lg);overflow:hidden}
+#gifPicker.open{display:flex}
+#gifPickerTabs{display:flex;gap:6px;padding:9px 9px 0}
+.gp-tab{flex:1;border:none;background:rgba(255,255,255,.06);color:#c98a9a;font-weight:700;font-size:.78rem;padding:7px 0;border-radius:10px;cursor:pointer;transition:background .15s,color .15s}
+.gp-tab.active{background:var(--bright);color:#fff}
+#gifPickerSearchWrap{display:flex;align-items:center;gap:6px;margin:9px;padding:7px 10px;background:rgba(255,255,255,.06);border-radius:10px}
+#gifPickerSearchWrap svg{opacity:.6;flex-shrink:0}
+#gifPickerSearchWrap input{flex:1;background:none;border:none;outline:none;color:#f2c4ce;font-size:.85rem}
+#gifPickerSearchWrap input::placeholder{color:#8a5560}
+#gifPickerGrid{flex:1;overflow-y:auto;display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:0 9px 9px;-webkit-overflow-scrolling:touch}
+#gifPickerGrid img{width:100%;border-radius:9px;cursor:pointer;display:block;background:rgba(255,255,255,.05);aspect-ratio:1/1;object-fit:cover;transition:transform .12s}
+#gifPickerGrid img:active{transform:scale(.94)}
+#gifPickerStatus{grid-column:1/-1;text-align:center;color:#8a5560;font-size:.8rem;padding:30px 10px;line-height:1.5}
+#gifPickerStatus a{color:#e8577e;font-weight:700}
+
 /* ── ADMIN REACTION TOOLBAR ── */
 #reactionBar{display:none;align-items:center;justify-content:flex-start;gap:8px;padding:8px 10px;background:rgba(43,15,28,.7);border-top:1px solid rgba(242,196,206,.06);flex-shrink:0;z-index:10;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
 #reactionBar::-webkit-scrollbar{display:none}
@@ -1085,6 +1107,7 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
     <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 22s7-7.4 7-12.5A7 7 0 0 0 5 9.5C5 14.6 12 22 12 22Z"/><circle cx="12" cy="9.5" r="2.4"/></symbol>
     <symbol id="i-buzz" viewBox="0 0 24 24"><path d="M4 8v8M20 8v8M7 5v14M17 5v14"/><rect x="9.5" y="7" width="5" height="10" rx="1.6"/></symbol>
     <symbol id="i-transcript" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></symbol>
+    <symbol id="i-gif" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="3"/><path d="M7.5 9.5v5M12 9.5v5M12 12h2M15.5 9.5v5M15.5 9.5H18M15.5 12H17.5" stroke-width="1.6"/></symbol>
     <symbol id="i-rec-dot" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="12" r="7.5"/></symbol>
     <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4.5-4.5M12 15l4.5-4.5"/><path d="M4 18.5h16"/></symbol>
     <symbol id="i-phone-missed" viewBox="0 0 24 24"><path d="M17 8l-4.5 4.5L8 8"/><path d="M3 15.5c4-4 14-4 18 0l-2 3c-.6.9-1.8 1.1-2.7.5l-2-1.4a1.6 1.6 0 0 1-.6-1.9l.4-1a10 10 0 0 0-6.2 0l.4 1a1.6 1.6 0 0 1-.6 1.9l-2 1.4c-.9.6-2.1.4-2.7-.5l-2-3Z"/></symbol>
@@ -1298,6 +1321,7 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
 <div id="inputBar">
   <div id="quickActionsRow">
     <button class="sm-btn" onclick="toggleEmoji()"><svg class="icon"><use href="#i-emoji"/></svg></button>
+    <button class="sm-btn" id="gifBtn" onclick="event.stopPropagation();toggleGifPicker()" title="GIF / Çıkartma"><svg class="icon"><use href="#i-gif"/></svg></button>
     <button class="sm-btn" onclick="toggleSearchBar()" title="Sohbette Ara"><svg class="icon"><use href="#i-search"/></svg></button>
     <button class="sm-btn nudge-btn" onclick="sendNudge()" title="Titreşim Gönder"><svg class="icon"><use href="#i-buzz"/></svg></button>
     <button class="sm-btn" id="attachBtn" onclick="event.stopPropagation();toggleAttachMenu()"><svg class="icon"><use href="#i-paperclip"/></svg></button>
@@ -1348,6 +1372,19 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
   <div class="vr-dot"></div>
   <span id="dictateStatus">Dinleniyor…</span>
   <button class="dictate-stop" onclick="stopDictation()">Bitir</button>
+</div>
+
+<!-- GIF / ÇIKARTMA PICKER -->
+<div id="gifPicker">
+  <div id="gifPickerTabs">
+    <button class="gp-tab active" data-tab="gif" onclick="setGifPickerTab('gif')">GIF</button>
+    <button class="gp-tab" data-tab="sticker" onclick="setGifPickerTab('sticker')">Çıkartma</button>
+  </div>
+  <div id="gifPickerSearchWrap">
+    <svg class="icon icon-sm"><use href="#i-search"/></svg>
+    <input type="text" id="gifPickerSearch" placeholder="GIF ara…" oninput="onGifSearchInput()"/>
+  </div>
+  <div id="gifPickerGrid"><div id="gifPickerStatus">Yükleniyor…</div></div>
 </div>
 
 <!-- EMOJI PICKER -->
@@ -1652,6 +1689,15 @@ let sessionAdminPassword=null;
 let myName='';
 let myEmoji='🌹';
 let activeRoom='';
+/* ── GIF / ÇIKARTMA (Tenor API) ─────────────────────────────────────────
+   Tenor'un ÜCRETSİZ API anahtarını buraya yapıştır: developers.google.com/tenor
+   adresinden birkaç dakikada, kredi kartı istemeden alınabilir. Anahtar
+   girilmeden bu özellik sadece bir bilgilendirme mesajı gösterir, uygulamanın
+   geri kalanını hiçbir şekilde etkilemez. */
+const TENOR_API_KEY='YOUR_TENOR_API_KEY_HERE';
+let gifPickerTab='gif'; // 'gif' | 'sticker'
+let gifSearchDebounceTmr=null;
+let gifSearchSeq=0; // yarış durumunu (eski sorgunun geç gelen sonucu) önlemek için
 let activePartner=null;
 let unsubMsg=null;
 let unsubPresence=null;
@@ -3745,7 +3791,7 @@ function appendBubble(msg,doScroll=true){
     if(!isAdmin)b.classList.add('deleted-bubble-locked'); // guest için tıklanamaz görünüm
     const dmsg=document.createElement('div');dmsg.className='deleted-msg';
     const who=isMe?'Sen':(msg.senderName||'Karşı taraf');
-    const label=msg.type==='image'?'bir fotoğrafı':(msg.type==='video'?'bir videoyu':(msg.type==='voice'?'bir sesli mesajı':(msg.type==='file'?'bir dosyayı':'bir mesajı')));
+    const label=msg.type==='image'?'bir fotoğrafı':(msg.type==='video'?'bir videoyu':(msg.type==='voice'?'bir sesli mesajı':(msg.type==='gif'?'bir GIF\'i':(msg.type==='sticker'?'bir çıkartmayı':(msg.type==='file'?'bir dosyayı':'bir mesajı')))));
     // Guest'e "görmek için dokun" ipucu bile gösterilmiyor — o içeriği
     // hiçbir şekilde göremez.
     dmsg.innerHTML=`<svg class="icon icon-sm"><use href="#i-trash"/></svg><span>${esc(who)} ${label} sildi${isAdmin?' · görmek için dokun':''}</span>`;
@@ -3795,6 +3841,12 @@ function appendBubble(msg,doScroll=true){
       tDiv.textContent=msg.transcript.trim();
       b.appendChild(tDiv);
     }
+  }
+  else if(msg.type==='gif'||msg.type==='sticker'){
+    b.classList.add(msg.type==='sticker'?'sticker-bubble':'gif-bubble');
+    const img=document.createElement('img');img.src=msg.url;img.loading='lazy';
+    img.onclick=()=>openLb('image',msg.url);
+    b.appendChild(img);
   }
   else if(msg.type==='image'||msg.type==='video'){
     const hasLimit=!!msg.viewLimit;
@@ -4231,6 +4283,24 @@ async function sendMsg(){
   await sendTextMessage(text);
 }
 
+/* ── GIF / ÇIKARTMA gönderimi: seçilen GIF/çıkartma dosyaya YÜKLENMEZ,
+   Tenor'un kendi (herkese açık) CDN adresi doğrudan mesaj olarak kaydedilir
+   — foto/videoda olduğu gibi Cloudinary'ye kopyalanmasına gerek yok. ── */
+async function sendGifMessage(url,isSticker){
+  if(!fb||!activeRoom)return;
+  const replyTo=pendingReply;clearReply();
+  closeGifPicker();
+  try{
+    const {db,collection,addDoc,serverTimestamp}=fb;
+    await addDoc(collection(db,`rooms/${activeRoom}/messages`),{
+      type:isSticker?'sticker':'gif',url,senderId:myId,senderName:myName,senderEmoji:myEmoji,ts:serverTimestamp(),read:false,
+      ...(vanishMode?{vanish:true}:{}),
+      ...(replyTo?{replyTo:{id:replyTo.id,text:replySnippet(replyTo),senderName:replyTo.senderName||'',senderId:replyTo.senderId||''}}:{})
+    });
+    updateRoomMeta(isSticker?'🧸 Çıkartma gönderdi':'🎞️ GIF gönderdi');
+  }catch(e){console.error(e);showToast('Gönderilemedi','error')}
+}
+
 /* ── CEVAPLA (REPLY) ────────────────────────────────────────────────── */
 let pendingReply=null;
 function replySnippet(msg){
@@ -4238,6 +4308,8 @@ function replySnippet(msg){
   if(msg.type==='image')return '📷 Fotoğraf';
   if(msg.type==='video')return '🎥 Video';
   if(msg.type==='voice')return '🎤 Sesli mesaj';
+  if(msg.type==='gif')return '🎞️ GIF';
+  if(msg.type==='sticker')return '🧸 Çıkartma';
   if(msg.type==='location'||msg.type==='liveLocation')return '📍 Konum';
   return 'Mesaj';
 }
@@ -4811,6 +4883,77 @@ document.addEventListener('click',e=>{
   if(menu&&menu.classList.contains('open')&&!menu.contains(e.target)&&e.target.id!=='attachBtn'&&!e.target.closest('#attachBtn'))closeAttachMenu();
 });
 
+/* ── GIF / ÇIKARTMA PANELİ (Tenor API) ───────────────────────────────── */
+function toggleGifPicker(){
+  const p=document.getElementById('gifPicker');
+  if(!p)return;
+  const willOpen=!p.classList.contains('open');
+  document.getElementById('emojiPicker').classList.remove('open');
+  p.classList.toggle('open',willOpen);
+  if(willOpen&&!p._loadedOnce){
+    p._loadedOnce=true;
+    loadGifResults('',true);
+  }
+}
+function closeGifPicker(){document.getElementById('gifPicker').classList.remove('open')}
+document.addEventListener('click',e=>{
+  const p=document.getElementById('gifPicker');
+  if(p&&p.classList.contains('open')&&!p.contains(e.target)&&e.target.id!=='gifBtn'&&!e.target.closest('#gifBtn'))closeGifPicker();
+});
+function setGifPickerTab(tab){
+  gifPickerTab=tab;
+  document.querySelectorAll('.gp-tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
+  const q=document.getElementById('gifPickerSearch').value.trim();
+  loadGifResults(q,true);
+}
+function onGifSearchInput(){
+  clearTimeout(gifSearchDebounceTmr);
+  const q=document.getElementById('gifPickerSearch').value.trim();
+  gifSearchDebounceTmr=setTimeout(()=>loadGifResults(q,true),380);
+}
+function gifPickerStatusHTML(msg){return `<div id="gifPickerStatus">${msg}</div>`}
+async function loadGifResults(query,resetGrid){
+  const grid=document.getElementById('gifPickerGrid');
+  if(!grid)return;
+  if(!TENOR_API_KEY||TENOR_API_KEY==='YOUR_TENOR_API_KEY_HERE'){
+    grid.innerHTML=gifPickerStatusHTML('GIF/çıkartma özelliği için ücretsiz bir Tenor API anahtarı gerekiyor.<br><a href="https://developers.google.com/tenor/guides/quickstart" target="_blank" rel="noopener">Buradan ücretsiz anahtar al</a> ve kodda <code>TENOR_API_KEY</code> alanına yapıştır.');
+    return;
+  }
+  const mySeq=++gifSearchSeq;
+  if(resetGrid)grid.innerHTML=gifPickerStatusHTML('Yükleniyor…');
+  const base='https://tenor.googleapis.com/v2/'+(query?'search':'featured');
+  const params=new URLSearchParams({
+    key:TENOR_API_KEY,client_key:'ask-bahcem-app',limit:'24',
+    contentfilter:'medium',media_filter:'tinygif,gif',
+    ...(query?{q:query}:{}),
+    ...(gifPickerTab==='sticker'?{searchfilter:'sticker'}:{})
+  });
+  try{
+    const res=await fetch(base+'?'+params.toString());
+    if(mySeq!==gifSearchSeq)return; // bu arada başka bir arama başladı, bu sonucu at
+    if(!res.ok)throw new Error('HTTP '+res.status);
+    const data=await res.json();
+    const results=Array.isArray(data.results)?data.results:[];
+    if(!results.length){grid.innerHTML=gifPickerStatusHTML('Sonuç bulunamadı 🥺');return}
+    grid.innerHTML='';
+    results.forEach(item=>{
+      const mf=item.media_formats||{};
+      const thumb=(mf.tinygif&&mf.tinygif.url)||(mf.gif&&mf.gif.url);
+      const full=(mf.gif&&mf.gif.url)||thumb;
+      if(!thumb)return;
+      const img=document.createElement('img');
+      img.src=thumb;img.loading='lazy';img.alt=item.content_description||'';
+      img.onclick=()=>sendGifMessage(full,gifPickerTab==='sticker');
+      grid.appendChild(img);
+    });
+    if(!grid.children.length)grid.innerHTML=gifPickerStatusHTML('Sonuç bulunamadı 🥺');
+  }catch(e){
+    console.error(e);
+    if(mySeq!==gifSearchSeq)return;
+    grid.innerHTML=gifPickerStatusHTML('Yüklenemedi, bağlantını kontrol et 🥺');
+  }
+}
+
 async function startLiveLocation(){
   if(!fb||!activeRoom){showToast('Önce bir sohbet seç','warn');return}
   if(!navigator.geolocation){showToast('Konum bu cihazda desteklenmiyor','error');return}
@@ -5137,6 +5280,7 @@ let recAudioCtx=null,recAnalyser=null,recWaveTimer=null,recWaveform=[];
    olmadan da kayıt normal şekilde çalışmaya devam eder. ── */
 let recRecognition=null;
 let recTranscript='';
+let recTranscriptSessionBase=''; // motor yeniden başladığında önceki session'ların metnini korumak için
 const REC_CANCEL_THRESHOLD=70;
 const REC_LOCK_THRESHOLD=58;
 
@@ -5180,26 +5324,45 @@ function downsampleWaveform(arr,n){
 }
 function startRecTranscription(){
   recTranscript='';
+  recTranscriptSessionBase='';
   const Ctor=getSpeechRecognitionCtor();
   if(!Ctor)return; // desteklenmiyor — transkriptsiz kayıt normal devam eder
   try{
     const rec=new Ctor();
     rec.lang='tr-TR';
     rec.continuous=true;
-    rec.interimResults=false;
+    // DÜZELTME (ASIL SEBEP): interimResults=false iken tarayıcı bir cümleyi
+    // sadece konuşmada BELİRGİN BİR SESSİZLİK molası algıladıktan SONRA
+    // "final" (kesinleşmiş) sayıyor. Kısa sesli mesajlarda (birkaç saniye,
+    // hiç durmadan tek nefeste konuşulan) kayıt bitip rec.stop() çağrıldığında
+    // motor henüz HİÇBİR şeyi "final" işaretlememiş oluyordu — rec.stop()
+    // de bekleyen/kesinleşmemiş sonucu tamamlamadan direkt atıyor, bu yüzden
+    // recTranscript hep boş kalıp transkript hiç görünmüyordu. Şimdi
+    // interimResults=true yapıp HER onresult'ta o ana kadarki TÜM sonucu
+    // (kesinleşmiş + hâlâ kesinleşmemiş) yeniden inşa ediyoruz; böylece kayıt
+    // aniden kesilse bile elimizde en azından yaklaşık bir metin kalıyor —
+    // hiç transkript göstermemektense kesinleşmemiş de olsa bir metin
+    // göstermek çok daha faydalı.
+    rec.interimResults=true;
     rec.onresult=e=>{
-      let chunk='';
-      for(let i=e.resultIndex;i<e.results.length;i++){
-        if(e.results[i].isFinal)chunk+=e.results[i][0].transcript;
+      let combined='';
+      for(let i=0;i<e.results.length;i++){
+        const t=(e.results[i][0]&&e.results[i][0].transcript||'').trim();
+        if(t)combined+=(combined?' ':'')+t;
       }
-      chunk=chunk.trim();
-      if(chunk)recTranscript=(recTranscript?recTranscript+' ':'')+chunk;
+      recTranscript=((recTranscriptSessionBase?recTranscriptSessionBase+' ':'')+combined).trim();
     };
-    rec.onerror=()=>{}; // sessizce yoksay, kayıt/gönderim buna bağlı değil
+    rec.onerror=(ev)=>{ console.warn('Sesli mesaj transkript hatası:',ev&&ev.error); };
     rec.onend=()=>{
       // Bazı tarayıcılar (özellikle Android) sesli aralıklarda motoru
-      // kendiliğinden durdurur — kayıt hâlâ sürüyorsa sessizce yeniden başlat.
-      if(recRecognition===rec&&mediaRecorder){try{rec.start()}catch(e){}}
+      // kendiliğinden durdurur — kayıt hâlâ sürüyorsa sessizce yeniden
+      // başlatıyoruz. Yeniden başlayan session'ın e.results dizisi sıfırdan
+      // başladığından, o ana kadarki metni önce "kalıcı taban"a yazıyoruz —
+      // aksi halde her yeniden başlamada önceki sözler kaybolurdu.
+      if(recRecognition===rec&&mediaRecorder){
+        recTranscriptSessionBase=recTranscript;
+        try{rec.start()}catch(e){}
+      }
     };
     recRecognition=rec;
     rec.start();
@@ -6000,7 +6163,7 @@ function notifyIncomingMessage(msg){
   // kapalıyken) çalışmaz — bu JS ile aşılamaz, tarayıcı güvenlik kısıtı. Sekme
   // açık/görünürken titreşim burada normal şekilde çalışır.
   vib([300,120,300,120,400]);
-  const preview=msg.type==='text'?msg.text:(msg.type==='image'?'Fotoğraf gönderdi':(msg.type==='video'?'Video gönderdi':(msg.type==='voice'?'🎤 Sesli mesaj gönderdi':(msg.type==='file'?`📄 ${msg.fileName||'Dosya'} gönderdi`:(msg.type==='location'?'📍 Konum gönderdi':(msg.type==='liveLocation'?'🔴 Canlı konum':(msg.text||'Arama')))))));
+  const preview=msg.type==='text'?msg.text:(msg.type==='image'?'Fotoğraf gönderdi':(msg.type==='video'?'Video gönderdi':(msg.type==='voice'?'🎤 Sesli mesaj gönderdi':(msg.type==='gif'?'🎞️ GIF gönderdi':(msg.type==='sticker'?'🧸 Çıkartma gönderdi':(msg.type==='file'?`📄 ${msg.fileName||'Dosya'} gönderdi`:(msg.type==='location'?'📍 Konum gönderdi':(msg.type==='liveLocation'?'🔴 Canlı konum':(msg.text||'Arama')))))))));
   const senderName=msg.senderName||'Mesaj';
   // Admin, mesajı atan kişinin panelinde olmasa bile toast'a tıklayınca
   // doğrudan o kişinin sohbetine geçsin.
@@ -7564,7 +7727,7 @@ function initChatScrollTracking(){
   });
 }
 function autoResize(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,90)+'px'}
-function toggleEmoji(){document.getElementById('emojiPicker').classList.toggle('open')}
+function toggleEmoji(){document.getElementById('gifPicker').classList.remove('open');document.getElementById('emojiPicker').classList.toggle('open')}
 function ae(e){const i=document.getElementById('msgInput');i.value+=e;autoResize(i);toggleSendMicBtn();i.focus();document.getElementById('emojiPicker').classList.remove('open')}
 
 const TOAST_ICONS={success:'i-check1',error:'i-close',warn:'i-bell'};
