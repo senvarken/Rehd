@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260708-173553-9a7c49d">
+<html lang="tr" data-build="askbahcem-20260708-174140-6af5f77">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -5328,6 +5328,12 @@ document.addEventListener('visibilitychange',()=>{
   // sesli arama vb.) çakışmaması için sadece kendi RTDB yolunu yazıyor.
   if(activeRoom&&myId)setMyViewing(!document.hidden);
 });
+// App24/AppCreator24 gibi bazı Android WebView sarmalayıcılarında
+// visibilitychange her zaman güvenilir tetiklenmeyebiliyor. blur/focus ve
+// pagehide/pageshow ile aynı "bakıyor" durumunu yedekli olarak güncelliyoruz.
+window.addEventListener('blur',()=>{if(activeRoom&&myId)setMyViewing(false)});
+window.addEventListener('focus',()=>{if(activeRoom&&myId)setMyViewing(!document.hidden)});
+window.addEventListener('pagehide',()=>{if(activeRoom&&myId)setMyViewing(false)});
 
 /* ═══════════════════════════════════════
    💋 BOMB
@@ -7296,7 +7302,7 @@ function initChatScrollTracking(){
 }
 function autoResize(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,90)+'px'}
 function toggleEmoji(){document.getElementById('emojiPicker').classList.toggle('open')}
-function ae(e){const i=document.getElementById('msgInput');i.value+=e;i.focus();document.getElementById('emojiPicker').classList.remove('open')}
+function ae(e){const i=document.getElementById('msgInput');i.value+=e;autoResize(i);toggleSendMicBtn();i.focus();document.getElementById('emojiPicker').classList.remove('open')}
 
 const TOAST_ICONS={success:'i-check1',error:'i-close',warn:'i-bell'};
 function showToast(msg,kind='info',dur=2600,onClick=null){
