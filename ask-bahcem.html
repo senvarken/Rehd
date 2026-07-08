@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260708-185718-66ae4b9">
+<html lang="tr" data-build="askbahcem-20260708-190339-192c954">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -2838,7 +2838,21 @@ function listenAllIncomingMessagesForAdmin(){
       // sayıp sidebar rozetlerine yansıt (gerçek okunmamış sayısı gözüksün).
       snap.docs.forEach(d=>{
         const msg=d.data();
-        if(!msg||msg.senderId===myId||msg.read===true)return;
+        if(!msg)return;
+        // DÜZELTME: Adminin gönderdiği "kaybolan mesaj" (vanish), o an
+        // görüntülenmeyen bir sohbette karşı taraf tarafından okunmuş
+        // (read:true) ama henüz silinmemiş olabilir — çünkü mesajı silme
+        // yetkisi sadece göndericide (admin) olduğundan, bu yalnızca
+        // admin'in o SPESİFİK sohbeti açıkken çalışan listenMessages()
+        // dinleyicisiyle tetiklenebiliyordu. Admin başka bir sohbete
+        // bakıyorsa (ya da hiç sohbet açık değilse) bu hiç tetiklenmiyor,
+        // mesaj sonsuza dek ekranda asılı kalıyordu. Bu genel (tüm
+        // sohbetleri kapsayan) dinleyici artık bunu da yakalayıp silme
+        // zamanlayıcısını kuruyor.
+        if(msg.senderId===myId&&msg.vanish&&msg.read===true&&!msg.deleted){
+          scheduleVanish(d.id,d.ref.parent.parent.id);
+        }
+        if(msg.senderId===myId||msg.read===true)return;
         const roomId=d.ref.parent.parent.id;
         const otherUid=roomId.split('__').find(id=>id!==myId);
         if(!otherUid)return;
@@ -2849,8 +2863,17 @@ function listenAllIncomingMessagesForAdmin(){
       return;
     }
     snap.docChanges().forEach(ch=>{
-      if(ch.type!=='added')return;
       const msg=ch.doc.data();
+      if(ch.type==='modified'){
+        // Admin'in gönderdiği kaybolan mesaj, o an açık OLMAYAN bir sohbette
+        // okundu (read:true oldu) — silme zamanlayıcısını burada kur (bkz.
+        // yukarıdaki ilk yükleme bloğundaki aynı düzeltme notu).
+        if(msg&&msg.senderId===myId&&msg.vanish&&msg.read===true&&!msg.deleted){
+          scheduleVanish(ch.doc.id,ch.doc.ref.parent.parent.id);
+        }
+        return;
+      }
+      if(ch.type!=='added')return;
       if(msg.senderId===myId)return;
       const roomId=ch.doc.ref.parent.parent.id;
       if(roomId===activeRoom)return; // bu sohbet zaten açık, listenMessages() hallediyor
@@ -3239,6 +3262,10 @@ function listenMessages(){
   viewCountStateMap=new Map();
   hideNewMsgPill();
   const {db,collection,query,orderBy,onSnapshot,limit}=fb;
+  // Bu dinleyicinin bağlı olduğu oda sabitleniyor — aşağıdaki onSnapshot
+  // callback'i içinde artık değişebilen global activeRoom değil, bu sabit
+  // roomIdForThisListener kullanılıyor (bkz. scheduleVanish düzeltmesi).
+  const roomIdForThisListener=activeRoom;
   const q=query(collection(db,`rooms/${activeRoom}/messages`),orderBy('ts','asc'),limit(300));
   // NOT: Firestore bir sorguya YENİ abone olunduğunda bazen önce önbellekten
   // eksik/kısmi bir sonuç, hemen ardından sunucudan tam sonucu ayrı ayrı
@@ -3384,7 +3411,7 @@ function listenMessages(){
     // silme yetkisi yok). Artık her istemci SADECE KENDİ gönderdiği mesajı
     // (ya da admin ise herhangi birini) siliyor — böylece silme her zaman
     // yazma iznine sahip bir istemci tarafından yapılıyor.
-    msgs.forEach(m=>{ if(m.vanish&&m.read&&!m.deleted&&(m.senderId===myId||isAdmin))scheduleVanish(m.id) });
+    msgs.forEach(m=>{ if(m.vanish&&m.read&&!m.deleted&&(m.senderId===myId||isAdmin))scheduleVanish(m.id,roomIdForThisListener) });
     // Sarı tik → yeşil: karşı tarafın bizim mesajlarımızı okuyup okumadığını
     // ekrandaki tiklere yansıt (mesaj listesi her güncellendiğinde çalışır,
     // böylece karşı taraf mesajı okuduğu an tik anında yeşile döner).
@@ -3532,14 +3559,22 @@ function markIncomingMessagesRead(msgs){
 }
 
 const _vanishScheduled=new Set();
-function scheduleVanish(msgId){
+function scheduleVanish(msgId,roomId){
   if(_vanishScheduled.has(msgId))return;
   _vanishScheduled.add(msgId);
+  // DÜZELTME: Önceden burada silme sırasında global (değişebilen) activeRoom
+  // değişkeni kullanılıyordu. Admin birden fazla sohbeti yönettiği için,
+  // zamanlayıcı kurulduktan sonraki 4 saniye içinde admin başka bir sohbete
+  // geçerse, 4 saniye sonra çalışan bu kod YANLIŞ odaya (admin'in o anki
+  // aktif sohbetine) yazmaya çalışıyor, mesajın gerçek odasına hiç
+  // dokunmuyordu. Artık hangi mesajın hangi odaya ait olduğu çağıran
+  // tarafından (aşağıda) sabit olarak veriliyor.
+  const targetRoom=roomId||activeRoom;
   setTimeout(async()=>{
-    if(!fb||!activeRoom){_vanishScheduled.delete(msgId);return}
+    if(!fb||!targetRoom){_vanishScheduled.delete(msgId);return}
     try{
       const {db,doc,updateDoc}=fb;
-      await updateDoc(doc(db,`rooms/${activeRoom}/messages`,msgId),{
+      await updateDoc(doc(db,`rooms/${targetRoom}/messages`,msgId),{
         deleted:true,vanished:true,deletedAt:Date.now()
       });
     }catch(e){}
