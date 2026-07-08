@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260708-154823-6fb0c30">
+<html lang="tr" data-build="askbahcem-20260708-162219-4400e4d">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -1439,6 +1439,23 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
       <button type="button" class="pass-toggle" onclick="togglePass('editUserPass',this)"><svg class="icon icon-sm"><use href="#i-eye"/></svg></button>
     </div>
     <button class="btn-enter" onclick="saveEditUser()"><svg class="icon icon-sm"><use href="#i-check1"/></svg>Kaydet</button>
+  </div>
+</div>
+
+<!-- MESAJ DÜZENLEME MODALI ── sınırsız süre içinde metin mesajı düzenleme + tam düzenleme geçmişi -->
+<div id="editMsgModal" class="modal-backdrop">
+  <div class="card" style="max-width:340px">
+    <button class="modal-close" onclick="closeEditMsgModal()"><svg class="icon icon-sm"><use href="#i-close"/></svg></button>
+    <div class="modal-title"><svg class="icon"><use href="#i-edit"/></svg>Mesajı Düzenle</div>
+    <label>Yeni Metin</label>
+    <div class="field-wrap" style="align-items:flex-start">
+      <textarea id="editMsgTextarea" rows="3" style="flex:1;background:none;border:none;outline:none;color:inherit;font:inherit;resize:vertical;min-height:60px;padding:10px 0" maxlength="4000"></textarea>
+    </div>
+    <button class="btn-enter" onclick="saveEditedMessage()"><svg class="icon icon-sm"><use href="#i-check1"/></svg>Kaydet</button>
+    <div id="editMsgHistoryWrap" style="display:none;margin-top:14px">
+      <div style="text-align:center;color:#8a5560;font-size:.75rem;font-weight:700;letter-spacing:.03em;margin-bottom:8px;text-transform:uppercase">Düzenleme Geçmişi</div>
+      <div id="editMsgHistoryList" style="max-height:220px;overflow-y:auto;display:flex;flex-direction:column;gap:8px"></div>
+    </div>
   </div>
 </div>
 
@@ -3434,6 +3451,16 @@ function appendBubble(msg,doScroll=true){
   }
   else if(msg.type==='text'){
     const tspan=document.createElement('span');tspan.textContent=msg.text;b.appendChild(tspan);
+    // Mesaj gönderildikten sonra düzenlendiyse küçük "(düzenlendi)" etiketi
+    // gösterilir; dokununca tüm düzenleme geçmişi (sınırsız kayıt) açılır.
+    if(msg.edited){
+      const editedTag=document.createElement('span');
+      editedTag.className='msg-edited-tag';
+      editedTag.textContent=' (düzenlendi)';
+      editedTag.style.cssText='font-size:.68em;opacity:.6;cursor:pointer;margin-left:4px;font-style:italic';
+      editedTag.onclick=(ev)=>{ev.stopPropagation();viewEditHistory(msg.id)};
+      b.appendChild(editedTag);
+    }
   }
   else if(msg.type==='voice'){
     b.classList.add('voice-bubble');
@@ -3637,6 +3664,13 @@ function openMsgMenu(msg,isMe){
     `<span class="${myReaction===e?'mine':''}" data-e="${e}">${e}</span>`
   ).join('')+`</div>`;
   html+=`<button onclick="startReply('${msg.id}');closeMsgMenu()"><svg class="icon"><use href="#i-edit"/></svg>Cevapla</button>`;
+  // DÜZELTME: "Düzenle" seçeneği sadece kendi gönderdiğin metin mesajlarında
+  // görünür — süre sınırı YOK, gönderildikten ne kadar süre geçmiş olursa
+  // olsun düzenlenebilir. Her düzenlemede önceki metin editHistory dizisine
+  // eklenir (sınırsız sayıda düzenleme kaydı tutulur, hiçbiri silinmez).
+  if(isMe&&msg.type==='text'){
+    html+=`<button onclick="openEditMsgModal('${msg.id}')"><svg class="icon"><use href="#i-edit"/></svg>Düzenle</button>`;
+  }
   html+=`<button onclick="deleteForMe()"><svg class="icon"><use href="#i-trash"/></svg>Benden Sil</button>`;
   if(isMe){
     html+=`<button class="danger" onclick="deleteForEveryone()"><svg class="icon"><use href="#i-trash"/></svg>Herkesten Sil</button>`;
@@ -3682,6 +3716,71 @@ async function deleteForEveryone(){
     showToast('Mesaj herkesten silindi','success');
   }catch(e){console.error(e);showToast('Mesaj silinemedi','error')}
   closeMsgMenu();
+}
+
+/* ── MESAJ DÜZENLEME ─────────────────────────────────────────────────
+   Metin mesajları gönderildikten SONRA da, süre sınırı olmadan
+   düzenlenebilir. Her kaydedişte önceki metin (ve önceki düzenleme
+   kayıtları varsa onlar da) editHistory dizisine eklenir — hiçbir eski
+   sürüm silinmez, dizi sınırsız büyüyebilir. Bu sayede "kaç kez ve ne
+   zaman değiştirildi" tam olarak görülebilir. ── */
+let editingMsgTarget=null;
+function openEditMsgModal(msgId){
+  const msg=(lastRenderedMsgs||[]).find(m=>m.id===msgId);
+  if(!msg||msg.type!=='text')return;
+  closeMsgMenu();
+  editingMsgTarget=msg;
+  document.getElementById('editMsgTextarea').value=msg.text||'';
+  const histWrap=document.getElementById('editMsgHistoryWrap');
+  const histList=document.getElementById('editMsgHistoryList');
+  const history=Array.isArray(msg.editHistory)?msg.editHistory:[];
+  if(history.length){
+    histWrap.style.display='block';
+    // En yeniden en eskiye doğru sırala ki en son değişiklik en üstte görünsün.
+    histList.innerHTML=history.slice().reverse().map(h=>{
+      const t=h.editedAt?new Date(h.editedAt).toLocaleString('tr-TR',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'';
+      return `<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:8px 10px">
+        <div style="font-size:.68rem;color:#8a5560;margin-bottom:3px">${esc(t)}</div>
+        <div style="font-size:.85rem;color:#d9b8c0;white-space:pre-wrap;word-break:break-word">${esc(h.text||'')}</div>
+      </div>`;
+    }).join('');
+  }else{
+    histWrap.style.display='none';
+    histList.innerHTML='';
+  }
+  document.getElementById('editMsgModal').classList.add('open');
+  setTimeout(()=>document.getElementById('editMsgTextarea').focus(),50);
+}
+function closeEditMsgModal(){
+  document.getElementById('editMsgModal').classList.remove('open');
+  editingMsgTarget=null;
+}
+async function saveEditedMessage(){
+  if(!editingMsgTarget||!fb||!activeRoom)return;
+  const newText=document.getElementById('editMsgTextarea').value.trim();
+  if(!newText){showToast('Mesaj boş olamaz','warn');return}
+  const oldText=editingMsgTarget.text||'';
+  if(newText===oldText){closeEditMsgModal();return}
+  try{
+    const {db,doc,updateDoc}=fb;
+    const prevHistory=Array.isArray(editingMsgTarget.editHistory)?editingMsgTarget.editHistory:[];
+    // Kaydetmeden önceki metni (bir önceki sürümü) geçmişe ekliyoruz —
+    // böylece geçmiş dizisi, mesajın o ana kadar aldığı TÜM sürümleri
+    // (ilk hali dahil) sırayla tutar.
+    const newHistory=[...prevHistory,{text:oldText,editedAt:Date.now()}];
+    await updateDoc(doc(db,`rooms/${activeRoom}/messages`,editingMsgTarget.id),{
+      text:newText,edited:true,editHistory:newHistory,lastEditedAt:Date.now()
+    });
+    showToast('Mesaj düzenlendi','success');
+  }catch(e){console.error(e);showToast('Mesaj düzenlenemedi','error');return}
+  closeEditMsgModal();
+}
+/* Balonda "(düzenlendi)" etiketine dokununca düzenleme geçmişini salt-okunur gösterir. */
+function viewEditHistory(msgId){
+  const msg=(lastRenderedMsgs||[]).find(m=>m.id===msgId);
+  if(!msg)return;
+  openEditMsgModal(msgId);
+  document.getElementById('editMsgTextarea').blur();
 }
 
 /* ── Tümünü temizle (sadece kendi ekranından, karşı tarafı etkilemez) ── */
