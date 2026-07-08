@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260708-172146-823949b">
+<html lang="tr" data-build="askbahcem-20260708-173553-9a7c49d">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -647,7 +647,7 @@ svg#loveArrow{width:26px!important;height:14px!important;display:block!important
 #liveLocMenu.open{display:flex;flex-direction:column}
 #liveLocMenu button{display:flex;align-items:center;gap:10px;padding:12px 16px;background:none;border:none;color:#fff;font-size:.86rem;text-align:left;cursor:pointer;white-space:nowrap}
 #liveLocMenu button:active{background:rgba(255,255,255,.08)}
-#cameraMenu{display:none;position:absolute;bottom:109px;left:92px;background:rgba(30,10,18,.97);border:1px solid rgba(242,196,206,.15);border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.4);overflow:hidden;z-index:20;backdrop-filter:blur(14px)}
+#cameraMenu{display:none;position:absolute;bottom:109px;left:180px;background:rgba(30,10,18,.97);border:1px solid rgba(242,196,206,.15);border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.4);overflow:hidden;z-index:20;backdrop-filter:blur(14px)}
 #cameraMenu.open{display:flex;flex-direction:column}
 #cameraMenu button{display:flex;align-items:center;gap:10px;padding:12px 16px;background:none;border:none;color:#fff;font-size:.86rem;text-align:left;cursor:pointer;white-space:nowrap}
 #cameraMenu button:active{background:rgba(255,255,255,.08)}
@@ -763,6 +763,12 @@ svg#loveArrow{width:26px!important;height:14px!important;display:block!important
 .bubble.them .voice-wave span.played{background:var(--bright)}
 .voice-dur{font-size:.7rem;opacity:.7;flex-shrink:0;font-variant-numeric:tabular-nums}
 .voice-speed{width:auto!important;height:22px!important;min-width:30px;padding:0 7px;border-radius:11px!important;font-size:.66rem;font-weight:700;background:rgba(255,255,255,.14)!important;flex-shrink:0}
+.voice-transcript-btn{width:24px!important;height:24px!important;border-radius:50%!important;background:rgba(255,255,255,.14)!important;flex-shrink:0}
+.voice-transcript-btn .icon{width:13px;height:13px}
+.voice-transcript-btn.open{background:var(--rose,#e8577e)!important;color:#fff}
+.voice-transcript-text{display:none;margin-top:7px;padding-top:7px;border-top:1px solid rgba(255,255,255,.14);font-size:.78rem;line-height:1.4;opacity:.92;white-space:pre-wrap;word-break:break-word}
+.voice-transcript-text.open{display:block}
+.voice-transcript-hint{font-size:.66rem;opacity:.55;margin-top:3px;font-style:italic}
 
 /* ── EMOJI PICKER ── */
 #emojiPicker{display:none;position:absolute;bottom:111px;left:10px;background:#2b0f1c;border:1px solid rgba(242,196,206,.16);border-radius:16px;padding:11px;z-index:60;flex-wrap:wrap;gap:4px;max-width:280px;max-height:240px;overflow-y:auto;box-shadow:var(--shadow-lg)}
@@ -809,8 +815,8 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
   80%{transform:translate(5px,-1px)}
   90%{transform:translate(-2px,1px)}
 }
-.ico-btn.nudge-btn{color:var(--gold-soft)}
-.ico-btn.nudge-btn:active{transform:scale(.85) rotate(-8deg)}
+.ico-btn.nudge-btn,.sm-btn.nudge-btn{color:var(--gold-soft)}
+.ico-btn.nudge-btn:active,.sm-btn.nudge-btn:active{transform:scale(.85) rotate(-8deg)}
 
 /* ── LOCATION MESSAGE ── */
 .loc-card{display:flex;align-items:center;gap:10px;cursor:pointer;padding-bottom:8px;margin-bottom:2px}
@@ -977,7 +983,7 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
 .file-dl-btn .icon{width:15px;height:15px}
 
 /* ── EK (ATTACH) MENÜSÜ ── */
-#attachMenu{display:none;position:absolute;bottom:111px;left:44px;background:#2b0f1c;border:1px solid rgba(242,196,206,.16);border-radius:16px;padding:7px;z-index:60;flex-direction:column;gap:2px;min-width:190px;box-shadow:var(--shadow-lg)}
+#attachMenu{display:none;position:absolute;bottom:111px;left:135px;background:#2b0f1c;border:1px solid rgba(242,196,206,.16);border-radius:16px;padding:7px;z-index:60;flex-direction:column;gap:2px;min-width:190px;box-shadow:var(--shadow-lg)}
 #attachMenu.open{display:flex}
 #attachMenu button{display:flex;align-items:center;gap:10px;background:none;border:none;color:#fff;font-family:var(--font-body);font-size:.85rem;font-weight:600;padding:10px 11px;border-radius:11px;cursor:pointer;text-align:left}
 #attachMenu button:active{background:rgba(255,255,255,.1)}
@@ -1052,6 +1058,7 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
     <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11.2 11.8L19 4M15.5 8.5L18 11M18.5 5.5L21 8"/></symbol>
     <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 22s7-7.4 7-12.5A7 7 0 0 0 5 9.5C5 14.6 12 22 12 22Z"/><circle cx="12" cy="9.5" r="2.4"/></symbol>
     <symbol id="i-buzz" viewBox="0 0 24 24"><path d="M4 8v8M20 8v8M7 5v14M17 5v14"/><rect x="9.5" y="7" width="5" height="10" rx="1.6"/></symbol>
+    <symbol id="i-transcript" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></symbol>
     <symbol id="i-rec-dot" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="12" r="7.5"/></symbol>
     <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4.5-4.5M12 15l4.5-4.5"/><path d="M4 18.5h16"/></symbol>
     <symbol id="i-phone-missed" viewBox="0 0 24 24"><path d="M17 8l-4.5 4.5L8 8"/><path d="M3 15.5c4-4 14-4 18 0l-2 3c-.6.9-1.8 1.1-2.7.5l-2-1.4a1.6 1.6 0 0 1-.6-1.9l.4-1a10 10 0 0 0-6.2 0l.4 1a1.6 1.6 0 0 1-.6 1.9l-2 1.4c-.9.6-2.1.4-2.7-.5l-2-3Z"/></symbol>
@@ -1164,8 +1171,6 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
       </div>
     </div>
     <div class="hd-acts" id="headerActs">
-      <button class="ico-btn" onclick="toggleSearchBar()" title="Sohbette Ara"><svg class="icon"><use href="#i-search"/></svg></button>
-      <button class="ico-btn nudge-btn" onclick="sendNudge()" title="Titreşim Gönder"><svg class="icon"><use href="#i-buzz"/></svg></button>
       <button class="ico-btn" onclick="startCall()" title="Görüntülü Arama"><svg class="icon"><use href="#i-video"/></svg></button>
       <button id="muteAllHeaderBtn" class="hd-mute-txt-btn" onclick="toggleMuteAll()"></button>
       <div class="hd-more-wrap">
@@ -1267,6 +1272,8 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
 <div id="inputBar">
   <div id="quickActionsRow">
     <button class="sm-btn" onclick="toggleEmoji()"><svg class="icon"><use href="#i-emoji"/></svg></button>
+    <button class="sm-btn" onclick="toggleSearchBar()" title="Sohbette Ara"><svg class="icon"><use href="#i-search"/></svg></button>
+    <button class="sm-btn nudge-btn" onclick="sendNudge()" title="Titreşim Gönder"><svg class="icon"><use href="#i-buzz"/></svg></button>
     <button class="sm-btn" id="attachBtn" onclick="event.stopPropagation();toggleAttachMenu()"><svg class="icon"><use href="#i-paperclip"/></svg></button>
     <input type="file" id="fileIn" accept="image/*,video/*" style="display:none" onchange="sendMedia(this)"/>
     <input type="file" id="docIn" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.json,.zip,.rar,.7z,.apk,.mp3,.m4a,.wav,application/pdf,application/vnd.android.package-archive" style="display:none" onchange="sendDocument(this)"/>
@@ -3565,9 +3572,17 @@ function appendBubble(msg,doScroll=true){
     const durTxt=msg.duration?(Math.floor(msg.duration/60)+':'+String(msg.duration%60).padStart(2,'0')):'0:00';
     const waveData=(msg.waveform&&msg.waveform.length)?msg.waveform:Array.from({length:24},()=>Math.round(15+Math.random()*70));
     const bars=waveData.map(v=>`<span style="height:${Math.max(3,Math.round(3+(v/100)*20))}px"></span>`).join('');
+    const hasTranscript=!!(msg.transcript&&msg.transcript.trim());
     const vwrap=document.createElement('div');vwrap.className='voice-msg';
-    vwrap.innerHTML=`<button onclick="event.stopPropagation();toggleVoicePlay('${msg.id}','${msg.url}')"><svg class="icon"><use href="#i-mic"/></svg></button><div class="voice-wave" id="vw-${msg.id}">${bars}</div><span class="voice-dur">${durTxt}</span><button class="voice-speed" onclick="event.stopPropagation();cycleVoiceSpeed('${msg.id}')">${voicePlaybackRate===1?'1':voicePlaybackRate}x</button>`;
+    vwrap.innerHTML=`<button onclick="event.stopPropagation();toggleVoicePlay('${msg.id}','${msg.url}')"><svg class="icon"><use href="#i-mic"/></svg></button><div class="voice-wave" id="vw-${msg.id}">${bars}</div><span class="voice-dur">${durTxt}</span><button class="voice-speed" onclick="event.stopPropagation();cycleVoiceSpeed('${msg.id}')">${voicePlaybackRate===1?'1':voicePlaybackRate}x</button>${hasTranscript?`<button class="voice-transcript-btn" id="vtb-${msg.id}" onclick="event.stopPropagation();toggleVoiceTranscript('${msg.id}')" title="Yazıya dökülmüş metni göster"><svg class="icon"><use href="#i-transcript"/></svg></button>`:''}`;
     b.appendChild(vwrap);
+    if(hasTranscript){
+      const tDiv=document.createElement('div');
+      tDiv.className='voice-transcript-text';
+      tDiv.id='vt-'+msg.id;
+      tDiv.textContent=msg.transcript.trim();
+      b.appendChild(tDiv);
+    }
   }
   else if(msg.type==='image'||msg.type==='video'){
     const hasLimit=!!msg.viewLimit;
@@ -4851,6 +4866,14 @@ let recTimerId=null;
 let recStartX=0,recStartY=0,recCanceled=false,recLocked=false,recPointerId=null;
 let recPaused=false,recPausedAccumMs=0;
 let recAudioCtx=null,recAnalyser=null,recWaveTimer=null,recWaveform=[];
+/* ── Sesli mesaj OTOMATİK TRANSKRİPT: kayıt sırasında MediaRecorder'a
+   paralel olarak tarayıcının SpeechRecognition motoru da çalıştırılır.
+   Böylece sesli mesajla birlikte, dinlemeden okunabilecek bir yazıya
+   dökülmüş metin de karşı tarafa iletilir. Tarayıcı desteklemiyorsa veya
+   motor hata verirse (ör. ağ yok, izin yok) sessizce atlanır — transkript
+   olmadan da kayıt normal şekilde çalışmaya devam eder. ── */
+let recRecognition=null;
+let recTranscript='';
 const REC_CANCEL_THRESHOLD=70;
 const REC_LOCK_THRESHOLD=58;
 
@@ -4892,6 +4915,39 @@ function downsampleWaveform(arr,n){
   }
   return out;
 }
+function startRecTranscription(){
+  recTranscript='';
+  const Ctor=getSpeechRecognitionCtor();
+  if(!Ctor)return; // desteklenmiyor — transkriptsiz kayıt normal devam eder
+  try{
+    const rec=new Ctor();
+    rec.lang='tr-TR';
+    rec.continuous=true;
+    rec.interimResults=false;
+    rec.onresult=e=>{
+      let chunk='';
+      for(let i=e.resultIndex;i<e.results.length;i++){
+        if(e.results[i].isFinal)chunk+=e.results[i][0].transcript;
+      }
+      chunk=chunk.trim();
+      if(chunk)recTranscript=(recTranscript?recTranscript+' ':'')+chunk;
+    };
+    rec.onerror=()=>{}; // sessizce yoksay, kayıt/gönderim buna bağlı değil
+    rec.onend=()=>{
+      // Bazı tarayıcılar (özellikle Android) sesli aralıklarda motoru
+      // kendiliğinden durdurur — kayıt hâlâ sürüyorsa sessizce yeniden başlat.
+      if(recRecognition===rec&&mediaRecorder){try{rec.start()}catch(e){}}
+    };
+    recRecognition=rec;
+    rec.start();
+  }catch(e){recRecognition=null}
+}
+function stopRecTranscription(){
+  const rec=recRecognition;
+  recRecognition=null; // onend'in yeniden başlatmasını önce engelle
+  if(rec){try{rec.onend=null;rec.stop()}catch(e){}}
+  return recTranscript.trim();
+}
 
 async function micPointerDown(ev){
   if(mediaRecorder)return;
@@ -4921,6 +4977,7 @@ async function micPointerDown(ev){
   mediaRecorder.ondataavailable=e=>{if(e.data&&e.data.size>0)recChunks.push(e.data)};
   mediaRecorder.start();
   startWaveSampling(stream);
+  startRecTranscription();
   recStartTs=Date.now();
   document.getElementById('voiceMicBtn').classList.add('recording');
   const ov=document.getElementById('voiceRecOverlay');
@@ -5011,19 +5068,20 @@ function finishRecording(cancel){
   document.getElementById('micLockPill').classList.remove('show','locked');
   const durationSec=Math.max(0,Math.round((recPausedAccumMs+(wasPaused?0:(Date.now()-recStartTs)))/1000));
   const waveformSnapshot=downsampleWaveform(recWaveform,24);
+  const transcriptSnapshot=stopRecTranscription();
   const stream=rec._stream;
   rec.onstop=async()=>{
     stream.getTracks().forEach(t=>t.stop());
     if(cancel||durationSec<1){recChunks=[];return}
     const blob=new Blob(recChunks,{type:rec.mimeType||'audio/webm'});
     recChunks=[];
-    await sendVoiceMessage(blob,durationSec,waveformSnapshot);
+    await sendVoiceMessage(blob,durationSec,waveformSnapshot,transcriptSnapshot);
   };
   try{ if(rec.state!=='inactive')rec.stop() }catch(e){}
 }
 document.addEventListener('pointermove',micPointerMove);
 
-async function sendVoiceMessage(blob,durationSec,waveform){
+async function sendVoiceMessage(blob,durationSec,waveform,transcript){
   if(!fb||!activeRoom)return;
   const replyTo=pendingReply;clearReply();
   showUpload(true);
@@ -5035,6 +5093,7 @@ async function sendVoiceMessage(blob,durationSec,waveform){
     await addDoc(collection(db,`rooms/${activeRoom}/messages`),{
       type:'voice',url,duration:durationSec,senderId:myId,senderName:myName,senderEmoji:myEmoji,ts:serverTimestamp(),read:false,
       ...(waveform&&waveform.length?{waveform}:{}),
+      ...(transcript?{transcript}:{}),
       ...(replyTo?{replyTo:{id:replyTo.id,text:replySnippet(replyTo),senderName:replyTo.senderName||'',senderId:replyTo.senderId||''}}:{})
     });
     updateRoomMeta('🎤 Sesli mesaj');
@@ -5056,6 +5115,13 @@ function voiceBtnEl(msgId){
 function resetVoiceWave(msgId){
   const wave=document.getElementById('vw-'+msgId);
   if(wave)Array.from(wave.children).forEach(s=>s.classList.remove('played'));
+}
+function toggleVoiceTranscript(msgId){
+  const txt=document.getElementById('vt-'+msgId);
+  const btn=document.getElementById('vtb-'+msgId);
+  if(!txt)return;
+  txt.classList.toggle('open');
+  if(btn)btn.classList.toggle('open',txt.classList.contains('open'));
 }
 function cycleVoiceSpeed(msgId){
   const order=[1,1.5,2];
