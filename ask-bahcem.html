@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260709-112708-9d42ded">
+<html lang="tr" data-build="askbahcem-20260709-124810-4e2b8b5">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -779,10 +779,10 @@ svg#loveArrow{width:26px!important;height:14px!important;display:block!important
 @keyframes quoteFlash{0%,100%{filter:none}30%{filter:brightness(1.5)}}
 
 /* ── SESLİ MESAJ BALONU ── */
-.voice-msg{display:flex;align-items:center;gap:9px;min-width:170px}
+.voice-msg{display:flex;align-items:center;gap:7px;min-width:170px;max-width:100%}
 .voice-msg button{width:32px;height:32px;border-radius:50%;border:none;flex-shrink:0;display:flex;align-items:center;justify-content:center;cursor:pointer;background:rgba(255,255,255,.18);color:inherit}
 .voice-msg .icon{width:16px;height:16px}
-.voice-wave{flex:1;height:22px;display:flex;align-items:center;gap:2px}
+.voice-wave{flex:1;min-width:0;overflow:hidden;height:22px;display:flex;align-items:center;gap:2px}
 .voice-wave span{width:2.5px;border-radius:2px;background:currentColor;opacity:.4;transition:opacity .1s}
 .voice-wave span.played{opacity:1;background:var(--rose)}
 .bubble.them .voice-wave span.played{background:var(--bright)}
@@ -5199,10 +5199,7 @@ function downsampleWaveform(arr,n){
 // Worker URL boşsa veya istek başarısız olursa sessizce boş string döner —
 // transkript yoksa mesaj yine normal (metinsiz) sesli mesaj olarak gider.
 async function transcribeVoiceViaWorker(blob){
-  if(!VOICE_TRANSCRIBE_URL||VOICE_TRANSCRIBE_URL.startsWith('__')){
-    showToast('DEBUG: Worker URL enjekte edilmemiş (placeholder kalmış)','warn');
-    return '';
-  }
+  if(!VOICE_TRANSCRIBE_URL||VOICE_TRANSCRIBE_URL.startsWith('__'))return '';
   try{
     const fd=new FormData();
     const ext=blob.type.includes('mp4')?'m4a':'webm';
@@ -5211,18 +5208,11 @@ async function transcribeVoiceViaWorker(blob){
     const timeout=setTimeout(()=>ctrl.abort(),20000);
     const res=await fetch(VOICE_TRANSCRIBE_URL,{method:'POST',body:fd,signal:ctrl.signal});
     clearTimeout(timeout);
-    if(!res.ok){
-      const bodyTxt=await res.text().catch(()=>'');
-      showToast('DEBUG: worker '+res.status+' '+bodyTxt.slice(0,80),'error');
-      throw new Error('transcribe worker status '+res.status);
-    }
+    if(!res.ok)throw new Error('transcribe worker status '+res.status);
     const data=await res.json();
-    const t=(data&&data.text||'').trim();
-    showToast('DEBUG: transkript alındı ('+t.length+' karakter)','warn');
-    return t;
+    return (data&&data.text||'').trim();
   }catch(e){
     console.warn('Sesli mesaj transkript alınamadı:',e);
-    showToast('DEBUG: transkript hatası: '+(e&&e.message||e),'error');
     return '';
   }
 }
