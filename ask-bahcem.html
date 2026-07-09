@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260709-091430-8b71026">
+<html lang="tr" data-build="askbahcem-20260709-105500-37937b3">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -1630,6 +1630,14 @@ function sendTelegramNotification(text,cb){
 // secret'larından (CLOUDINARY_CLOUD_NAME / CLOUDINARY_UPLOAD_PRESET) enjekte ediliyor.
 const CLOUDINARY_CLOUD_NAME = 'vuxazzjx';
 const CLOUDINARY_UPLOAD_PRESET = 'Umitmod';
+// Sesli mesaj → metin: kayıt BİTTİKTEN SONRA tek seferlik ses dosyası bu
+// Cloudflare Worker'a gönderilir, Worker Groq Whisper API'ye iletip metni
+// döner. Kayıt SIRASINDA artık hiçbir tarayıcı motoru çalışmıyor — bu sayede
+// hem WebView'da (browser SpeechRecognition desteklemiyor) çalışır, hem de
+// mikrofonu MediaRecorder ile paylaşıp kaydı kesintiye uğratma sorunu ortadan
+// kalkar. Worker'ı deploy edip URL'sini aşağıya yaz; boş bırakılırsa
+// transkript denenmez, sesli mesaj yine normal şekilde gönderilir.
+const VOICE_TRANSCRIBE_URL = 'https://voice.umitm0d2.workers.dev';
 
 // ★ Admin (sen) giriş bilgilerin — varsayılan, Firestore'dan değiştirilebilir ★
 const ADMIN_USERNAME = 'admin';
@@ -5130,15 +5138,22 @@ let recTimerId=null;
 let recStartX=0,recStartY=0,recCanceled=false,recLocked=false,recPointerId=null;
 let recPaused=false,recPausedAccumMs=0;
 let recAudioCtx=null,recAnalyser=null,recWaveTimer=null,recWaveform=[];
-/* ── Sesli mesaj OTOMATİK TRANSKRİPT: kayıt sırasında MediaRecorder'a
-   paralel olarak tarayıcının SpeechRecognition motoru da çalıştırılır.
-   Böylece sesli mesajla birlikte, dinlemeden okunabilecek bir yazıya
-   dökülmüş metin de karşı tarafa iletilir. Tarayıcı desteklemiyorsa veya
-   motor hata verirse (ör. ağ yok, izin yok) sessizce atlanır — transkript
-   olmadan da kayıt normal şekilde çalışmaya devam eder. ── */
-let recRecognition=null;
-let recTranscript='';
-let recTranscriptSessionBase=''; // motor yeniden başladığında önceki session'ların metnini korumak için
+/* ── Sesli mesaj OTOMATİK TRANSKRİPT ────────────────────────────────────
+   ESKİ YÖNTEM (kaldırıldı): kayıt SIRASINDA MediaRecorder'a paralel olarak
+   tarayıcının webkitSpeechRecognition motoru da çalıştırılıyordu. Bunun 2
+   büyük sorunu vardı: (1) Android WebView'da (APK içindeki uygulama) bu API
+   hiç bulunmuyor — Ctor hep null dönüyor, transkript hiçbir zaman
+   üretilmiyordu, buton da bu yüzden UI'de asla görünmüyordu. (2) Chrome'da
+   API var ama kendi mikrofon oturumunu MediaRecorder'ınkiyle aynı anda
+   kullanıyor; motor birkaç saniyede bir kendini resetlerken (onend→restart)
+   cihazın ses donanımını kısa süreliğine bırakıyor, bu da kayıt esnasında
+   "belli saniyeden sonra kapanıp tekrar açılma" olarak hissediliyordu.
+   YENİ YÖNTEM: kayıt sırasında hiçbir transkript motoru ÇALIŞMAZ — mikrofon
+   sadece MediaRecorder'a ait, kesintisiz kayıt garanti. Kayıt BİTTİKTEN
+   SONRA tamamlanmış ses dosyası tek seferde bir Cloudflare Worker'a
+   gönderilir, Worker de Groq Whisper API ile metne çevirip döner (bkz.
+   transcribeVoiceViaWorker). Bu hem WebView'da çalışır hem de kayıt
+   sırasında mikrofona hiç dokunmadığı için kesinti sorunu tamamen biter. ── */
 const REC_CANCEL_THRESHOLD=70;
 const REC_LOCK_THRESHOLD=58;
 
@@ -5180,57 +5195,26 @@ function downsampleWaveform(arr,n){
   }
   return out;
 }
-function startRecTranscription(){
-  recTranscript='';
-  recTranscriptSessionBase='';
-  const Ctor=getSpeechRecognitionCtor();
-  if(!Ctor)return; // desteklenmiyor — transkriptsiz kayıt normal devam eder
+// Kayıt bitince tamamlanmış ses blob'unu Worker'a gönderip metni alır.
+// Worker URL boşsa veya istek başarısız olursa sessizce boş string döner —
+// transkript yoksa mesaj yine normal (metinsiz) sesli mesaj olarak gider.
+async function transcribeVoiceViaWorker(blob){
+  if(!VOICE_TRANSCRIBE_URL||VOICE_TRANSCRIBE_URL.startsWith('__'))return '';
   try{
-    const rec=new Ctor();
-    rec.lang='tr-TR';
-    rec.continuous=true;
-    // DÜZELTME (ASIL SEBEP): interimResults=false iken tarayıcı bir cümleyi
-    // sadece konuşmada BELİRGİN BİR SESSİZLİK molası algıladıktan SONRA
-    // "final" (kesinleşmiş) sayıyor. Kısa sesli mesajlarda (birkaç saniye,
-    // hiç durmadan tek nefeste konuşulan) kayıt bitip rec.stop() çağrıldığında
-    // motor henüz HİÇBİR şeyi "final" işaretlememiş oluyordu — rec.stop()
-    // de bekleyen/kesinleşmemiş sonucu tamamlamadan direkt atıyor, bu yüzden
-    // recTranscript hep boş kalıp transkript hiç görünmüyordu. Şimdi
-    // interimResults=true yapıp HER onresult'ta o ana kadarki TÜM sonucu
-    // (kesinleşmiş + hâlâ kesinleşmemiş) yeniden inşa ediyoruz; böylece kayıt
-    // aniden kesilse bile elimizde en azından yaklaşık bir metin kalıyor —
-    // hiç transkript göstermemektense kesinleşmemiş de olsa bir metin
-    // göstermek çok daha faydalı.
-    rec.interimResults=true;
-    rec.onresult=e=>{
-      let combined='';
-      for(let i=0;i<e.results.length;i++){
-        const t=(e.results[i][0]&&e.results[i][0].transcript||'').trim();
-        if(t)combined+=(combined?' ':'')+t;
-      }
-      recTranscript=((recTranscriptSessionBase?recTranscriptSessionBase+' ':'')+combined).trim();
-    };
-    rec.onerror=(ev)=>{ console.warn('Sesli mesaj transkript hatası:',ev&&ev.error); };
-    rec.onend=()=>{
-      // Bazı tarayıcılar (özellikle Android) sesli aralıklarda motoru
-      // kendiliğinden durdurur — kayıt hâlâ sürüyorsa sessizce yeniden
-      // başlatıyoruz. Yeniden başlayan session'ın e.results dizisi sıfırdan
-      // başladığından, o ana kadarki metni önce "kalıcı taban"a yazıyoruz —
-      // aksi halde her yeniden başlamada önceki sözler kaybolurdu.
-      if(recRecognition===rec&&mediaRecorder){
-        recTranscriptSessionBase=recTranscript;
-        try{rec.start()}catch(e){}
-      }
-    };
-    recRecognition=rec;
-    rec.start();
-  }catch(e){recRecognition=null}
-}
-function stopRecTranscription(){
-  const rec=recRecognition;
-  recRecognition=null; // onend'in yeniden başlatmasını önce engelle
-  if(rec){try{rec.onend=null;rec.stop()}catch(e){}}
-  return recTranscript.trim();
+    const fd=new FormData();
+    const ext=blob.type.includes('mp4')?'m4a':'webm';
+    fd.append('audio',blob,'voice.'+ext);
+    const ctrl=new AbortController();
+    const timeout=setTimeout(()=>ctrl.abort(),20000);
+    const res=await fetch(VOICE_TRANSCRIBE_URL,{method:'POST',body:fd,signal:ctrl.signal});
+    clearTimeout(timeout);
+    if(!res.ok)throw new Error('transcribe worker status '+res.status);
+    const data=await res.json();
+    return (data&&data.text||'').trim();
+  }catch(e){
+    console.warn('Sesli mesaj transkript alınamadı:',e);
+    return '';
+  }
 }
 
 async function micPointerDown(ev){
@@ -5261,7 +5245,6 @@ async function micPointerDown(ev){
   mediaRecorder.ondataavailable=e=>{if(e.data&&e.data.size>0)recChunks.push(e.data)};
   mediaRecorder.start();
   startWaveSampling(stream);
-  startRecTranscription();
   recStartTs=Date.now();
   document.getElementById('voiceMicBtn').classList.add('recording');
   const ov=document.getElementById('voiceRecOverlay');
@@ -5352,27 +5335,32 @@ function finishRecording(cancel){
   document.getElementById('micLockPill').classList.remove('show','locked');
   const durationSec=Math.max(0,Math.round((recPausedAccumMs+(wasPaused?0:(Date.now()-recStartTs)))/1000));
   const waveformSnapshot=downsampleWaveform(recWaveform,24);
-  const transcriptSnapshot=stopRecTranscription();
   const stream=rec._stream;
   rec.onstop=async()=>{
     stream.getTracks().forEach(t=>t.stop());
     if(cancel||durationSec<1){recChunks=[];return}
     const blob=new Blob(recChunks,{type:rec.mimeType||'audio/webm'});
     recChunks=[];
-    await sendVoiceMessage(blob,durationSec,waveformSnapshot,transcriptSnapshot);
+    await sendVoiceMessage(blob,durationSec,waveformSnapshot);
   };
   try{ if(rec.state!=='inactive')rec.stop() }catch(e){}
 }
 document.addEventListener('pointermove',micPointerMove);
 
-async function sendVoiceMessage(blob,durationSec,waveform,transcript){
+async function sendVoiceMessage(blob,durationSec,waveform){
   if(!fb||!activeRoom)return;
   const replyTo=pendingReply;clearReply();
   showUpload(true);
   try{
     const ext=blob.type.includes('mp4')?'m4a':'webm';
     const file=new File([blob],'voice_'+Date.now()+'.'+ext,{type:blob.type});
-    const url=await uploadToCloudinary(file,true); // ses de Cloudinary'de 'video' resource_type ile yüklenir
+    // Yükleme ve transkript birbirini beklemeden paralel çalışır — transkript
+    // başarısız/yavaş olsa bile sesli mesajın gönderilmesini geciktirmez,
+    // sadece transkripti boş bırakır (buton o zaman görünmez).
+    const [url,transcript]=await Promise.all([
+      uploadToCloudinary(file,true), // ses de Cloudinary'de 'video' resource_type ile yüklenir
+      transcribeVoiceViaWorker(blob)
+    ]);
     const {db,collection,addDoc,serverTimestamp}=fb;
     await addDoc(collection(db,`rooms/${activeRoom}/messages`),{
       type:'voice',url,duration:durationSec,senderId:myId,senderName:myName,senderEmoji:myEmoji,ts:serverTimestamp(),read:false,
