@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260709-105500-37937b3">
+<html lang="tr" data-build="askbahcem-20260709-112708-9d42ded">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -5199,7 +5199,10 @@ function downsampleWaveform(arr,n){
 // Worker URL boşsa veya istek başarısız olursa sessizce boş string döner —
 // transkript yoksa mesaj yine normal (metinsiz) sesli mesaj olarak gider.
 async function transcribeVoiceViaWorker(blob){
-  if(!VOICE_TRANSCRIBE_URL||VOICE_TRANSCRIBE_URL.startsWith('__'))return '';
+  if(!VOICE_TRANSCRIBE_URL||VOICE_TRANSCRIBE_URL.startsWith('__')){
+    showToast('DEBUG: Worker URL enjekte edilmemiş (placeholder kalmış)','warn');
+    return '';
+  }
   try{
     const fd=new FormData();
     const ext=blob.type.includes('mp4')?'m4a':'webm';
@@ -5208,11 +5211,18 @@ async function transcribeVoiceViaWorker(blob){
     const timeout=setTimeout(()=>ctrl.abort(),20000);
     const res=await fetch(VOICE_TRANSCRIBE_URL,{method:'POST',body:fd,signal:ctrl.signal});
     clearTimeout(timeout);
-    if(!res.ok)throw new Error('transcribe worker status '+res.status);
+    if(!res.ok){
+      const bodyTxt=await res.text().catch(()=>'');
+      showToast('DEBUG: worker '+res.status+' '+bodyTxt.slice(0,80),'error');
+      throw new Error('transcribe worker status '+res.status);
+    }
     const data=await res.json();
-    return (data&&data.text||'').trim();
+    const t=(data&&data.text||'').trim();
+    showToast('DEBUG: transkript alındı ('+t.length+' karakter)','warn');
+    return t;
   }catch(e){
     console.warn('Sesli mesaj transkript alınamadı:',e);
+    showToast('DEBUG: transkript hatası: '+(e&&e.message||e),'error');
     return '';
   }
 }
