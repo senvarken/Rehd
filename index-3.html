@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Rojda için</title>
+<link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22Rojda%20i%C3%A7in%22%2C%22short_name%22%3A%22Rojda%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23FDF6F0%22%2C%22theme_color%22%3A%22%235C2A3E%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22https%3A%2F%2Fresmim.net%2Fcdn%2F2026%2F07%2F25%2FECoEjR.jpg%22%2C%22sizes%22%3A%22192x192%22%2C%22type%22%3A%22image%2Fjpeg%22%7D%2C%7B%22src%22%3A%22https%3A%2F%2Fresmim.net%2Fcdn%2F2026%2F07%2F25%2FECoEjR.jpg%22%2C%22sizes%22%3A%22512x512%22%2C%22type%22%3A%22image%2Fjpeg%22%7D%5D%7D">
+<meta name="theme-color" content="#5C2A3E">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Rojda">
+<link rel="apple-touch-icon" href="https://resmim.net/cdn/2026/07/25/ECoEjR.jpg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,500;1,600&family=Lora:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
 <style>
@@ -290,9 +296,52 @@
     text-align:center; padding:3.5rem 1.5rem 4rem; position:relative; z-index:2;
     font-size:0.85rem; color:var(--ink-light); font-style:italic;
   }
+
+  /* ---------- Install prompt ---------- */
+  .install-banner{
+    position:fixed; left:1rem; right:1rem; bottom:1rem;
+    z-index:100;
+    background:var(--paper);
+    border:1px solid rgba(212,165,116,0.4);
+    border-radius:16px;
+    box-shadow:0 14px 40px -14px rgba(92,42,62,0.4);
+    padding:1rem 1.1rem;
+    display:none;
+    align-items:center; gap:0.8rem;
+    max-width:420px; margin:0 auto;
+    animation:unfold .4s ease;
+  }
+  .install-banner.show{display:flex;}
+  .install-banner img{
+    width:44px;height:44px;border-radius:12px;object-fit:cover;flex-shrink:0;
+  }
+  .install-banner .txt{flex:1; min-width:0;}
+  .install-banner .txt strong{
+    display:block; font-family:'Playfair Display',serif; font-style:italic; font-size:1rem; color:var(--wine);
+  }
+  .install-banner .txt span{font-size:0.78rem; color:var(--ink-light);}
+  .install-banner .btns{display:flex; gap:0.5rem; flex-shrink:0;}
+  .install-banner button{
+    border:none; border-radius:10px; font-family:'Lora',serif; font-size:0.82rem;
+    padding:0.55rem 0.85rem; cursor:pointer;
+  }
+  .install-banner .btn-yes{background:var(--wine); color:var(--paper);}
+  .install-banner .btn-no{background:transparent; color:var(--ink-light);}
 </style>
 </head>
 <body>
+
+<div class="install-banner" id="installBanner">
+  <img src="https://resmim.net/cdn/2026/07/25/ECoEjR.jpg" alt="">
+  <div class="txt">
+    <strong>Uygulama olarak eklensin mi?</strong>
+    <span>Telefonuna ekleyip tek dokunuşla açabilirsin</span>
+  </div>
+  <div class="btns">
+    <button class="btn-no" id="installNo">Hayır</button>
+    <button class="btn-yes" id="installYes">Evet</button>
+  </div>
+</div>
 
 <div class="petals" id="petals"></div>
 
@@ -325,7 +374,7 @@ bir kelime nasıl bu kadar aydınlık olur?
 Sen gelmeden önce de vardı gökyüzü,
 ama rengi bu kadar derin değildi hiç.
 
-Elini tuttuğumda anladım,
+Sesini duyunca anladım,
 bazı isimler sadece söylenmez,
 hissedilir, taşınır, sevilir —
 senin adın öyle bir şey işte.</div>
@@ -500,6 +549,79 @@ biriyle kendin olabilmek, kolayca.</div>
     heartBox.classList.add('open');
     heartTrigger.setAttribute('aria-expanded','true');
   });
+
+  // PWA: service worker (offline cache + "add to home screen" desteği)
+  if ('serviceWorker' in navigator) {
+    const swCode = `
+      const CACHE = 'rojda-v1';
+      self.addEventListener('install', e => {
+        self.skipWaiting();
+        e.waitUntil(caches.open(CACHE).then(c => c.add(self.registration.scope)));
+      });
+      self.addEventListener('activate', e => self.clients.claim());
+      self.addEventListener('fetch', e => {
+        e.respondWith(
+          caches.match(e.request).then(cached => cached || fetch(e.request).then(res => {
+            const clone = res.clone();
+            caches.open(CACHE).then(c => c.put(e.request, clone));
+            return res;
+          }).catch(() => cached))
+        );
+      });
+    `;
+    const blob = new Blob([swCode], { type: 'application/javascript' });
+    navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(() => {});
+  }
+
+  // PWA install prompt: "Uygulama olarak eklensin mi?" sor, evet derse kur
+  (function(){
+    const banner = document.getElementById('installBanner');
+    const yesBtn = document.getElementById('installYes');
+    const noBtn = document.getElementById('installNo');
+    let deferredPrompt = null;
+
+    // Zaten kurulmuşsa hiç sorma
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+      || window.navigator.standalone === true;
+    if (isStandalone) return;
+    if (localStorage.getItem('installDismissed') === '1') return;
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      setTimeout(() => banner.classList.add('show'), 1200);
+    });
+
+    yesBtn.addEventListener('click', async () => {
+      banner.classList.remove('show');
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        await deferredPrompt.userChoice;
+        deferredPrompt = null;
+      }
+    });
+
+    noBtn.addEventListener('click', () => {
+      banner.classList.remove('show');
+      localStorage.setItem('installDismissed', '1');
+    });
+
+    // iOS Safari: beforeinstallprompt desteklenmiyor, elle yönlendir
+    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    if (isIOS) {
+      setTimeout(() => {
+        document.querySelector('.install-banner .txt span').textContent =
+          'Paylaş menüsünden "Ana Ekrana Ekle" ile uygulama gibi açabilirsin';
+        document.querySelector('.install-banner .btns').innerHTML =
+          '<button class="btn-yes" id="iosOk">Tamam</button>';
+        banner.classList.add('show');
+        document.getElementById('iosOk').addEventListener('click', () => {
+          banner.classList.remove('show');
+          localStorage.setItem('installDismissed', '1');
+        });
+      }, 1200);
+    }
+  })();
 </script>
 
 </body>
