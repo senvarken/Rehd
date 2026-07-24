@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Rojda için</title>
-<link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22Rojda%20i%C3%A7in%22%2C%22short_name%22%3A%22Rojda%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23FDF6F0%22%2C%22theme_color%22%3A%22%235C2A3E%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22https%3A%2F%2Fresmim.net%2Fcdn%2F2026%2F07%2F25%2FECoEjR.jpg%22%2C%22sizes%22%3A%22192x192%22%2C%22type%22%3A%22image%2Fjpeg%22%7D%2C%7B%22src%22%3A%22https%3A%2F%2Fresmim.net%2Fcdn%2F2026%2F07%2F25%2FECoEjR.jpg%22%2C%22sizes%22%3A%22512x512%22%2C%22type%22%3A%22image%2Fjpeg%22%7D%5D%7D">
+<link rel="manifest" id="dynamicManifest">
 <meta name="theme-color" content="#5C2A3E">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -374,7 +374,7 @@ bir kelime nasıl bu kadar aydınlık olur?
 Sen gelmeden önce de vardı gökyüzü,
 ama rengi bu kadar derin değildi hiç.
 
-Sesini duyunca anladım,
+Sesini duyduğumda anladım,
 bazı isimler sadece söylenmez,
 hissedilir, taşınır, sevilir —
 senin adın öyle bir şey işte.</div>
@@ -447,6 +447,27 @@ biriyle kendin olabilmek, kolayca.</div>
 <footer>sonsuza kadar, senin için ✦</footer>
 
 <script>
+  // PWA: manifest'i sayfanın GERÇEK konumuna göre dinamik oluştur.
+  // (Sabit bir data URI manifest'te start_url alt klasörlerde 404'e düşüyordu.)
+  (function(){
+    const scopeUrl = new URL('.', location.href).href; // örn: https://x.github.io/Rehd/
+    const manifest = {
+      name: 'Rojda için',
+      short_name: 'Rojda',
+      start_url: location.pathname + location.search,
+      scope: scopeUrl,
+      display: 'standalone',
+      background_color: '#FDF6F0',
+      theme_color: '#5C2A3E',
+      icons: [
+        { src: 'https://resmim.net/cdn/2026/07/25/ECoEjR.jpg', sizes: '192x192', type: 'image/jpeg' },
+        { src: 'https://resmim.net/cdn/2026/07/25/ECoEjR.jpg', sizes: '512x512', type: 'image/jpeg' }
+      ]
+    };
+    const blob = new Blob([JSON.stringify(manifest)], { type: 'application/manifest+json' });
+    document.getElementById('dynamicManifest').href = URL.createObjectURL(blob);
+  })();
+
   // Petals
   const petalContainer = document.getElementById('petals');
   const count = window.innerWidth < 640 ? 14 : 24;
