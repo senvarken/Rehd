@@ -327,9 +327,82 @@
   }
   .install-banner .btn-yes{background:var(--wine); color:var(--paper);}
   .install-banner .btn-no{background:transparent; color:var(--ink-light);}
+
+  /* ---------- Müzik butonu ---------- */
+  .music-btn{
+    position:fixed; top:1rem; right:1rem; z-index:99;
+    width:48px; height:48px; border-radius:50%;
+    background:var(--paper);
+    border:1px solid rgba(212,165,116,0.4);
+    box-shadow:0 8px 24px -8px rgba(92,42,62,0.35);
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer;
+    transition:transform .2s ease;
+  }
+  .music-btn:active{transform:scale(0.92);}
+  .music-btn svg{width:20px; height:20px; fill:var(--wine);}
+  .music-btn.playing{
+    animation:musicPulse 1.6s ease-in-out infinite;
+  }
+  @keyframes musicPulse{
+    0%,100%{box-shadow:0 8px 24px -8px rgba(92,42,62,0.35);}
+    50%{box-shadow:0 8px 28px -6px rgba(92,42,62,0.6);}
+  }
+  .music-btn .bars{display:flex; align-items:center; gap:2px; height:16px;}
+  .music-btn .bars span{
+    width:3px; background:var(--wine); border-radius:2px;
+    animation:barBounce 0.9s ease-in-out infinite;
+  }
+  .music-btn .bars span:nth-child(1){height:6px; animation-delay:0s;}
+  .music-btn .bars span:nth-child(2){height:14px; animation-delay:.15s;}
+  .music-btn .bars span:nth-child(3){height:9px; animation-delay:.3s;}
+  .music-btn:not(.playing) .bars span{animation-play-state:paused; height:6px;}
+  @keyframes barBounce{
+    0%,100%{height:5px;}
+    50%{height:15px;}
+  }
+
+  /* ---------- Müzik toast ---------- */
+  .music-toast{
+    position:fixed; top:1rem; right:4.2rem; z-index:98;
+    background:var(--wine); color:var(--paper);
+    font-family:'Lora',serif; font-style:italic; font-size:0.88rem;
+    padding:0.65rem 1rem; border-radius:12px 12px 4px 12px;
+    box-shadow:0 10px 28px -10px rgba(92,42,62,0.5);
+    max-width:200px; text-align:right;
+    opacity:0; transform:translateX(8px) scale(0.96);
+    pointer-events:none;
+    transition:opacity .35s ease, transform .35s ease;
+    cursor:pointer;
+    display:flex; align-items:center; gap:0.4rem; justify-content:flex-end;
+  }
+  .music-toast.show{
+    opacity:1; transform:translateX(0) scale(1);
+    pointer-events:auto;
+  }
+  .music-toast .toast-arrow{
+    flex-shrink:0; font-size:1.1rem;
+    animation:arrowNudge 1.1s ease-in-out infinite;
+  }
+  @keyframes arrowNudge{
+    0%,100%{transform:translateX(0);}
+    50%{transform:translateX(4px);}
+  }
 </style>
 </head>
 <body>
+
+<audio id="bgMusic" src="https://dl.dropbox.com/scl/fi/lw9peva6l7ex7eclxf51f/mart_kanad_nda.mp4?rlkey=7ebjpqhxm5dxiskmj94b6n23n&st=xzba5v9g&dl=1" loop preload="none"></audio>
+
+<div class="music-toast" id="musicToast">
+  <span>Müziğimi dinlemek için tıkla sevgilim 🎵</span>
+  <span class="toast-arrow">➜</span>
+</div>
+
+<button class="music-btn" id="musicBtn" aria-label="Müziği çal">
+  <div class="bars"><span></span><span></span><span></span></div>
+</button>
+
 
 <div class="install-banner" id="installBanner">
   <img src="https://resmim.net/cdn/2026/07/25/ECoEjR.jpg" alt="">
@@ -350,7 +423,7 @@
   <div class="hero-photo">
     <img src="https://resmim.net/cdn/2026/07/25/ECoEjR.jpg" alt="Rojda ve ben">
   </div>
-  <p class="hero-eyebrow">bir mektup, birkaç şiir, sonsuz bir aşk</p>
+  <p class="hero-eyebrow">bir mektup, birkaç şiir, sonsuz bir şey</p>
   <h1>Rojda'ya<span>küçük bir jest, büyük bir kalp ile</span></h1>
   <p class="sub">Bu sayfa yalnızca senin için. Aşağı in, sana ne yazdığımı gör.</p>
   <div class="scroll-cue">kaydır</div>
@@ -374,7 +447,7 @@ bir kelime nasıl bu kadar aydınlık olur?
 Sen gelmeden önce de vardı gökyüzü,
 ama rengi bu kadar derin değildi hiç.
 
-Sesini duyduğumda anladım,
+Elini tuttuğumda anladım,
 bazı isimler sadece söylenmez,
 hissedilir, taşınır, sevilir —
 senin adın öyle bir şey işte.</div>
@@ -415,6 +488,187 @@ biriyle kendin olabilmek, kolayca.</div>
     </div>
   </div>
 
+  <div class="heart-box" id="heartBox2">
+    <button class="heart-trigger" id="heartTrigger2" aria-expanded="false" disabled>
+      <svg viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 21s-6.7-4.35-9.33-8.2C.86 10.02 1.4 6.6 4.1 5.02 6.2 3.8 8.9 4.3 10.4 6.2L12 8.2l1.6-2C15.1 4.3 17.8 3.8 19.9 5.02c2.7 1.58 3.24 5 1.43 7.78C18.7 16.65 12 21 12 21z"/>
+      </svg>
+      <span class="heart-label">Sana Bir Şiir Daha</span>
+      <span class="heart-lock-note" id="lockNote2">Bu kutu saat 12:00'den önce açılmaz.</span>
+      <span class="heart-countdown" id="heartCountdown2">--:--:--</span>
+      <span class="heart-hint">kilitli</span>
+    </button>
+    <div class="heart-poem">
+      <p style="font-size:1.05rem; line-height:2.1; color:var(--wine-soft); font-style:italic; margin-bottom:1.1rem;">Rüyalarımın en güzel yerinde sen varsın; uyansam bile etkisi geçmeyen tek mucizem sensin.<br>
+      O kadar derin bir iz bıraktın ki kalbimde, senden önce yaşadıklarım sanki hiç yaşanmamış gibi geliyor.<br>
+      Jestlerinle değil sadece, sessizliğinle bile içimi huzurla dolduruyorsun; çünkü sen, sevmenin en güzel hâlisin.<br>
+      Dünyanın bütün yolları başka yerlere çıksa da, benim yolum hep sana çıkıyor. Sen benim evim, huzurum ve en güzel yarınımsın.<br>
+      Aşkın bana bir insanın başka bir insanın kalbinde sonsuz olabileceğini öğretti. Benim sonsuzluğumun adı sensin: Rojda.</p>
+
+      <p style="font-size:1.05rem; line-height:2.1; color:var(--wine-soft); font-style:italic; margin-bottom:1.1rem;">Belki sana her gün "Seni seviyorum" diyebilirim...<br>
+      Ama bu iki kelime bile içimde taşıdığım sevgiyi anlatmaya yetmez.</p>
+
+      <p style="font-size:1.05rem; line-height:2.1; color:var(--wine-soft); font-style:italic; margin-bottom:1.1rem;">Çünkü sen;<br>
+      gözlerimde umut,<br>
+      kalbimde cesaret,<br>
+      ruhumda huzur,<br>
+      ve ömrümün en güzel duasısın.</p>
+
+      <p style="font-size:1.05rem; line-height:2.1; color:var(--wine-soft); font-style:italic; margin-bottom:1.1rem;">Bir gün zaman durursa, yıldızlar sönerse, denizler kurursa bile değişmeyecek tek şey var:</p>
+
+      <p style="font-size:1.05rem; line-height:2.1; color:var(--wine-soft); font-style:italic; margin-bottom:1.1rem;">Sana olan sevgim...</p>
+
+      <p style="font-size:1.05rem; line-height:2.1; color:var(--wine-soft); font-style:italic; margin-bottom:0;">Ve eğer aşkın bir adı varsa, ben onu her gece aynı isimle fısıldıyorum:</p>
+
+      <p style="font-family:'Playfair Display',serif; font-style:italic; font-weight:700; font-size:1.5rem; color:var(--plum-accent); text-align:center; margin-top:1.2rem;">Rojda... ❤️</p>
+    </div>
+  </div>
+
+  <div class="heart-box" id="heartBox3">
+    <button class="heart-trigger" id="heartTrigger3" aria-expanded="false" disabled>
+      <svg viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 21s-6.7-4.35-9.33-8.2C.86 10.02 1.4 6.6 4.1 5.02 6.2 3.8 8.9 4.3 10.4 6.2L12 8.2l1.6-2C15.1 4.3 17.8 3.8 19.9 5.02c2.7 1.58 3.24 5 1.43 7.78C18.7 16.65 12 21 12 21z"/>
+      </svg>
+      <span class="heart-label">Gece Yarısına Doğru</span>
+      <span class="heart-lock-note" id="lockNote3">Bu kutu saat 22:00'den önce açılmaz.</span>
+      <span class="heart-countdown" id="heartCountdown3">--:--:--</span>
+      <span class="heart-hint">kilitli</span>
+    </button>
+    <div class="heart-poem">
+      <p class="acrostic-line"><span class="initial">R</span>uhumun en sessiz yerinde bile adın yankılanıyor; çünkü kalbim seni sevmeyi nefes almak gibi öğrendi.</p>
+      <p class="acrostic-line"><span class="initial">O</span>muzlarıma bütün dünyanın yükü binsin, yine de elini tuttuğum sürece hiçbir şey ağır gelmez bana.</p>
+      <p class="acrostic-line"><span class="initial">J</span>ilet kadar keskin ayrılıklar bile yaşansa, seni seven kalbimden bir harfini bile silemez.</p>
+      <p class="acrostic-line"><span class="initial">D</span>ünyada binlerce güzel var belki, ama benim gözüm yalnızca seni güzel görüyor; çünkü aşk gözle değil, kalple seçiyor.</p>
+      <p class="acrostic-line"><span class="initial">A</span>dını her andığımda içimde çiçekler açıyor; sen benim en güzel tesadüfüm değil, en kıymetli kaderimsin.</p>
+
+      <p style="font-size:1.05rem; line-height:2.1; color:var(--wine-soft); font-style:italic; margin-top:1.1rem; margin-bottom:1.1rem;">Senden önce yaşamak, sadece nefes almaktan ibaretmiş...<br>
+      Sen geldin, hayatıma anlam geldi.<br>
+      Şimdi her duamda sen varsın, her hayalimde sen, her yarınımda yine sen...</p>
+
+      <p style="font-size:1.05rem; line-height:2.1; color:var(--wine-soft); font-style:italic; margin-bottom:1.1rem;">Bir gün bana "Beni neden bu kadar seviyorsun?" diye sorarsan,<br>
+      cevabım tek cümle olacak:</p>
+
+      <p style="font-size:1.05rem; line-height:2.1; color:var(--wine-soft); font-style:italic; margin-bottom:1.1rem;">"Çünkü seni sevmek için bir sebebe hiç ihtiyacım olmadı... Sen zaten bütün sebeplerin kendisisin."</p>
+
+      <p style="font-family:'Playfair Display',serif; font-style:italic; font-weight:700; font-size:1.5rem; color:var(--plum-accent); text-align:center; margin-top:1.2rem;">Seni kelimelerle değil, ömrümle seviyorum Rojda... ❤️</p>
+    </div>
+  </div>
+
+</section>
+
+<!-- HAFTANIN GÜNLERİ -->
+<section id="haftalik">
+  <div class="section-head">
+    <div class="eyebrow">Her Gün Bir Tanesi</div>
+    <h2>Haftanın Şiirleri</h2>
+    <div class="rule"></div>
+  </div>
+
+  <div class="heart-box" id="dayBoxMon">
+    <button class="heart-trigger" id="dayTriggerMon" aria-expanded="false" disabled>
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-6.7-4.35-9.33-8.2C.86 10.02 1.4 6.6 4.1 5.02 6.2 3.8 8.9 4.3 10.4 6.2L12 8.2l1.6-2C15.1 4.3 17.8 3.8 19.9 5.02c2.7 1.58 3.24 5 1.43 7.78C18.7 16.65 12 21 12 21z"/></svg>
+      <span class="heart-label">Pazartesi</span>
+      <span class="heart-lock-note" id="dayLockMon">Sadece Pazartesi günleri, saat 09:00'dan sonra açılır.</span>
+      <span class="heart-countdown" id="dayCountdownMon">--:--:--</span>
+      <span class="heart-hint">kilitli</span>
+    </button>
+    <div class="heart-poem">
+      <p style="font-size:1.05rem; line-height:2.1; color:var(--wine-soft); font-style:italic;">Haftanın ilk sabahı, gözümü açar açmaz aklıma ilk sen düşüyorsun.<br>
+      Yeni bir hafta başlıyor olabilir ama benim için değişen tek bir şey var:<br>
+      seni dün de sevdim, bugün de seviyorum, yarın da seveceğim — hiç durmadan.</p>
+    </div>
+  </div>
+
+  <div class="heart-box" id="dayBoxTue">
+    <button class="heart-trigger" id="dayTriggerTue" aria-expanded="false" disabled>
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-6.7-4.35-9.33-8.2C.86 10.02 1.4 6.6 4.1 5.02 6.2 3.8 8.9 4.3 10.4 6.2L12 8.2l1.6-2C15.1 4.3 17.8 3.8 19.9 5.02c2.7 1.58 3.24 5 1.43 7.78C18.7 16.65 12 21 12 21z"/></svg>
+      <span class="heart-label">Salı</span>
+      <span class="heart-lock-note" id="dayLockTue">Sadece Salı günleri, saat 14:00'ten sonra açılır.</span>
+      <span class="heart-countdown" id="dayCountdownTue">--:--:--</span>
+      <span class="heart-hint">kilitli</span>
+    </button>
+    <div class="heart-poem">
+      <p style="font-size:1.05rem; line-height:2.1; color:var(--wine-soft); font-style:italic;">Günün tam ortasında, işlerin arasında bir an durup seni düşünüyorum.<br>
+      Belki yanımda değilsin ama kalbimin en gürültülü yerinde hep sen varsın.<br>
+      Bu öğleden sonra, aklımdaki tek isim: sen.</p>
+    </div>
+  </div>
+
+  <div class="heart-box" id="dayBoxWed">
+    <button class="heart-trigger" id="dayTriggerWed" aria-expanded="false" disabled>
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-6.7-4.35-9.33-8.2C.86 10.02 1.4 6.6 4.1 5.02 6.2 3.8 8.9 4.3 10.4 6.2L12 8.2l1.6-2C15.1 4.3 17.8 3.8 19.9 5.02c2.7 1.58 3.24 5 1.43 7.78C18.7 16.65 12 21 12 21z"/></svg>
+      <span class="heart-label">Çarşamba</span>
+      <span class="heart-lock-note" id="dayLockWed">Sadece Çarşamba günleri, saat 18:00'den sonra açılır.</span>
+      <span class="heart-countdown" id="dayCountdownWed">--:--:--</span>
+      <span class="heart-hint">kilitli</span>
+    </button>
+    <div class="heart-poem">
+      <p style="font-size:1.05rem; line-height:2.1; color:var(--wine-soft); font-style:italic;">Haftanın tam ortasındayız, yorgunluk belki üzerimizde.<br>
+      Ama akşam olup da sesini duyduğumda, bütün yorgunluk bir anda eriyor.<br>
+      Sen benim en dinlendirici molamsın.</p>
+    </div>
+  </div>
+
+  <div class="heart-box" id="dayBoxThu">
+    <button class="heart-trigger" id="dayTriggerThu" aria-expanded="false" disabled>
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-6.7-4.35-9.33-8.2C.86 10.02 1.4 6.6 4.1 5.02 6.2 3.8 8.9 4.3 10.4 6.2L12 8.2l1.6-2C15.1 4.3 17.8 3.8 19.9 5.02c2.7 1.58 3.24 5 1.43 7.78C18.7 16.65 12 21 12 21z"/></svg>
+      <span class="heart-label">Perşembe</span>
+      <span class="heart-lock-note" id="dayLockThu">Sadece Perşembe günleri, saat 11:00'den sonra açılır.</span>
+      <span class="heart-countdown" id="dayCountdownThu">--:--:--</span>
+      <span class="heart-hint">kilitli</span>
+    </button>
+    <div class="heart-poem">
+      <p style="font-size:1.05rem; line-height:2.1; color:var(--wine-soft); font-style:italic;">Haftanın sonuna yaklaşıyoruz ama sana olan sevgim hiç azalmıyor, tam tersine katlanarak büyüyor.<br>
+      Her geçen gün seni biraz daha çok seviyorum,<br>
+      ve bu hiç bitmeyecek bir yolculuk gibi hissettiriyor içimi.</p>
+    </div>
+  </div>
+
+  <div class="heart-box" id="dayBoxFri">
+    <button class="heart-trigger" id="dayTriggerFri" aria-expanded="false" disabled>
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-6.7-4.35-9.33-8.2C.86 10.02 1.4 6.6 4.1 5.02 6.2 3.8 8.9 4.3 10.4 6.2L12 8.2l1.6-2C15.1 4.3 17.8 3.8 19.9 5.02c2.7 1.58 3.24 5 1.43 7.78C18.7 16.65 12 21 12 21z"/></svg>
+      <span class="heart-label">Cuma</span>
+      <span class="heart-lock-note" id="dayLockFri">Sadece Cuma günleri, saat 20:00'den sonra açılır.</span>
+      <span class="heart-countdown" id="dayCountdownFri">--:--:--</span>
+      <span class="heart-hint">kilitli</span>
+    </button>
+    <div class="heart-poem">
+      <p style="font-size:1.05rem; line-height:2.1; color:var(--wine-soft); font-style:italic;">Aramızda kilometreler var ama bu akşam sesini duyunca hepsi yok oluyor.<br>
+      Hafta boyu "keşke yanımda olsan" dediğim onca an, bu telefon ekranında birleşiyor.<br>
+      İstanbul'dan Diyarbakır'a uzanan bu özlem, her cuma biraz daha ağırlaşıyor — ama seni sevmekten hiç yorulmuyorum.</p>
+    </div>
+  </div>
+
+  <div class="heart-box" id="dayBoxSat">
+    <button class="heart-trigger" id="dayTriggerSat" aria-expanded="false" disabled>
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-6.7-4.35-9.33-8.2C.86 10.02 1.4 6.6 4.1 5.02 6.2 3.8 8.9 4.3 10.4 6.2L12 8.2l1.6-2C15.1 4.3 17.8 3.8 19.9 5.02c2.7 1.58 3.24 5 1.43 7.78C18.7 16.65 12 21 12 21z"/></svg>
+      <span class="heart-label">Cumartesi</span>
+      <span class="heart-lock-note" id="dayLockSat">Sadece Cumartesi günleri, saat 16:00'dan sonra açılır.</span>
+      <span class="heart-countdown" id="dayCountdownSat">--:--:--</span>
+      <span class="heart-hint">kilitli</span>
+    </button>
+    <div class="heart-poem">
+      <p style="font-size:1.05rem; line-height:2.1; color:var(--wine-soft); font-style:italic;">Bugün hafta sonu, herkes sevdiğiyle birlikteyken ben ekranından gülüşüne bakıyorum.<br>
+      Mesafe bazen içimi sıkıştırsa da, seni bu kadar uzaktan bile bu kadar çok sevebilmek beni şaşırtıyor.<br>
+      Bir gün bu kilometreler bitecek ve seni hiç bırakmayacağım kollarımda.</p>
+    </div>
+  </div>
+
+  <div class="heart-box" id="dayBoxSun">
+    <button class="heart-trigger" id="dayTriggerSun" aria-expanded="false" disabled>
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-6.7-4.35-9.33-8.2C.86 10.02 1.4 6.6 4.1 5.02 6.2 3.8 8.9 4.3 10.4 6.2L12 8.2l1.6-2C15.1 4.3 17.8 3.8 19.9 5.02c2.7 1.58 3.24 5 1.43 7.78C18.7 16.65 12 21 12 21z"/></svg>
+      <span class="heart-label">Pazar</span>
+      <span class="heart-lock-note" id="dayLockSun">Sadece Pazar günleri, saat 23:00'ten sonra açılır.</span>
+      <span class="heart-countdown" id="dayCountdownSun">--:--:--</span>
+      <span class="heart-hint">kilitli</span>
+    </button>
+    <div class="heart-poem">
+      <p style="font-size:1.05rem; line-height:2.1; color:var(--wine-soft); font-style:italic;">Hafta bitiyor, gece derinleşiyor, ve ben yine seni düşünerek uykuya dalmaya hazırlanıyorum.<br>
+      Yeni haftaya "seni seviyorum" diyerek girmek, benim için en güzel gelenek.<br>
+      İyi geceler sevgilim, yarın yine seninleyim.</p>
+    </div>
+  </div>
+
 </section>
 
 <!-- LETTER -->
@@ -447,14 +701,16 @@ biriyle kendin olabilmek, kolayca.</div>
 <footer>sonsuza kadar, senin için ✦</footer>
 
 <script>
+<script>
   // PWA: manifest'i sayfanın GERÇEK konumuna göre dinamik oluştur.
-  // (Sabit bir data URI manifest'te start_url alt klasörlerde 404'e düşüyordu.)
-  (function(){
-    const scopeUrl = new URL('.', location.href).href; // örn: https://x.github.io/Rehd/
+  try {
+    const base = document.baseURI || location.href;
+    const scopeUrl = new URL('./', base).href;
+    const startUrl = (location.pathname || './') + (location.search || '');
     const manifest = {
       name: 'Rojda için',
       short_name: 'Rojda',
-      start_url: location.pathname + location.search,
+      start_url: startUrl,
       scope: scopeUrl,
       display: 'standalone',
       background_color: '#FDF6F0',
@@ -465,9 +721,14 @@ biriyle kendin olabilmek, kolayca.</div>
       ]
     };
     const blob = new Blob([JSON.stringify(manifest)], { type: 'application/manifest+json' });
-    document.getElementById('dynamicManifest').href = URL.createObjectURL(blob);
-  })();
+    const link = document.getElementById('dynamicManifest');
+    if (link) link.href = URL.createObjectURL(blob);
+  } catch (err) {
+    console.warn('Manifest oluşturulamadı:', err);
+  }
+</script>
 
+<script>
   // Petals
   const petalContainer = document.getElementById('petals');
   const count = window.innerWidth < 640 ? 14 : 24;
@@ -503,11 +764,6 @@ biriyle kendin olabilmek, kolayca.</div>
   });
 
   // Heart box + flying hearts
-  const heartBox = document.getElementById('heartBox');
-  const heartTrigger = document.getElementById('heartTrigger');
-  const heartCountdown = document.getElementById('heartCountdown');
-  const heartHint = document.getElementById('heartHint');
-  const lockNote = document.getElementById('lockNote');
   const heartSymbols = ['♥','❤','💗'];
 
   function spawnHearts(){
@@ -529,47 +785,133 @@ biriyle kendin olabilmek, kolayca.</div>
     setTimeout(() => burst.remove(), 4200);
   }
 
-  function getNextUnlockTime(){
+  function pad(n){ return String(n).padStart(2,'0'); }
+
+  function getNextUnlockTime(hour){
     const now = new Date();
-    const target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 7, 0, 0, 0);
-    if (now >= target) return null; // already past 07:00 today
+    const target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, 0, 0, 0);
+    if (now >= target) return null; // bugün için saat zaten geçmiş
     return target;
   }
 
-  function pad(n){ return String(n).padStart(2,'0'); }
+  function setupHeartBox(unlockHour, ids){
+    const box = document.getElementById(ids.box);
+    const trigger = document.getElementById(ids.trigger);
+    const countdown = document.getElementById(ids.countdown);
+    const hint = document.getElementById(ids.hint);
+    const lockNote = document.getElementById(ids.lockNote);
+    if (!box || !trigger) return;
 
-  function updateLockState(){
-    const target = getNextUnlockTime();
-    if (!target){
-      // Unlocked
-      heartTrigger.disabled = false;
-      heartCountdown.style.display = 'none';
-      lockNote.style.display = 'none';
-      heartHint.textContent = 'açmak için kalbe dokun';
-      return true;
+    function updateLockState(){
+      const target = getNextUnlockTime(unlockHour);
+      if (!target){
+        trigger.disabled = false;
+        if (countdown) countdown.style.display = 'none';
+        if (lockNote) lockNote.style.display = 'none';
+        if (hint) hint.textContent = 'açmak için kalbe dokun';
+        return true;
+      }
+      const diff = target - new Date();
+      const h = Math.floor(diff / 3600000);
+      const m = Math.floor((diff % 3600000) / 60000);
+      const s = Math.floor((diff % 60000) / 1000);
+      if (countdown) countdown.textContent = pad(h) + ':' + pad(m) + ':' + pad(s);
+      if (hint) hint.textContent = 'kilitli';
+      return false;
     }
-    const diff = target - new Date();
-    const h = Math.floor(diff / 3600000);
-    const m = Math.floor((diff % 3600000) / 60000);
-    const s = Math.floor((diff % 60000) / 1000);
-    heartCountdown.textContent = pad(h) + ':' + pad(m) + ':' + pad(s);
-    heartHint.textContent = 'kilitli';
-    return false;
+
+    let unlocked = updateLockState();
+    const timer = setInterval(() => {
+      if (unlocked) { clearInterval(timer); return; }
+      unlocked = updateLockState();
+      if (unlocked) clearInterval(timer);
+    }, 1000);
+
+    trigger.addEventListener('click', () => {
+      if (trigger.disabled) return;
+      spawnHearts();
+      box.classList.add('open');
+      trigger.setAttribute('aria-expanded','true');
+    });
   }
 
-  let unlocked = updateLockState();
-  const lockTimer = setInterval(() => {
-    if (unlocked) { clearInterval(lockTimer); return; }
-    unlocked = updateLockState();
-    if (unlocked) clearInterval(lockTimer);
-  }, 1000);
-
-  heartTrigger.addEventListener('click', () => {
-    if (heartTrigger.disabled) return;
-    spawnHearts();
-    heartBox.classList.add('open');
-    heartTrigger.setAttribute('aria-expanded','true');
+  setupHeartBox(7, {
+    box: 'heartBox', trigger: 'heartTrigger',
+    countdown: 'heartCountdown', hint: 'heartHint', lockNote: 'lockNote'
   });
+
+  setupHeartBox(12, {
+    box: 'heartBox2', trigger: 'heartTrigger2',
+    countdown: 'heartCountdown2', hint: null, lockNote: 'lockNote2'
+  });
+
+  setupHeartBox(22, {
+    box: 'heartBox3', trigger: 'heartTrigger3',
+    countdown: 'heartCountdown3', hint: null, lockNote: 'lockNote3'
+  });
+
+  // Haftanın günlerine özel kutular: sadece o gün, belirtilen saatten sonra açılır
+  function getNextDayUnlockTime(targetWeekday, hour){
+    // targetWeekday: 0=Pazar, 1=Pazartesi ... 6=Cumartesi (JS Date standardı)
+    const now = new Date();
+    if (now.getDay() === targetWeekday) {
+      const todayTarget = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, 0, 0, 0);
+      if (now >= todayTarget) return { unlockedToday: true };
+      return { target: todayTarget, unlockedToday: false };
+    }
+    return { wrongDay: true };
+  }
+
+  function setupDayHeartBox(targetWeekday, unlockHour, ids){
+    const box = document.getElementById(ids.box);
+    const trigger = document.getElementById(ids.trigger);
+    const countdown = document.getElementById(ids.countdown);
+    const lockNote = document.getElementById(ids.lockNote);
+    if (!box || !trigger) return;
+
+    function updateLockState(){
+      const state = getNextDayUnlockTime(targetWeekday, unlockHour);
+
+      if (state.wrongDay) {
+        trigger.disabled = true;
+        if (countdown) countdown.style.display = 'none';
+        return false;
+      }
+
+      if (state.unlockedToday) {
+        trigger.disabled = false;
+        if (countdown) countdown.style.display = 'none';
+        if (lockNote) lockNote.style.display = 'none';
+        return true;
+      }
+
+      const diff = state.target - new Date();
+      const h = Math.floor(diff / 3600000);
+      const m = Math.floor((diff % 3600000) / 60000);
+      const s = Math.floor((diff % 60000) / 1000);
+      if (countdown) { countdown.style.display = ''; countdown.textContent = pad(h) + ':' + pad(m) + ':' + pad(s); }
+      if (lockNote) lockNote.style.display = '';
+      return false;
+    }
+
+    let unlocked = updateLockState();
+    setInterval(() => { unlocked = updateLockState(); }, 1000);
+
+    trigger.addEventListener('click', () => {
+      if (trigger.disabled) return;
+      spawnHearts();
+      box.classList.add('open');
+      trigger.setAttribute('aria-expanded','true');
+    });
+  }
+
+  setupDayHeartBox(1, 9,  { box:'dayBoxMon', trigger:'dayTriggerMon', countdown:'dayCountdownMon', lockNote:'dayLockMon' });
+  setupDayHeartBox(2, 14, { box:'dayBoxTue', trigger:'dayTriggerTue', countdown:'dayCountdownTue', lockNote:'dayLockTue' });
+  setupDayHeartBox(3, 18, { box:'dayBoxWed', trigger:'dayTriggerWed', countdown:'dayCountdownWed', lockNote:'dayLockWed' });
+  setupDayHeartBox(4, 11, { box:'dayBoxThu', trigger:'dayTriggerThu', countdown:'dayCountdownThu', lockNote:'dayLockThu' });
+  setupDayHeartBox(5, 20, { box:'dayBoxFri', trigger:'dayTriggerFri', countdown:'dayCountdownFri', lockNote:'dayLockFri' });
+  setupDayHeartBox(6, 16, { box:'dayBoxSat', trigger:'dayTriggerSat', countdown:'dayCountdownSat', lockNote:'dayLockSat' });
+  setupDayHeartBox(0, 23, { box:'dayBoxSun', trigger:'dayTriggerSun', countdown:'dayCountdownSun', lockNote:'dayLockSun' });
 
   // PWA: service worker (offline cache + "add to home screen" desteği)
   if ('serviceWorker' in navigator) {
@@ -595,54 +937,103 @@ biriyle kendin olabilmek, kolayca.</div>
   }
 
   // PWA install prompt: "Uygulama olarak eklensin mi?" sor, evet derse kur
-  (function(){
+  try {
     const banner = document.getElementById('installBanner');
     const yesBtn = document.getElementById('installYes');
     const noBtn = document.getElementById('installNo');
     let deferredPrompt = null;
 
-    // Zaten kurulmuşsa hiç sorma
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches
-      || window.navigator.standalone === true;
-    if (isStandalone) return;
-    if (localStorage.getItem('installDismissed') === '1') return;
+    function safeGet(key){ try { return localStorage.getItem(key); } catch(e){ return null; } }
+    function safeSet(key, val){ try { localStorage.setItem(key, val); } catch(e){} }
 
-    window.addEventListener('beforeinstallprompt', (e) => {
-      e.preventDefault();
-      deferredPrompt = e;
-      setTimeout(() => banner.classList.add('show'), 1200);
-    });
+    if (banner && yesBtn && noBtn) {
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+        || window.navigator.standalone === true;
 
-    yesBtn.addEventListener('click', async () => {
-      banner.classList.remove('show');
-      if (deferredPrompt) {
-        deferredPrompt.prompt();
-        await deferredPrompt.userChoice;
-        deferredPrompt = null;
-      }
-    });
-
-    noBtn.addEventListener('click', () => {
-      banner.classList.remove('show');
-      localStorage.setItem('installDismissed', '1');
-    });
-
-    // iOS Safari: beforeinstallprompt desteklenmiyor, elle yönlendir
-    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
-    if (isIOS) {
-      setTimeout(() => {
-        document.querySelector('.install-banner .txt span').textContent =
-          'Paylaş menüsünden "Ana Ekrana Ekle" ile uygulama gibi açabilirsin';
-        document.querySelector('.install-banner .btns').innerHTML =
-          '<button class="btn-yes" id="iosOk">Tamam</button>';
-        banner.classList.add('show');
-        document.getElementById('iosOk').addEventListener('click', () => {
-          banner.classList.remove('show');
-          localStorage.setItem('installDismissed', '1');
+      if (!isStandalone && safeGet('installDismissed') !== '1') {
+        window.addEventListener('beforeinstallprompt', (e) => {
+          e.preventDefault();
+          deferredPrompt = e;
+          setTimeout(() => banner.classList.add('show'), 1200);
         });
-      }, 1200);
+
+        yesBtn.addEventListener('click', async () => {
+          banner.classList.remove('show');
+          if (deferredPrompt) {
+            deferredPrompt.prompt();
+            await deferredPrompt.userChoice;
+            deferredPrompt = null;
+          }
+        });
+
+        noBtn.addEventListener('click', () => {
+          banner.classList.remove('show');
+          safeSet('installDismissed', '1');
+        });
+
+        // iOS Safari: beforeinstallprompt desteklenmiyor, elle yönlendir
+        const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+        if (isIOS) {
+          setTimeout(() => {
+            const txt = document.querySelector('.install-banner .txt span');
+            const btns = document.querySelector('.install-banner .btns');
+            if (txt) txt.textContent = 'Paylaş menüsünden "Ana Ekrana Ekle" ile uygulama gibi açabilirsin';
+            if (btns) btns.innerHTML = '<button class="btn-yes" id="iosOk">Tamam</button>';
+            banner.classList.add('show');
+            const iosOk = document.getElementById('iosOk');
+            if (iosOk) iosOk.addEventListener('click', () => {
+              banner.classList.remove('show');
+              safeSet('installDismissed', '1');
+            });
+          }, 1200);
+        }
+      }
     }
-  })();
+  } catch (err) {
+    console.warn('Install prompt kurulamadı:', err);
+  }
+</script>
+
+<script>
+  // Müzik çal/durdur
+  try {
+    const bgMusic = document.getElementById('bgMusic');
+    const musicBtn = document.getElementById('musicBtn');
+    const musicToast = document.getElementById('musicToast');
+
+    if (musicToast) {
+      setTimeout(() => musicToast.classList.add('show'), 900);
+      setTimeout(() => musicToast.classList.remove('show'), 10900);
+    }
+
+    async function toggleMusic(){
+      if (!bgMusic || !musicBtn) return;
+      if (musicToast) musicToast.classList.remove('show');
+      try {
+        if (bgMusic.paused) {
+          await bgMusic.play();
+          musicBtn.classList.add('playing');
+        } else {
+          bgMusic.pause();
+          musicBtn.classList.remove('playing');
+        }
+      } catch (e) {
+        console.warn('Müzik çalınamadı:', e);
+      }
+    }
+
+    if (bgMusic && musicBtn) {
+      musicBtn.addEventListener('click', toggleMusic);
+      bgMusic.addEventListener('ended', () => musicBtn.classList.remove('playing'));
+      bgMusic.addEventListener('pause', () => musicBtn.classList.remove('playing'));
+      bgMusic.addEventListener('play', () => musicBtn.classList.add('playing'));
+    }
+    if (musicToast) {
+      musicToast.addEventListener('click', toggleMusic);
+    }
+  } catch (err) {
+    console.warn('Müzik butonu kurulamadı:', err);
+  }
 </script>
 
 </body>
