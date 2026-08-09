@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260809-065926-6fe570b">
+<html lang="tr" data-build="askbahcem-20260809-070546-28a4eba">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -806,9 +806,19 @@ svg#loveArrow{width:26px!important;height:14px!important;display:block!important
 #emojiPicker span:hover{background:rgba(255,255,255,.1)}
 
 /* ── ADMIN REACTION TOOLBAR ── */
-#reactionBar{display:none;align-items:center;justify-content:flex-start;gap:8px;padding:8px 10px;background:rgba(43,15,28,.7);border-top:1px solid rgba(242,196,206,.06);flex-shrink:0;z-index:10;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+#reactionBar{display:none;align-items:center;justify-content:flex-start;gap:8px;padding:8px 10px;background:rgba(43,15,28,.7);border-top:1px solid rgba(242,196,206,.06);flex-shrink:0;z-index:10;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;position:relative}
 #reactionBar::-webkit-scrollbar{display:none}
-.react-btn{border:none;cursor:pointer;background:rgba(255,255,255,.05);border-radius:13px;padding:8px 13px;color:#fff;display:flex;align-items:center;gap:6px;transition:transform .15s,background .15s;font-family:var(--font-body);flex-shrink:0}
+/* DÜZELTME (hızlı mesajlar "bozuk/kesik" görünüyordu): #reactionBar yatayda
+   kaydırılabilir bir satır, ama görsel bir ipucu olmadığı için son buton
+   (ör. "Ateş") ekranın kenarında yarım kesilmiş halde duruyor ve kullanıcıya
+   bozuk/render hatası gibi görünüyordu — aslında kaydırınca geri kalanı
+   normal çıkıyordu. Çözüm: konteynerin sağ (ve gerekirse sol) kenarına ince
+   bir "fade" gölgesi ekleyerek "burada daha fazla içerik var, kaydır"
+   sinyali veriyoruz. Performans/ısınma açısından maliyetsiz: sabit,
+   animasyonsuz bir ::after katmanı, GPU'ya sürekli iş yüklemez. */
+#reactionBarWrap{position:relative;flex-shrink:0}
+#reactionBarWrap::after{content:'';position:absolute;top:0;right:0;bottom:0;width:28px;pointer-events:none;background:linear-gradient(90deg,rgba(43,15,28,0),rgba(43,15,28,.85));z-index:11}
+.react-btn{border:none;cursor:pointer;background:rgba(255,255,255,.05);border-radius:13px;padding:8px 13px;color:#fff;display:flex;align-items:center;gap:6px;transition:transform .15s,background .15s;font-family:var(--font-body);flex-shrink:0;white-space:nowrap}
 .react-btn:hover{background:rgba(192,57,90,.32);transform:scale(1.05)}
 .react-btn:active{transform:scale(.94)}
 .react-btn .icon{color:var(--rose)}
@@ -1261,6 +1271,7 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
 </div>
 
 <!-- ADMIN REACTION BAR -->
+<div id="reactionBarWrap">
 <div id="reactionBar">
   <div class="react-label">Gönder</div>
   <button class="react-btn" onclick="sendBomb('kiss','Öpücük gönderdi')"><span class="emoji-ico">💋</span><span>Öpücük</span></button>
@@ -1271,6 +1282,7 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
   <button class="react-btn" onclick="sendBomb('ring','Evlenelim mi?')"><span class="emoji-ico">💍</span><span>Yüzük</span></button>
   <button class="react-btn" onclick="sendBomb('hug','Sarılıyorum!')"><span class="emoji-ico">🤗</span><span>Sarıl</span></button>
   <button class="react-btn" onclick="sendBomb('cry','Seni özledim!')"><span class="emoji-ico">🥺</span><span>Özledim</span></button>
+</div>
 </div>
 
 <!-- ═══ KAYBOLAN MESAJ MODU BİLDİRİM ÇUBUĞU ═══ -->
