@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260809-234523-c705b0f">
+<html lang="tr" data-build="askbahcem-20260809-235558-e83bf09">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -6368,6 +6368,19 @@ function listenCallSignal(){
       // bir answer ile karşılık verilir; görüşme hiç kesintiye uğramaz.
       if(d.renegotiate&&peerConn&&d.sessionId&&d.sessionId===currentCallSessionId){
         try{
+          // DÜZELTME (glare/çakışma koruması): eğer signalingState zaten
+          // 'have-local-offer' ise biz de tam o anda kendi offer'ımızı
+          // gönderiyorduk demektir — iki taraf aynı anda offer atarsa
+          // setRemoteDescription burada da patlayıp görüşmeyi kalıcı
+          // "yeniden bağlanıyor" durumunda bırakabiliyordu. Bu durumda
+          // gelen offer'ı bu turda atlıyoruz; birkaç saniye içinde taraflar
+          // kendiliğinden tekrar deneyip senkronize olacaktır.
+          if(peerConn.signalingState!=='stable'&&peerConn.signalingState!=='have-local-offer'){
+            return;
+          }
+          if(peerConn.signalingState==='have-local-offer'){
+            return; // çakışma — bu turu atla, karşı taraf da bizim offer'ımızı işleyecek
+          }
           await peerConn.setRemoteDescription(new RTCSessionDescription(d.offer));
           flushPendingIce();
           const answer=await peerConn.createAnswer();
@@ -6390,7 +6403,20 @@ function listenCallSignal(){
       missedCallTmr=setTimeout(missCall,30000);
     }
     if(d.type==='answer'&&peerConn){
-      try{await peerConn.setRemoteDescription(new RTCSessionDescription(d.answer))}catch(e){return}
+      // DÜZELTME (sonsuza dek "Yeniden bağlanıyor" takılması): önceden
+      // setRemoteDescription hata verirse (ör. glare/state uyumsuzluğu)
+      // sessizce return ediliyordu — negotiating kilidi zaten finally'de
+      // sıfırlanıyor ama banner hiç kapanmıyor, kullanıcı ekranda asılı
+      // kalıyordu. Artık hata durumunda da toparlanma şansı için kısa bir
+      // süre sonra tekrar deneme tetikliyoruz.
+      try{
+        await peerConn.setRemoteDescription(new RTCSessionDescription(d.answer));
+      }catch(e){
+        // signalingState uyumsuzsa bu answer artık geçersiz (eski bir tur) —
+        // görüşmeyi hemen kapatmıyoruz, mevcut _dcRetryInt/watchdog zaten
+        // birkaç saniye içinde yeni bir tur başlatacak.
+        return;
+      }
       flushPendingIce();
       hideReconnectBanner();
       setCallConnectedUI();
@@ -7072,6 +7098,16 @@ function createPC(){
     // Sadece gerçek bir yeniden-bağlanma (ör. ICE restart) söz konusu olduğunda,
     // yani ilk el sıkışma zaten tamamlanmışken tetiklenir.
     if(!pc.currentLocalDescription||!pc.currentRemoteDescription)return;
+    // DÜZELTME (sonsuza dek "Yeniden bağlanıyor" takılması — asıl sebep):
+    // signalingState 'stable' değilken (yani zaten bir offer/answer turu
+    // sürüyorken) ikinci bir offer daha göndermek "glare" (çakışma) yaratır.
+    // Bu durumda karşı tarafın setRemoteDescription'ı InvalidStateError ile
+    // patlar, hata sessizce yutulur ve görüşme kalıcı olarak "yeniden
+    // bağlanıyor" durumunda asılı kalırdı. Sadece stable haldeyken yeni
+    // offer başlatıyoruz; değilse bu turu atlıyoruz — periyodik yeniden
+    // deneme mekanizması (_dcRetryInt) zaten birkaç saniye sonra tekrar
+    // dener, o zamana kadar state stable'a dönmüş olur.
+    if(pc.signalingState!=='stable')return;
     try{
       pc._negotiating=true;
       const offer=await pc.createOffer({iceRestart:true});
