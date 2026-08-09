@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260809-072057-aed43c8">
+<html lang="tr" data-build="askbahcem-20260809-072917-c2f71d3">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -1787,11 +1787,88 @@ const CALL_MEDIA_CONSTRAINTS={
   video:{width:{ideal:426,max:640},height:{ideal:320,max:480},frameRate:{ideal:18,max:20},facingMode:'user'},
   audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}
 };
+/* GÖRÜŞME PERFORMANS MODU: startCall()/acceptCall() içinde açılır,
+   endCallCleanup() içinde kapanır. html'e .call-active ekler (CSS'teki
+   genel dondurma kuralını tetikler) ve arka planda çalışan, görüşme
+   sırasında hiçbir işe yaramayan ama sürekli DOM/CSS animasyonu tetikleyen
+   interval'leri (aşk oku, kalp partikülleri) durdurur. Ayrıca görüşme
+   kalite kademesini (aşağıda) SIFIRDAN başlatır — süre ve CPU-zorlanma
+   sayaçları burada bir kere kurulur, ağ kesintisi sonrası yeniden
+   bağlanmalarda (startAdaptiveBitrate tekrar çağrılsa bile) SIFIRLANMAZ;
+   böylece 10 saatlik bir görüşmede ara ara wifi↔mobil veri geçişi olsa
+   bile, önceden düşürülmüş kademe kaybolup telefon tekrar yüksek
+   çözünürlüğe/ısınmaya dönmez. */
+function enterCallPerfMode(){
+  document.documentElement.classList.add('call-active');
+  clearInterval(loveArrowTmr);
+  window.__callPerfMode=true;
+  callOverallStartTs=Date.now();
+  callQualityTierIdx=0;
+  cpuLimitedStreak=0;
+  adaptiveBrCurrent=CALL_QUALITY_TIERS[0].br;
+}
+function exitCallPerfMode(){
+  document.documentElement.classList.remove('call-active');
+  window.__callPerfMode=false;
+  const fx=document.getElementById('loveArrowFx');
+  if(fx&&fx.classList.contains('visible')){
+    clearInterval(loveArrowTmr);
+    loveArrowTmr=setInterval(playLoveArrow,5000);
+  }
+}
+/* ═══════════════════════════════════════
+   GÖRÜŞME KALİTE KADEMELERİ — KÖKTEN ÇÖZÜM
+   Önceki sürüm SADECE çıkış bitrate'ini kısıyordu; kamera hâlâ 426x320
+   çözünürlükte YAKALANIYOR ve her karede o boyutta encode ediliyordu.
+   Isının asıl kaynağı budur (ISP + renk dönüşümü + encode iş yükü) —
+   bitrate'i kısmak sadece çıktının boyutunu küçültür, encoder'ın YAPMASI
+   GEREKEN İŞİ değil. Burada track.applyConstraints() ile HAM YAKALAMAYI
+   gerçekten küçültüyoruz, böylece iş yükü fiziksel olarak azalıyor.
+   İki bağımsız tetikleyici var:
+   1) SÜRE: görüşme uzadıkça (15dk / 45dk / 2sa eşikleri — 10 saatlik
+      görüşmeler için) kademe otomatik iner.
+   2) GERÇEK ZAMANLI CPU SİNYALİ: tarayıcının kendi getStats() çıktısındaki
+      qualityLimitationReason:'cpu' değeri, encoder'ın O ANDA cihazın
+      gücüne yetişemediğinin doğrudan kanıtıdır — süre dolmasını beklemeden
+      hemen bir alt kademeye inilir. Bu, cihaz modelinden bağımsız çalışan
+      gerçek bir ısınma erken-uyarı sistemidir.
+═══════════════════════════════════════ */
+const CALL_QUALITY_TIERS=[
+  {w:426,h:320,fps:18,br:320000,brMax:500000}, // 0: görüşmenin ilk ~15dk'sı
+  {w:320,h:240,fps:15,br:220000,brMax:320000}, // 1: 15dk+ veya CPU zorlanması
+  {w:256,h:192,fps:12,br:150000,brMax:220000}, // 2: 45dk+ veya sürekli CPU zorlanması
+  {w:214,h:160,fps:10,br:100000,brMax:150000}  // 3: 2sa+ (çok uzun/10 saatlik görüşmeler)
+];
+let callQualityTierIdx=0;
+let cpuLimitedStreak=0;
+let callOverallStartTs=0;
+async function applyQualityTier(idx,pc){
+  idx=Math.max(0,Math.min(CALL_QUALITY_TIERS.length-1,idx));
+  if(idx<=callQualityTierIdx)return; // sadece aşağı doğru iniyoruz, geri yükseltmiyoruz (ısınma tekrar başlamasın)
+  callQualityTierIdx=idx;
+  const tier=CALL_QUALITY_TIERS[idx];
+  try{
+    const sender=pc&&pc.getSenders&&pc.getSenders().find(s=>s.track&&s.track.kind==='video');
+    if(sender&&sender.track){
+      await sender.track.applyConstraints({width:{ideal:tier.w},height:{ideal:tier.h},frameRate:{ideal:tier.fps}}).catch(()=>{});
+    }
+    if(sender){
+      const params=sender.getParameters();
+      if(!params.encodings||!params.encodings.length)params.encodings=[{}];
+      params.encodings[0].maxBitrate=tier.br;
+      params.encodings[0].degradationPreference='balanced';
+      sender.setParameters(params).catch(()=>{});
+    }
+    adaptiveBrCurrent=tier.br;
+    console.log('[QUALITY-TIER] kademe düşürüldü ->',idx,tier);
+  }catch(e){}
+}
 function capVideoBitrate(sender){
   try{
+    const tier=CALL_QUALITY_TIERS[callQualityTierIdx||0];
     const params=sender.getParameters();
     if(!params.encodings||!params.encodings.length)params.encodings=[{}];
-    params.encodings[0].maxBitrate=320000; // ~320kbps — kalıcı ısınma çözümü için biraz daha kısıldı
+    params.encodings[0].maxBitrate=tier.br;
     // DÜZELTME (ısınma — kalıcı çözüm): 'maintain-framerate' tarayıcıya
     // "fps'i her ne pahasına olursa olsun koru" der; bu, telefon ısındığında
     // bile encoder'ı yüksek fps'te zorlamaya devam ettirip ısınmayı katlayarak
@@ -1836,35 +1913,14 @@ function preferStableVideoCodec(pc){
    böylece her bağlantı koşuluna kendini uyarlayan bir video akışı elde
    ediliyor.
 */
-/* GÖRÜŞME PERFORMANS MODU: startCall()/acceptCall() içinde açılır,
-   endCallCleanup() içinde kapanır. html'e .call-active ekler (CSS'teki
-   genel dondurma kuralını tetikler) ve arka planda çalışan, görüşme
-   sırasında hiçbir işe yaramayan ama sürekli DOM/CSS animasyonu tetikleyen
-   interval'leri (aşk oku, kalp partikülleri) durdurur. */
-function enterCallPerfMode(){
-  document.documentElement.classList.add('call-active');
-  clearInterval(loveArrowTmr);
-  window.__callPerfMode=true;
-}
-function exitCallPerfMode(){
-  document.documentElement.classList.remove('call-active');
-  window.__callPerfMode=false;
-  const fx=document.getElementById('loveArrowFx');
-  if(fx&&fx.classList.contains('visible')){
-    clearInterval(loveArrowTmr);
-    loveArrowTmr=setInterval(playLoveArrow,5000);
-  }
-}
 const ADAPTIVE_BR_MIN=90000;    // ~90kbps — çok kötü ağda bile görüntü akmaya devam etsin
-const ADAPTIVE_BR_MAX=500000;   // ~500kbps — kalıcı ısınma çözümü için üst sınır daha da düşürüldü
 const ADAPTIVE_BR_STEP=80000;
 let adaptiveBrTmr=null;
 let adaptiveBrCurrent=320000;
 function startAdaptiveBitrate(pc){
   clearInterval(adaptiveBrTmr);
-  adaptiveBrCurrent=320000;
+  if(!callOverallStartTs)callOverallStartTs=Date.now(); // güvenlik: her ihtimale karşı
   let lastBytesLost=0,lastPacketsSent=0,haveBaseline=false;
-  const callStartedAt=Date.now();
   adaptiveBrTmr=setInterval(async()=>{
     if(!peerConn||peerConn!==pc)return clearInterval(adaptiveBrTmr);
     try{
@@ -1880,6 +1936,31 @@ function startAdaptiveBitrate(pc){
       const packetsSent=outbound.packetsSent||0;
       const packetsLost=(remoteInbound&&remoteInbound.packetsLost)||0;
       const rtt=(remoteInbound&&remoteInbound.roundTripTime)||0; // saniye
+
+      // GERÇEK ZAMANLI CPU SİNYALİ: encoder'ın kendisi "CPU'ya yetişemiyorum"
+      // derse (3 ardışık ölçüm ≈12sn boyunca), süre eşiklerini beklemeden
+      // hemen bir alt kademeye in.
+      if(outbound.qualityLimitationReason==='cpu'){
+        cpuLimitedStreak++;
+        if(cpuLimitedStreak>=3&&callQualityTierIdx<CALL_QUALITY_TIERS.length-1){
+          cpuLimitedStreak=0;
+          await applyQualityTier(callQualityTierIdx+1,pc);
+        }
+      }else{
+        cpuLimitedStreak=0;
+      }
+
+      // SÜREYE BAĞLI KADEME: CPU henüz zorlanma sinyali vermese bile, çok
+      // uzun görüşmelerde (10 saate kadar) ham yakalama boyutunu süreye göre
+      // de kademeli küçültüyoruz — cihaz gövdesi ne kadar uzun ısı biriktirirse
+      // biriktirsin, encoder'a verilen iş fiziksel olarak azalır.
+      const elapsedMin=(Date.now()-callOverallStartTs)/60000;
+      let timeTier=0;
+      if(elapsedMin>120)timeTier=3;
+      else if(elapsedMin>45)timeTier=2;
+      else if(elapsedMin>15)timeTier=1;
+      if(timeTier>callQualityTierIdx)await applyQualityTier(timeTier,pc);
+
       if(!haveBaseline){
         haveBaseline=true;lastBytesLost=packetsLost;lastPacketsSent=packetsSent;
         return;
@@ -1889,28 +1970,18 @@ function startAdaptiveBitrate(pc){
       lastBytesLost=packetsLost;lastPacketsSent=packetsSent;
       if(deltaSent<=0)return;
       const lossRatio=Math.max(0,deltaLost)/Math.max(1,deltaSent+Math.max(0,deltaLost));
-      // DÜZELTME (kalıcı ısınma çözümü): uzun süren görüşmelerde telefon
-      // kademeli olarak ısınır (özellikle ilk 5-10 dakikadan sonra belirgin
-      // hale gelir). Ağ durumundan bağımsız olarak, görüşme uzadıkça tavan
-      // bitrate'i kademeli düşürerek encoder'ın uzun vadeli ürettiği ısıyı
-      // azaltıyoruz — bu, "biraz sonra ısınıyor" şikayetinin süreye bağlı
-      // kısmını doğrudan hedefler.
-      const elapsedMin=(Date.now()-callStartedAt)/60000;
-      let thermalCap=ADAPTIVE_BR_MAX;
-      if(elapsedMin>15)thermalCap=Math.max(ADAPTIVE_BR_MIN,ADAPTIVE_BR_MAX-200000);
-      else if(elapsedMin>7)thermalCap=Math.max(ADAPTIVE_BR_MIN,ADAPTIVE_BR_MAX-100000);
-      // Kayıp oranı yüksek VEYA RTT yüksekse (ağ tıkanık/zayıf) bitrate'i
-      // düşür; ikisi de iyiyse kademeli olarak yükselterek daha iyi
-      // görüntüye izin ver — ama her durumda thermalCap'i asla aşma.
+      // Tavan bitrate artık aktif kademenin kendi tavanından geliyor —
+      // düşük kademedeyken ağ iyi diye eski yüksek tavana geri çıkılmıyor.
+      const tierCap=CALL_QUALITY_TIERS[callQualityTierIdx].brMax;
       let target=adaptiveBrCurrent;
       if(lossRatio>0.05||rtt>0.4){
         target=Math.max(ADAPTIVE_BR_MIN,adaptiveBrCurrent-ADAPTIVE_BR_STEP*2);
       }else if(lossRatio>0.02||rtt>0.25){
         target=Math.max(ADAPTIVE_BR_MIN,adaptiveBrCurrent-ADAPTIVE_BR_STEP);
       }else if(lossRatio<0.01&&rtt<0.15){
-        target=Math.min(thermalCap,adaptiveBrCurrent+ADAPTIVE_BR_STEP);
+        target=Math.min(tierCap,adaptiveBrCurrent+ADAPTIVE_BR_STEP);
       }
-      target=Math.min(target,thermalCap);
+      target=Math.min(target,tierCap);
       if(target!==adaptiveBrCurrent){
         adaptiveBrCurrent=target;
         const params=sender.getParameters();
@@ -1918,7 +1989,7 @@ function startAdaptiveBitrate(pc){
         params.encodings[0].maxBitrate=target;
         params.encodings[0].degradationPreference='balanced';
         sender.setParameters(params).catch(()=>{});
-        console.log('[ADAPTIVE-BR] bitrate ayarlandı:',target,'lossRatio:',lossRatio.toFixed(3),'rtt:',rtt,'thermalCap:',thermalCap);
+        console.log('[ADAPTIVE-BR] bitrate:',target,'tier:',callQualityTierIdx,'lossRatio:',lossRatio.toFixed(3),'rtt:',rtt);
       }
     }catch(e){}
   },4000);
@@ -7065,9 +7136,18 @@ let callRecRecorder=null;
 let callRecChunks=[];
 let callRecCanvas=null,callRecCtx=null,callRecRAF=null;
 let callRecAudioCtx=null;
+let callRecLastDraw=0;
 
-function drawCallRecFrame(){
+function drawCallRecFrame(ts){
   if(!callRecActive||!callRecCanvas)return;
+  callRecRAF=requestAnimationFrame(drawCallRecFrame);
+  // DÜZELTME (kalıcı ısınma — kayıt): requestAnimationFrame ekranın GERÇEK
+  // yenileme hızında tetiklenir (bazı telefonlarda 90/120Hz) ama kayıt
+  // zaten captureStream(20) ile sadece 20fps olarak alınıyor — ekran hızında
+  // çizmek tamamen israf GPU/CPU işiydi (4-6 kat fazla drawImage çağrısı).
+  // Burada çizimi gerçekten ~20fps'e sabitliyoruz.
+  if(ts&&ts-callRecLastDraw<48)return; // ~20fps (1000/20≈50ms, güvenlik payıyla 48)
+  callRecLastDraw=ts||0;
   const cw=callRecCanvas.width,ch=callRecCanvas.height;
   const remoteVid=document.getElementById('remoteVid'),localVid=document.getElementById('localVid');
   callRecCtx.fillStyle='#000';callRecCtx.fillRect(0,0,cw,ch);
@@ -7088,7 +7168,6 @@ function drawCallRecFrame(){
     callRecCtx.strokeRect(px,py,pw,ph);
     callRecCtx.restore();
   }
-  callRecRAF=requestAnimationFrame(drawCallRecFrame);
 }
 
 async function toggleCallRecording(){
