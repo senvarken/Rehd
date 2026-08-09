@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260809-233401-6939efe">
+<html lang="tr" data-build="askbahcem-20260809-234523-c705b0f">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -6766,68 +6766,92 @@ function setCallConnectedUI(){
   callConnected=true;
   document.getElementById('callInfo').textContent=(activePartner?.name||'Sevgilim');
   document.getElementById('callPhStatusText').textContent='Bağlandı';
+  registerCallPipHandler();
   setTimeout(showSwapHintOnConnect,800);
 }
 
 /* ═══════════════════════════════════════
-   ARKA PLANA GEÇİŞ — Document Picture-in-Picture (Android Chrome)
+   ARKA PLANA GEÇİŞ — Picture-in-Picture
    ─────────────────────────────────────────────────────────────
-   ÖNEMLİ SINIRLAMA: Web/PWA teknolojisiyle "başka bir uygulamaya
-   geçince görüşme tamamen normal şekilde devam etsin" TAM olarak
-   sağlanamaz — bu platform kısıtı, kod hatası değil:
-   • Android Chrome: documentPictureInPicture API varsa video gerçek
-     bir OS-seviyeli yüzen pencerede devam eder (bu API'yi kullanıyoruz).
-   • iOS Safari/PWA: Apple, App Store dışı web içeriğine hiçbir native
-     PiP izni vermiyor. Sekme arka plana geçtiği an kamera/mikrofon
-     track'leri sistem tarafından duraklatılıyor — JS ile aşılamaz.
-     Bu yüzden iOS'ta yapabildiğimiz tek şey: track'ler durunca bunu
-     erkenden fark edip kullanıcıyı uyarmak ve öne dönünce sorunsuz
-     otomatik olarak yeniden bağlanmak (aşağıdaki oninactive/ICE
-     restart mekanizmasıyla).
+   DÜZELTME (kritik — önceki yaklaşım hiç çalışmıyordu): Document
+   Picture-in-Picture API Android Chrome'da HİÇ DESTEKLENMİYOR (sadece
+   masaüstü Chrome/Edge'de var). Yani önceki kod supportsDocPip() her
+   zaman false döndüğü için sessizce devre dışı kalıyordu — Android'de
+   PiP hiçbir zaman açılmamıştı, bu yazılım hatası değil yanlış API
+   seçimiydi.
+
+   Android Chrome'da GERÇEKTEN çalışan API iki parçadan oluşuyor:
+   1) Klasik <video>.requestPictureInPicture() — bu Android'de destekleniyor
+      ve video+ses'i birlikte taşır (aynı srcObject üzerindeki audio track
+      PiP penceresinde de duyulur, ekstra bir şey gerekmez).
+   2) navigator.mediaSession.setActionHandler('enterpictureinpicture', ...)
+      — bu, tarayıcının "sekme değişince otomatik PiP aç" izni vermesi
+      için ŞART. Bu handler kayıtlıyken VE kamera/mikrofon aktifken,
+      Chrome kullanıcı başka app'e geçtiğinde requestPictureInPicture()'ı
+      KULLANICI JESTİ OLMADAN kendisi çağırıyor — gesture kısıtını resmi
+      olarak aşan tek yol budur.
+
+   iOS Safari/PWA: Apple, App Store dışı web içeriğine hiçbir native PiP
+   izni vermiyor (Document PiP de, klasik video PiP de yok). Sekme arka
+   plana geçtiği an kamera/mikrofon track'leri sistem tarafından
+   duraklatılıyor — JS ile aşılamaz. iOS'ta yapabildiğimiz tek şey: bunu
+   erkenden fark edip kullanıcıyı uyarmak ve öne dönünce mevcut ICE
+   reconnect mekanizmasıyla otomatik toparlamak.
    ═══════════════════════════════════════ */
-let docPipWin=null;
-function supportsDocPip(){
-  return 'documentPictureInPicture' in window;
+function supportsVideoPip(){
+  return document.pictureInPictureEnabled&&!!document.getElementById('remoteVid')&&!document.getElementById('remoteVid').disablePictureInPicture;
 }
-async function enterDocumentPip(){
-  if(!peerConn||!callConnected)return;
-  if(!supportsDocPip())return;
-  if(docPipWin)return; // zaten açık
+// Görüşme bağlanır bağlanmaz mediaSession handler'ını kaydediyoruz —
+// bu, Chrome'a "sekme değişince PiP'i ben yöneteceğim" der ve otomatik
+// tetiklemeyi (gesture olmadan) mümkün kılar.
+function registerCallPipHandler(){
+  if(!('mediaSession' in navigator))return;
   try{
-    docPipWin=await documentPictureInPicture.requestWindow({width:220,height:330});
-    const style=docPipWin.document.createElement('style');
-    style.textContent='html,body{margin:0;padding:0;background:#000;height:100%}'+
-      'video{width:100%;height:100%;object-fit:cover;background:#000}';
-    docPipWin.document.head.appendChild(style);
-    const remoteVid=document.getElementById('remoteVid');
-    if(remoteVid&&remoteVid.srcObject){
-      const pipVid=docPipWin.document.createElement('video');
-      pipVid.autoplay=true;pipVid.playsInline=true;
-      pipVid.srcObject=remoteVid.srcObject;
-      docPipWin.document.body.appendChild(pipVid);
-    }
-    docPipWin.addEventListener('pagehide',()=>{docPipWin=null});
-  }catch(e){docPipWin=null}
+    navigator.mediaSession.setActionHandler('enterpictureinpicture',async()=>{
+      const remoteVid=document.getElementById('remoteVid');
+      if(!remoteVid||!remoteVid.srcObject)return;
+      try{
+        if(document.pictureInPictureElement!==remoteVid){
+          await remoteVid.requestPictureInPicture();
+        }
+      }catch(e){}
+    });
+  }catch(e){}
 }
-function exitDocumentPip(){
-  if(docPipWin){try{docPipWin.close()}catch(e){}docPipWin=null}
+function unregisterCallPipHandler(){
+  if(!('mediaSession' in navigator))return;
+  try{navigator.mediaSession.setActionHandler('enterpictureinpicture',null)}catch(e){}
+}
+async function exitDocumentPip(){
+  try{
+    if(document.pictureInPictureElement){
+      await document.exitPictureInPicture();
+    }
+  }catch(e){}
+  unregisterCallPipHandler();
 }
 document.addEventListener('visibilitychange',()=>{
   if(!peerConn)return; // görüşme yoksa hiçbir şey yapma
   if(document.hidden){
     // Uygulama arka plana geçti (başka app'e geçildi / ana ekrana dönüldü).
-    if(supportsDocPip()){
-      enterDocumentPip();
-    }else{
-      // iOS ve Document PiP desteklemeyen tarayıcılar: gerçek PiP mümkün
-      // değil, bunu gizlemek yerine kullanıcıya açıkça bildiriyoruz —
-      // track'ler sistem tarafından duraklatılınca "neden koptu" belirsiz
-      // kalmasın diye.
+    // mediaSession handler kayıtlıysa Chrome PiP'i KENDİSİ otomatik açar —
+    // burada elle requestPictureInPicture() çağırmaya GEREK YOK ve zaten
+    // gesture olmadığı için başarısız olurdu. Yine de destekleyen ama
+    // otomatik tetiklemeyen eski Chrome sürümleri için bir yedek deneme:
+    const remoteVid=document.getElementById('remoteVid');
+    if(supportsVideoPip()&&remoteVid&&remoteVid.srcObject&&document.pictureInPictureElement!==remoteVid){
+      remoteVid.requestPictureInPicture().catch(()=>{});
+    }
+    if(!supportsVideoPip()){
+      // iOS ve PiP desteklemeyen tarayıcılar: gerçek PiP mümkün değil,
+      // bunu gizlemek yerine kullanıcıya açıkça bildiriyoruz — track'ler
+      // sistem tarafından duraklatılınca "neden koptu" belirsiz kalmasın.
       showToast('Arka planda kalırsan görüşme geçici olarak duraklayabilir (iOS/tarayıcı kısıtı)','warn');
     }
-  }else{
-    exitDocumentPip();
   }
+  // Öne dönünce PiP'i elle kapatmıyoruz — Chrome zaten "picture-in-picture
+  // window is automatically closed when the page visibility becomes
+  // visible again" davranışını kendisi uyguluyor.
 });
 
 async function startCall(){
