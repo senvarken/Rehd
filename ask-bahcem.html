@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260809-082159-fc975ba">
+<html lang="tr" data-build="askbahcem-20260809-233401-6939efe">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -1775,16 +1775,20 @@ const ICE=[
 /* Görüşme kalitesi/performans ayarları — mobil veri üzerinde kasma/donmayı
    azaltmak için orta çözünürlük + sınırlı bitrate kullanılır. Yüksek
    çözünürlük+bitrate zayıf bağlantılarda tam tersine takılmaya sebep olur.
-   DÜZELTME (kalıcı ısınma çözümü): önceki 480x360@20fps hâlâ orta segment
-   cihazlarda (ör. Samsung A80) gözle görülür ısınmaya sebep oluyordu.
-   Kalıcı çözüm üç ayağa dayanıyor: (1) burada çözünürlük/fps daha da
-   kısıldı, (2) codec sırası H264'e çevrildi (donanım hızlandırma — asıl
-   büyük etken), (3) degradationPreference 'balanced' yapıldı (cihaz
-   ısınıp yavaşladıkça encoder kendini otomatik kısar). Görüntü biraz daha
-   düşük netlikte olur ama telefon artık belirgin şekilde daha az ısınır
-   ve pil çok daha yavaş tükenir. */
+   DÜZELTME (kalite iyileştirme — ısınmadan): Samsung A80'in çipi
+   (Snapdragon 730G) donanımsal H264 encoder'a sahip ve kamerası zaten
+   4K@30fps'i donanımda encode edebiliyor — yani asıl ısınma sebebi hiçbir
+   zaman "426x320 çok mu yüksek" değildi, VP8'in YAZILIMSAL çalışmasıydı
+   (bkz. preferStableVideoCodec notu, H264 önceliğine alındı). O sorun
+   çözüldükten sonra 426x320@18fps, bu donanım için gereksiz derecede
+   düşük kalmıştı. Çözünürlük/fps'i donanımın rahatça kaldırabileceği bir
+   seviyeye çektik; asıl güvenlik ağı zaten aşağıdaki CALL_QUALITY_TIERS +
+   gerçek zamanlı CPU sinyali sistemi — cihaz gerçekten zorlanırsa (başka
+   telefonlarda ya da A80'de arka planda ağır bir şey çalışıyorsa) otomatik
+   olarak kademe kademe eski düşük değerlere geri iner, bu yüzden yukarı
+   çekmek güvenli. */
 const CALL_MEDIA_CONSTRAINTS={
-  video:{width:{ideal:426,max:640},height:{ideal:320,max:480},frameRate:{ideal:18,max:20},facingMode:'user'},
+  video:{width:{ideal:640,max:854},height:{ideal:480,max:640},frameRate:{ideal:24,max:30},facingMode:'user'},
   // DÜZELTME (pil): channelCount/sampleRate belirtilmediğinde bazı Android
   // cihazlarında tarayıcı varsayılan olarak stereo + 48kHz yakalar. Sesli
   // görüşme için bunun hiçbir faydası yok (tek mikrofon zaten mono kaynak),
@@ -1842,10 +1846,10 @@ function exitCallPerfMode(){
       gerçek bir ısınma erken-uyarı sistemidir.
 ═══════════════════════════════════════ */
 const CALL_QUALITY_TIERS=[
-  {w:426,h:320,fps:18,br:320000,brMax:500000}, // 0: görüşmenin ilk ~15dk'sı
-  {w:320,h:240,fps:15,br:220000,brMax:320000}, // 1: 15dk+ veya CPU zorlanması
-  {w:256,h:192,fps:12,br:150000,brMax:220000}, // 2: 45dk+ veya sürekli CPU zorlanması
-  {w:214,h:160,fps:10,br:100000,brMax:150000}  // 3: 2sa+ (çok uzun/10 saatlik görüşmeler)
+  {w:640,h:480,fps:24,br:700000,brMax:1000000}, // 0: görüşmenin ilk ~15dk'sı — donanım H264 için rahat seviye
+  {w:480,h:360,fps:20,br:450000,brMax:700000},  // 1: 15dk+ veya CPU zorlanması
+  {w:384,h:288,fps:16,br:280000,brMax:400000},  // 2: 45dk+ veya sürekli CPU zorlanması
+  {w:320,h:240,fps:14,br:180000,brMax:280000}   // 3: 2sa+ (çok uzun/10 saatlik görüşmeler) — eski kademe 0 seviyesinin biraz altı, güvenli taban
 ];
 let callQualityTierIdx=0;
 let cpuLimitedStreak=0;
