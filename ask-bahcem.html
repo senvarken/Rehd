@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260809-070546-28a4eba">
+<html lang="tr" data-build="askbahcem-20260809-072057-aed43c8">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -224,6 +224,23 @@ html.low-end .call-ph-pulse span,html.low-end .av-name,html.low-end .msg-row{
 }
 html.low-end .bubble::before{display:none!important}
 html.low-end .av-name{-webkit-text-fill-color:currentColor;background:none!important;color:inherit!important}
+
+/* GÖRÜŞME SIRASINDA GPU DONDURMA (kalıcı ısınma/pil çözümü — ek ve daha
+   kapsamlı önlem): #callOverlay tam ekranı kaplayıp altını görsel olarak
+   gizlese de, altındaki sohbet ekranı/header/mesaj listesi DOM'da canlı
+   kalmaya devam ediyor — isim parıltısı, kalp atışı, çevrimiçi noktası,
+   blur'lar gibi onlarca animasyon gözle görünmeseki bile arka planda GPU'yu
+   işletmeye devam ediyordu. Samsung A80 gibi RAM/çekirdek sayısı yüksek
+   ama GPU'su orta seviye cihazlar yukarıdaki .low-end eşiğini geçtiği için
+   bu optimizasyonlardan hiç faydalanamıyordu. Bu yüzden aktif görüşme
+   sırasında, CİHAZ GÜCÜNDEN BAĞIMSIZ OLARAK, görüşme ekranı DIŞINDAKİ her
+   şeyin animasyon/blur/transition'ı tamamen donduruluyor. */
+html.call-active body *:not(#callOverlay):not(#callOverlay *){
+  animation:none!important;
+  transition:none!important;
+  backdrop-filter:none!important;
+  -webkit-backdrop-filter:none!important;
+}
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 :root{
   --deep:#170810;--dark:#2b0f1c;--mid:#8B1a3a;--bright:#c0395a;--rose:#d65d7a;
@@ -1819,6 +1836,25 @@ function preferStableVideoCodec(pc){
    böylece her bağlantı koşuluna kendini uyarlayan bir video akışı elde
    ediliyor.
 */
+/* GÖRÜŞME PERFORMANS MODU: startCall()/acceptCall() içinde açılır,
+   endCallCleanup() içinde kapanır. html'e .call-active ekler (CSS'teki
+   genel dondurma kuralını tetikler) ve arka planda çalışan, görüşme
+   sırasında hiçbir işe yaramayan ama sürekli DOM/CSS animasyonu tetikleyen
+   interval'leri (aşk oku, kalp partikülleri) durdurur. */
+function enterCallPerfMode(){
+  document.documentElement.classList.add('call-active');
+  clearInterval(loveArrowTmr);
+  window.__callPerfMode=true;
+}
+function exitCallPerfMode(){
+  document.documentElement.classList.remove('call-active');
+  window.__callPerfMode=false;
+  const fx=document.getElementById('loveArrowFx');
+  if(fx&&fx.classList.contains('visible')){
+    clearInterval(loveArrowTmr);
+    loveArrowTmr=setInterval(playLoveArrow,5000);
+  }
+}
 const ADAPTIVE_BR_MIN=90000;    // ~90kbps — çok kötü ağda bile görüntü akmaya devam etsin
 const ADAPTIVE_BR_MAX=500000;   // ~500kbps — kalıcı ısınma çözümü için üst sınır daha da düşürüldü
 const ADAPTIVE_BR_STEP=80000;
@@ -2160,7 +2196,7 @@ function revealRealLogin(){
   let petalCount=0;
   let spawnTmr=null;
   function mk(){
-    if(document.hidden||petalCount>=MAX_PETALS)return;
+    if(document.hidden||window.__callPerfMode||petalCount>=MAX_PETALS)return;
     petalCount++;
     const e=document.createElement('div');e.className='hf';
     e.innerHTML='<svg width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor" style="stroke:none" xmlns="http://www.w3.org/2000/svg"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>';
@@ -6637,6 +6673,7 @@ async function startCall(){
   if(peerConn){showToast('Arama devam ediyor','warn');return}
   try{localStream=await navigator.mediaDevices.getUserMedia(CALL_MEDIA_CONSTRAINTS)}
   catch(e){showToast('Kamera/Mikrofon izni gerekli','error');return}
+  enterCallPerfMode();
   document.getElementById('localVid').srcObject=localStream;
   applySavedSelfVidPos();
   currentCallSessionId='s_'+Date.now()+'_'+Math.random().toString(36).slice(2);
@@ -6671,6 +6708,7 @@ async function acceptCall(){
   stopRingtone();
   try{localStream=await navigator.mediaDevices.getUserMedia(CALL_MEDIA_CONSTRAINTS)}
   catch(e){showToast('Kamera/Mikrofon izni gerekli','error');return}
+  enterCallPerfMode();
   document.getElementById('localVid').srcObject=localStream;
   applySavedSelfVidPos();
   currentCallSessionId=currentCallData.sessionId||('s_'+Date.now());
@@ -7127,6 +7165,7 @@ function stopCallRecording(){
 }
 
 function endCallCleanup(){
+  exitCallPerfMode();
   popCallHistIfNeeded();
   if(callRecActive)stopCallRecording();
   callConnected=false;
