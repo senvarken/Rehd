@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260809-074134-68d8ab9">
+<html lang="tr" data-build="askbahcem-20260809-082159-fc975ba">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -1785,7 +1785,13 @@ const ICE=[
    ve pil çok daha yavaş tükenir. */
 const CALL_MEDIA_CONSTRAINTS={
   video:{width:{ideal:426,max:640},height:{ideal:320,max:480},frameRate:{ideal:18,max:20},facingMode:'user'},
-  audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}
+  // DÜZELTME (pil): channelCount/sampleRate belirtilmediğinde bazı Android
+  // cihazlarında tarayıcı varsayılan olarak stereo + 48kHz yakalar. Sesli
+  // görüşme için bunun hiçbir faydası yok (tek mikrofon zaten mono kaynak),
+  // sadece echoCancellation/noiseSuppression DSP zincirine ekstra CPU işi
+  // olarak yansır. Mono + 24kHz, ses kalitesinde fark edilir kayıp olmadan
+  // işlem yükünü belirgin şekilde azaltır.
+  audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true,channelCount:1,sampleRate:24000}
 };
 /* GÖRÜŞME PERFORMANS MODU: startCall()/acceptCall() içinde açılır,
    endCallCleanup() içinde kapanır. html'e .call-active ekler (CSS'teki
@@ -1802,6 +1808,7 @@ function enterCallPerfMode(){
   document.documentElement.classList.add('call-active');
   clearInterval(loveArrowTmr);
   window.__callPerfMode=true;
+  window.dispatchEvent(new Event('callperfmode-on'));
   callOverallStartTs=Date.now();
   callQualityTierIdx=0;
   cpuLimitedStreak=0;
@@ -1810,6 +1817,7 @@ function enterCallPerfMode(){
 function exitCallPerfMode(){
   document.documentElement.classList.remove('call-active');
   window.__callPerfMode=false;
+  window.dispatchEvent(new Event('callperfmode-off'));
   const fx=document.getElementById('loveArrowFx');
   if(fx&&fx.classList.contains('visible')){
     clearInterval(loveArrowTmr);
@@ -2279,8 +2287,16 @@ function revealRealLogin(){
   spawnTmr=setInterval(mk,SPAWN_MS);
   document.addEventListener('visibilitychange',()=>{
     if(document.hidden){clearInterval(spawnTmr)}
-    else{spawnTmr=setInterval(mk,SPAWN_MS)}
+    else if(!window.__callPerfMode){spawnTmr=setInterval(mk,SPAWN_MS)}
   });
+  // DÜZELTME (pil): mk() zaten window.__callPerfMode iken çalışmayı
+  // reddediyordu ama interval'ın KENDİSİ (2.1sn'de bir fonksiyon çağrısı)
+  // görüşme boyunca — 10 saatlik bir görüşmede binlerce kez — hiçbir işe
+  // yaramadan çalışmaya devam ediyordu. Görüşme başlarken interval'ı
+  // tamamen durdurup bitince yeniden kuruyoruz; boşuna uyanan bir timer
+  // bile ölçülebilir pil tüketir.
+  window.addEventListener('callperfmode-on',()=>clearInterval(spawnTmr));
+  window.addEventListener('callperfmode-off',()=>{if(!document.hidden)spawnTmr=setInterval(mk,SPAWN_MS)});
 })();
 
 /* ═══════════════════════════════════════
@@ -7253,7 +7269,15 @@ async function startCallRecording(){
   if(!peerConn||!remoteVid.srcObject){showToast('Kayıt için görüşmenin bağlanmasını bekle','warn');return}
   try{
     callRecCanvas=document.createElement('canvas');
-    callRecCanvas.width=720;callRecCanvas.height=1280;
+    // DÜZELTME (ısınma — kayıt): canvas 720x1280 iken gerçek video akışı
+    // kalite kademesine göre çoktan 426x320'ye (hatta uzun görüşmelerde
+    // 214x160'a) düşürülmüş oluyordu. Küçük kaynağı büyük tuvale çizip
+    // sonra o büyük tuvali VP9/VP8 ile tekrar encode etmek hem gereksiz
+    // hem de gerçek bir ısı kaynağıydı (upscale + çift encode). Kayıt
+    // çözünürlüğünü görüşme kalitesiyle uyumlu, makul bir sabit değere
+    // (480x854, aynı 9:16 oranı) indiriyoruz — dosya hâlâ net izlenebilir
+    // kalır ama işlem yükü ciddi ölçüde azalır.
+    callRecCanvas.width=480;callRecCanvas.height=854;
     callRecCtx=callRecCanvas.getContext('2d');
     callRecActive=true;
     drawCallRecFrame();
@@ -7275,7 +7299,12 @@ async function startCallRecording(){
     }
 
     const combined=new MediaStream([...canvasStream.getVideoTracks(),...dest.stream.getAudioTracks()]);
-    const mime=['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'].find(t=>window.MediaRecorder&&MediaRecorder.isTypeSupported(t))||'';
+    // DÜZELTME (ısınma — kayıt): VP9 kalite/sıkıştırma açısından iyi ama
+    // Android'de MediaRecorder üzerinden neredeyse her zaman YAZILIMSAL
+    // (CPU) encode edilir ve VP8'e göre belirgin ölçüde daha fazla ısıtır.
+    // Zaten küçültülmüş 480x854/20fps kaynak için VP9'un sıkıştırma
+    // avantajı burada önemsiz, ısı maliyeti ise gerçek — VP8'i öne alıyoruz.
+    const mime=['video/webm;codecs=vp8,opus','video/webm;codecs=vp9,opus','video/webm'].find(t=>window.MediaRecorder&&MediaRecorder.isTypeSupported(t))||'';
     callRecChunks=[];
     callRecRecorder=mime?new MediaRecorder(combined,{mimeType:mime}):new MediaRecorder(combined);
     callRecRecorder.ondataavailable=e=>{if(e.data&&e.data.size>0)callRecChunks.push(e.data)};
