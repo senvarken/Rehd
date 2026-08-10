@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260809-235558-e83bf09">
+<html lang="tr" data-build="askbahcem-20260810-000853-cbef8e7">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -1091,6 +1091,7 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
     <symbol id="i-flip-cam" viewBox="0 0 24 24"><path d="M4 8h4l1.5-2h5L16 8h4v10H4Z"/><circle cx="12" cy="13" r="3"/><path d="M9 5l1.5-1.5M15 5l-1.5-1.5"/></symbol>
     <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 8h3l1.5-2h7L17 8h3a1.5 1.5 0 0 1 1.5 1.5v9A1.5 1.5 0 0 1 20 20H4a1.5 1.5 0 0 1-1.5-1.5v-9A1.5 1.5 0 0 1 4 8Z"/><circle cx="12" cy="13.5" r="3.6"/></symbol>
     <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+    <symbol id="i-pip" viewBox="0 0 24 24"><path d="M21 3H3a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1zm-1 16H4V5h16zM12 12h7v6h-7z"/></symbol>
     <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
     <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></symbol>
     <symbol id="i-emoji" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="9" cy="10" r="1"/><circle cx="15" cy="10" r="1"/><path d="M8 14.5c1 1.3 2.4 2 4 2s3-.7 4-2"/></symbol>
@@ -1472,6 +1473,7 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
       <div class="call-name" id="callInfo">Bağlanıyor…</div>
       <div class="call-timer" id="callTimerEl">00:00</div>
     </div>
+    <button class="call-minimize" id="callPipBtn" onclick="event.stopPropagation();manualEnterPip()" title="Küçük pencerede devam et" style="display:none"><svg class="icon icon-sm"><use href="#i-pip"/></svg></button>
     <button class="call-minimize" onclick="event.stopPropagation();minimizeCall()" title="Arka plana al"><svg class="icon icon-sm"><use href="#i-chevron-down"/></svg></button>
   </div>
   <div class="call-reconnect-banner" id="callReconnectBanner">
@@ -6793,7 +6795,33 @@ function setCallConnectedUI(){
   document.getElementById('callInfo').textContent=(activePartner?.name||'Sevgilim');
   document.getElementById('callPhStatusText').textContent='Bağlandı';
   registerCallPipHandler();
+  // DÜZELTME (üye tarafında otomatik PiP tetiklenmiyordu): Chrome'un
+  // "arka plana geçince otomatik PiP aç" davranışı, mediaSession handler'ı
+  // kayıtlı olsa bile ek koşullara bağlı — kullanıcının o sitede yeterince
+  // medya kullanım geçmişi olması (Media Engagement Index) ve/veya
+  // tarayıcının kendi "otomatik picture-in-picture" ayarının o cihazda
+  // açık olması gerekiyor. Yeni kurulmuş/az kullanılmış bir tarayıcıda
+  // (ör. yeni bir tablet) bu koşullar henüz sağlanmamış olabilir — otomatik
+  // tetikleme bu durumda tamamen tarayıcı politikası yüzünden sessizce
+  // çalışmaz, kod hatası değildir. Bunun için elle bir PiP butonu
+  // gösteriyoruz: gerçek bir dokunuşla tetiklendiği için bu politika
+  // kısıtlarının hiçbirine takılmaz, her zaman çalışır.
+  const pipBtn=document.getElementById('callPipBtn');
+  if(pipBtn)pipBtn.style.display=supportsVideoPip()?'flex':'none';
   setTimeout(showSwapHintOnConnect,800);
+}
+// Kullanıcının kendi dokunuşuyla PiP'e girmesi — otomatik tetikleme
+// başarısız olduğunda (bkz. yukarıdaki not) her zaman çalışan yedek yol.
+async function manualEnterPip(){
+  const remoteVid=document.getElementById('remoteVid');
+  if(!remoteVid||!remoteVid.srcObject){showToast('Görüşme henüz bağlanmadı','warn');return}
+  try{
+    if(document.pictureInPictureElement!==remoteVid){
+      await remoteVid.requestPictureInPicture();
+    }
+  }catch(e){
+    showToast('Bu cihazda küçük pencere modu desteklenmiyor','warn');
+  }
 }
 
 /* ═══════════════════════════════════════
@@ -7409,6 +7437,8 @@ function stopCallRecording(){
 
 function endCallCleanup(){
   exitDocumentPip();
+  const pipBtn=document.getElementById('callPipBtn');
+  if(pipBtn)pipBtn.style.display='none';
   exitCallPerfMode();
   popCallHistIfNeeded();
   if(callRecActive)stopCallRecording();
