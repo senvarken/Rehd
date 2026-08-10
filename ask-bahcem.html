@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260810-005155-bcd95be">
+<html lang="tr" data-build="askbahcem-20260810-010525-b587106">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -1804,6 +1804,42 @@ const ICE=[
    telefonlarda ya da A80'de arka planda ağır bir şey çalışıyorsa) otomatik
    olarak kademe kademe eski düşük değerlere geri iner, bu yüzden yukarı
    çekmek güvenli. */
+/* DÜZELTME (bozuk/renk taşmalı görüntü — kök sebep, ağ farkında başlangıç
+   kalitesi): Görüşme HER ZAMAN en üst kademeden (960x720/HD) başlıyordu —
+   sinyali zayıf olan bir hatta (ör. "4.5G" yazsa bile 1 çubuk sinyal) bu,
+   ilk saniyelerden itibaren ciddi paket kaybına ve bunun sonucunda decoder'ın
+   referans karesinin bozulup EKRAN GÖRÜNTÜLERİNDEKİ o rengarenk/bloklu
+   görüntüye dönüşmesine yol açıyordu. Adaptif bitrate sistemi bunu ancak
+   birkaç saniye SONRA fark edip kısıyordu — o "birkaç saniye" zaten
+   bozulma için yeterliydi. Burada, görüşme BAŞLAMADAN ÖNCE tarayıcının
+   Network Information API'sinden (varsa) bağlantı tahminini okuyup, zayıf
+   görünen bir hatta doğrudan daha düşük bir kademeden (hem kamera yakalama
+   çözünürlüğü HEM bitrate) başlıyoruz — bozulma hiç oluşmadan önleniyor.
+   API her cihaz/tarayıcıda yoksa (ör. iOS Safari) güvenli varsayılan olan
+   en üst kademeden başlanmaya devam edilir. */
+function pickInitialQualityTier(){
+  try{
+    const c=navigator.connection;
+    if(!c)return 0;
+    if(c.saveData)return 2;
+    const et=c.effectiveType;
+    if(et==='slow-2g'||et==='2g')return 3;
+    if(et==='3g')return 2;
+    if(typeof c.downlink==='number'){
+      if(c.downlink<1.2)return 3;
+      if(c.downlink<2.5)return 2;
+      if(c.downlink<4)return 1;
+    }
+  }catch(e){}
+  return 0;
+}
+function buildInitialMediaConstraints(tierIdx){
+  const t=CALL_QUALITY_TIERS[tierIdx];
+  return {
+    video:{width:{ideal:t.w},height:{ideal:t.h},frameRate:{ideal:t.fps},facingMode:'user'},
+    audio:CALL_MEDIA_CONSTRAINTS.audio
+  };
+}
 const CALL_MEDIA_CONSTRAINTS={
   // DÜZELTME (görüntü kalitesi yükseltildi): H264 artık kodek önceliğinde
   // ilk sırada ve donanım (chip) hızlandırmalı encode/decode kullanıyor —
@@ -1835,15 +1871,15 @@ const CALL_MEDIA_CONSTRAINTS={
    böylece 10 saatlik bir görüşmede ara ara wifi↔mobil veri geçişi olsa
    bile, önceden düşürülmüş kademe kaybolup telefon tekrar yüksek
    çözünürlüğe/ısınmaya dönmez. */
-function enterCallPerfMode(){
+function enterCallPerfMode(initTier){
   document.documentElement.classList.add('call-active');
   clearInterval(loveArrowTmr);
   window.__callPerfMode=true;
   window.dispatchEvent(new Event('callperfmode-on'));
   callOverallStartTs=Date.now();
-  callQualityTierIdx=0;
+  callQualityTierIdx=initTier||0;
   cpuLimitedStreak=0;
-  adaptiveBrCurrent=CALL_QUALITY_TIERS[0].br;
+  adaptiveBrCurrent=CALL_QUALITY_TIERS[callQualityTierIdx].br;
 }
 function exitCallPerfMode(){
   document.documentElement.classList.remove('call-active');
@@ -7033,9 +7069,10 @@ document.addEventListener('visibilitychange',()=>{
 async function startCall(){
   if(!fb||!activeRoom||!activePartner){showToast('Önce bir sohbet seç','warn');return}
   if(peerConn){showToast('Arama devam ediyor','warn');return}
-  try{localStream=await navigator.mediaDevices.getUserMedia(CALL_MEDIA_CONSTRAINTS)}
+  const initTier=pickInitialQualityTier();
+  try{localStream=await navigator.mediaDevices.getUserMedia(buildInitialMediaConstraints(initTier))}
   catch(e){showToast('Kamera/Mikrofon izni gerekli','error');return}
-  enterCallPerfMode();
+  enterCallPerfMode(initTier);
   document.getElementById('localVid').srcObject=localStream;
   applySavedSelfVidPos();
   currentCallSessionId='s_'+Date.now()+'_'+Math.random().toString(36).slice(2);
@@ -7068,9 +7105,10 @@ async function startCall(){
 async function acceptCall(){
   document.getElementById('incomingCall').classList.remove('open');
   stopRingtone();
-  try{localStream=await navigator.mediaDevices.getUserMedia(CALL_MEDIA_CONSTRAINTS)}
+  const initTier=pickInitialQualityTier();
+  try{localStream=await navigator.mediaDevices.getUserMedia(buildInitialMediaConstraints(initTier))}
   catch(e){showToast('Kamera/Mikrofon izni gerekli','error');return}
-  enterCallPerfMode();
+  enterCallPerfMode(initTier);
   document.getElementById('localVid').srcObject=localStream;
   applySavedSelfVidPos();
   currentCallSessionId=currentCallData.sessionId||('s_'+Date.now());
@@ -7288,6 +7326,11 @@ function createPC(){
     vid.muted=false;
     vid.volume=1.0;
     vid.play().catch(()=>{});
+    // DÜZELTME (bazı WebView'lerde autopictureinpicture HTML attribute'u
+    // parse zamanlaması güvenilir değil): aynı ayarı JS property olarak da
+    // burada, video akışı gerçekten geldiği anda tekrar zorluyoruz —
+    // böylece tarayıcı hangi yolla algılarsa algılasın devre dışı kalmıyor.
+    try{vid.autoPictureInPicture=true;vid.disablePictureInPicture=false}catch(e){}
     document.getElementById('remotePlaceholder').classList.add('hide');
     setTimeout(()=>{document.getElementById('remotePlaceholder')?.classList.add('hide')},50);
     setTimeout(()=>{document.getElementById('remotePlaceholder')?.classList.add('hide')},500);
