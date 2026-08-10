@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260810-004046-c485f97">
+<html lang="tr" data-build="askbahcem-20260810-005155-bcd95be">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -1461,7 +1461,22 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
     <button class="call-min-end" onclick="endCall()">✕</button>
   </div>
   <div class="call-remote-stage">
-    <video id="remoteVid" autoplay playsinline ontouchend="handleStageTap(event)" onclick="handleStageTap(event)"></video>
+    <!-- DÜZELTME (tam ekrandayken ani uygulama geçişinde PiP açılmıyordu):
+         Önceki mekanizma (mediaSession 'enterpictureinpicture' handler +
+         script'ten requestPictureInPicture() denemesi) sadece kullanıcı az
+         önce ekrana dokunmuşsa (ör. "küçük ekrana al" butonuna basınca) işe
+         yarıyordu — çünkü tarayıcı script'ten çağrılan requestPictureInPicture()
+         için YAKIN ZAMANLI bir dokunuş/tıklama (user activation) şart koşuyor;
+         tam ekran görüşme sırasında hiç dokunmadan direkt ana ekrana/başka
+         uygulamaya geçilince bu koşul sağlanmadığı için PiP sessizce
+         başarısız oluyordu. `autopictureinpicture` attribute'u, W3C
+         Picture-in-Picture standardının TAM OLARAK bu senaryo için var olan
+         mekanizmasıdır: tarayıcının kendisi, sayfa arka plana geçtiğinde bu
+         video'yu HİÇBİR script çağrısına veya kullanıcı dokunuşuna gerek
+         kalmadan otomatik PiP'e alır. Aşağıdaki visibilitychange'teki elle
+         requestPictureInPicture() denemesi eski/destelemeyen tarayıcılar için
+         yedek olarak duruyor, asıl güvenilir yol artık bu attribute. -->
+    <video id="remoteVid" autoplay playsinline autopictureinpicture ontouchend="handleStageTap(event)" onclick="handleStageTap(event)"></video>
     <div class="call-remote-placeholder" id="remotePlaceholder">
       <div class="call-ph-avatar" id="callPhAvatar">A</div>
       <div class="call-ph-name" id="callPhName">Sevgilim</div>
@@ -1790,7 +1805,17 @@ const ICE=[
    olarak kademe kademe eski düşük değerlere geri iner, bu yüzden yukarı
    çekmek güvenli. */
 const CALL_MEDIA_CONSTRAINTS={
-  video:{width:{ideal:640,max:854},height:{ideal:480,max:640},frameRate:{ideal:24,max:30},facingMode:'user'},
+  // DÜZELTME (görüntü kalitesi yükseltildi): H264 artık kodek önceliğinde
+  // ilk sırada ve donanım (chip) hızlandırmalı encode/decode kullanıyor —
+  // yani çözünürlüğü artırmak CPU'yu değil telefonun ayrı video devresini
+  // yorar, bu da ısınmayı eskisi kadar artırmaz. Bu yüzden başlangıç
+  // (en üst) kademe HD'ye çıkarıldı. Isınma güvencesi KALDIRILMADI: aşağıdaki
+  // CALL_QUALITY_TIERS/startAdaptiveBitrate sistemi, encoder gerçekten
+  // "qualityLimitationReason:'cpu'" derse (Samsung A80 dahil hangi cihaz
+  // olursa olsun) birkaç saniye içinde otomatik alt kademeye iniyor — yani
+  // cihaz gerçekten zorlanmadıkça bu üst kalitede kalınır, zorlanırsa
+  // kendiliğinden güvenli seviyeye geri çekilir.
+  video:{width:{ideal:960,max:1280},height:{ideal:720,max:960},frameRate:{ideal:30,max:30},facingMode:'user'},
   // DÜZELTME (pil): channelCount/sampleRate belirtilmediğinde bazı Android
   // cihazlarında tarayıcı varsayılan olarak stereo + 48kHz yakalar. Sesli
   // görüşme için bunun hiçbir faydası yok (tek mikrofon zaten mono kaynak),
@@ -1848,10 +1873,10 @@ function exitCallPerfMode(){
       gerçek bir ısınma erken-uyarı sistemidir.
 ═══════════════════════════════════════ */
 const CALL_QUALITY_TIERS=[
-  {w:640,h:480,fps:24,br:700000,brMax:1000000}, // 0: görüşmenin ilk ~15dk'sı — donanım H264 için rahat seviye
-  {w:480,h:360,fps:20,br:450000,brMax:700000},  // 1: 15dk+ veya CPU zorlanması
-  {w:384,h:288,fps:16,br:280000,brMax:400000},  // 2: 45dk+ veya sürekli CPU zorlanması
-  {w:320,h:240,fps:14,br:180000,brMax:280000}   // 3: 2sa+ (çok uzun/10 saatlik görüşmeler) — eski kademe 0 seviyesinin biraz altı, güvenli taban
+  {w:960,h:720,fps:30,br:1600000,brMax:2200000}, // 0: görüşmenin ilk ~15dk'sı — HD, donanım H264 hızlandırma rahat kaldırır
+  {w:640,h:480,fps:24,br:800000,brMax:1200000},  // 1: 15dk+ veya CPU zorlanması
+  {w:480,h:360,fps:18,br:450000,brMax:700000},   // 2: 45dk+ veya sürekli CPU zorlanması
+  {w:384,h:288,fps:15,br:250000,brMax:400000}    // 3: 2sa+ (çok uzun/10 saatlik görüşmeler) — güvenli taban
 ];
 let callQualityTierIdx=0;
 let cpuLimitedStreak=0;
@@ -1930,7 +1955,7 @@ function preferStableVideoCodec(pc){
 const ADAPTIVE_BR_MIN=90000;    // ~90kbps — çok kötü ağda bile görüntü akmaya devam etsin
 const ADAPTIVE_BR_STEP=80000;
 let adaptiveBrTmr=null;
-let adaptiveBrCurrent=320000;
+let adaptiveBrCurrent=CALL_QUALITY_TIERS[0].br;
 function startAdaptiveBitrate(pc){
   clearInterval(adaptiveBrTmr);
   if(!callOverallStartTs)callOverallStartTs=Date.now(); // güvenlik: her ihtimale karşı
@@ -6940,6 +6965,24 @@ function unregisterCallPipHandler(){
   if(!('mediaSession' in navigator))return;
   try{navigator.mediaSession.setActionHandler('enterpictureinpicture',null)}catch(e){}
 }
+async function exitDocumentPipOnly(){
+  // DÜZELTME (ilk arka plan geçişinde PiP algılanmıyordu — asıl sebep):
+  // Bu fonksiyon SADECE o an açık olan native PiP penceresini kapatır,
+  // navigator.mediaSession 'enterpictureinpicture' handler'ına DOKUNMAZ.
+  // Önceki halde (exitDocumentPip) uygulamaya her dönüşte handler da
+  // sıfırlanıyordu; bu da Chrome'un "bu sayfa arka plana geçince PiP'i
+  // otomatik aç" izninin görüşme ortasında kaybolmasına sebep oluyordu —
+  // izin sadece bir sonraki bağlantı/yeniden-müzakere olayında (varsa)
+  // tesadüfen yeniden kayıtlı hâle geliyordu, bu yüzden PiP 1. geçişte
+  // hiç açılmayıp 2. geçişte çalışıyormuş gibi görünüyordu. Handler artık
+  // sadece görüşme tamamen bitince (endCallCleanup → exitDocumentPip)
+  // kaldırılıyor, görüşme sürerken kalıcı olarak kayıtlı kalıyor.
+  try{
+    if(document.pictureInPictureElement){
+      await document.exitPictureInPicture();
+    }
+  }catch(e){}
+}
 async function exitDocumentPip(){
   try{
     if(document.pictureInPictureElement){
@@ -6979,7 +7022,7 @@ document.addEventListener('visibilitychange',()=>{
     // döndürüyoruz — 'leavepictureinpicture' olayı zaten restoreCall()'ı
     // tetikleyecek olsa da (attachPipRestoreListener), burada ekstra bir
     // güvence olarak doğrudan da çağırıyoruz.
-    exitDocumentPip();
+    exitDocumentPipOnly();
     const ov=document.getElementById('callOverlay');
     if(ov&&ov.classList.contains('open')&&ov.classList.contains('minimized')){
       restoreCall();
@@ -7136,13 +7179,25 @@ function startVideoHealthCheck(pc){
         // Bu ölçüm aralığında paket kaybı oldu ama kare üretimi durmadıysa
         // (yani "bağlantı koptu" değil, "bozuk kare akıyor" durumu) —
         // bu gerçek bozulma belirtisidir.
-        if(packetsLostDelta>3&&framesDelta>0){
+        // DÜZELTME (bozuk görüntü çok geç düzeliyordu): Önceki mantık
+        // "2 ARDIŞIK ölçümde de paket kaybı olsun" şartı arıyordu (streak>=2,
+        // ~8-12sn gecikme). Ama gerçek dünyada paket kaybı çoğunlukla TEK
+        // seferlik bir patlama (burst) şeklinde olur — kayıp olan ölçümden
+        // SONRAKİ ölçümde packetsLostDelta genelde 0'a döner (kayıp durmuştur,
+        // ama zarar — bozuk referans kare — zaten oluşmuştur ve kalıcıdır).
+        // Bu yüzden streak hiçbir zaman 2'ye ulaşmıyor ve keyframe isteği
+        // neredeyse hiç tetiklenmiyordu — ekran görüntüsündeki kalıcı
+        // bloklu/renk bozuk görüntünün asıl sebebi buydu. Artık TEK bir
+        // ölçümde yeterince belirgin kayıp görülürse (streak beklemeden)
+        // hemen keyframe isteniyor; cooldown de 8sn'den 3sn'ye indirildi ki
+        // ilk istek işe yaramazsa hızlıca tekrar denensin.
+        if(packetsLostDelta>2&&framesDelta>0){
           corruptionStreak++;
         }else{
           corruptionStreak=0;
         }
         const now=Date.now();
-        if(corruptionStreak>=2&&(now-lastKeyFrameReqTs)>8000){
+        if(corruptionStreak>=1&&(now-lastKeyFrameReqTs)>3000){
           corruptionStreak=0;
           lastKeyFrameReqTs=now;
           if(callPeerId){
@@ -7167,7 +7222,7 @@ function startVideoHealthCheck(pc){
         // Sağlıklı akıyor — birkaç saniyede bir kontrol etmeye devam et, hem
         // erken bir aksaklık olursa yakalamak hem de placeholder'ın tekrar
         // takılı kalmadığından emin olmak için.
-        videoHealthTmr=setTimeout(check,4000);
+        videoHealthTmr=setTimeout(check,2500);
       }
       console.log('[VIDEO-TANI]',JSON.stringify({
         role:iAmCaller?'ARAYAN(caller)':'ARANAN(callee)',
@@ -7295,12 +7350,33 @@ function createPC(){
       setCallConnectedUI();
       startVideoHealthCheck(pc);
       startAdaptiveBitrate(pc);
+      // DÜZELTME (kopma sonrası kalıcı bloklu/bozuk görüntü): Bağlantı bir
+      // kopuş/toparlanma (disconnected/failed → connected) geçirdiyse,
+      // kopukluk sırasında kaybolan paketler decoder'ın referans karesini
+      // bozmuş olabilir — bu bozukluk YENİ BİR KEYFRAME gelene kadar sürer.
+      // Önceden bunun tespiti tamamen startVideoHealthCheck'teki periyodik
+      // paket-kaybı ölçümüne bırakılmıştı (8-12+ saniye gecikmeli). Burada,
+      // TAM DA toparlanma anında, aşağıdaki gecikme olmadan doğrudan karşı
+      // taraftan (video gönderen) yeni bir keyframe istiyoruz — böylece
+      // ekran, kopuşun hemen ardından kısa sürede temizleniyor.
+      if(pc._hadDisconnect){
+        pc._hadDisconnect=false;
+        if(callPeerId){
+          setTimeout(()=>{
+            if(peerConn===pc&&callPeerId){
+              sigSend({type:'force-keyframe',to:callPeerId,from:myId,sessionId:currentCallSessionId}).catch(()=>{});
+            }
+          },1200);
+        }
+      }
     }
     if(st==='failed'){
+      pc._hadDisconnect=true;
       showReconnectBanner();
       try{pc.restartIce&&pc.restartIce()}catch(e){}
     }
     if(st==='disconnected'){
+      pc._hadDisconnect=true;
       showReconnectBanner();
       try{pc.restartIce&&pc.restartIce()}catch(e){}
       // DÜZELTME (sonsuza dek "Yeniden bağlanıyor" takılması — asıl kök
