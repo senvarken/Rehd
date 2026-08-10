@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260810-000853-cbef8e7">
+<html lang="tr" data-build="askbahcem-20260810-001929-544d397">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -6456,6 +6456,38 @@ function listenCallSignal(){
       showReconnectBanner();
       try{peerConn.restartIce&&peerConn.restartIce()}catch(e){}
     }
+    if(d.type==='force-keyframe'&&peerConn&&d.sessionId===currentCallSessionId){
+      // DÜZELTME (kalıcı bloklu/bozuk görüntü): Karşı taraf paket kaybından
+      // dolayı bozuk kare aldığını fark etti ve bizden (kendi encoder'ımız
+      // burada, video GÖNDEREN taraf) yeni bir keyframe (I-frame) istiyor.
+      // WebRTC API'sinde bunu doğrudan tetikleyen bir metod yok — bilinen
+      // teknik: gönderilen video track'inin encode parametresini (bitrate)
+      // bir anlığına değiştirip hemen eski değerine geri almak, tarayıcının
+      // encoder'ını yeni bir keyframe üretmeye zorluyor. Bu, karşı taraftaki
+      // decoder'ın bozuk referans karesini temizler ve görüntü normale döner.
+      try{
+        const sender=peerConn.getSenders().find(s=>s.track&&s.track.kind==='video');
+        if(sender){
+          const params=sender.getParameters();
+          if(params.encodings&&params.encodings.length){
+            const originalBr=params.encodings[0].maxBitrate;
+            const nudgedBr=Math.max(50000,Math.floor((originalBr||300000)*0.7));
+            params.encodings[0].maxBitrate=nudgedBr;
+            sender.setParameters(params).then(()=>{
+              setTimeout(()=>{
+                try{
+                  const p2=sender.getParameters();
+                  if(p2.encodings&&p2.encodings.length){
+                    p2.encodings[0].maxBitrate=originalBr;
+                    sender.setParameters(p2).catch(()=>{});
+                  }
+                }catch(e){}
+              },300);
+            }).catch(()=>{});
+          }
+        }
+      }catch(e){}
+    }
   });
 }
 
@@ -7003,6 +7035,7 @@ let videoHealthTmr=null;
 function startVideoHealthCheck(pc){
   clearTimeout(videoHealthTmr);
   let triedRestart=false;
+  let lastPliCount=0,lastPacketsLost=0,lastFramesDecoded=0,corruptionStreak=0,lastKeyFrameReqTs=0;
   const check=async()=>{
     if(!peerConn||peerConn!==pc)return;
     try{
@@ -7023,6 +7056,46 @@ function startVideoHealthCheck(pc){
       // geliyor.
       if(hasFrames&&ph&&!ph.classList.contains('hide')){
         ph.classList.add('hide');
+      }
+      /* DÜZELTME (kalıcı bloklu/bozuk görüntü — PLI eksikliği): Video akışı
+         devam ediyor (hasFrames=true) ama görüntü blok blok/renk bozuk
+         kalabiliyordu ve KENDİLİĞİNDEN düzelmiyordu. Sebep: paket kaybı
+         (packetsLost) sonucu decoder'ın referans karesi bozuluyor; H.264/
+         VP8'de bu, YENİ BİR KEYFRAME (I-frame) gelene kadar HER karede
+         birikerek sürer — tarayıcı bunu bazı durumlarda otomatik ister
+         (PLI/FIR RTCP paketiyle) ama bağlantı kısa süreliğine "disconnected"
+         olup toparlandığı durumlarda bu otomatik istek kayboluyor ve hiç
+         kimse yeni keyframe istemiyor. JS'te alıcı taraftan doğrudan PLI
+         tetiklemek mümkün değil — bunun yerine karşı tarafa (encoder'ı
+         tutan taraf) signaling kanalından "keyframe üret" isteği gönderip,
+         orada video track'inin bitrate parametresini bir anlığına dokunup
+         geri alarak (bu, tarayıcıyı yeni bir I-frame üretmeye zorlayan
+         bilinen bir teknik) sorunu köklü şekilde çözüyoruz. */
+      if(inbound){
+        const pliCount=inbound.pliCount||0;
+        const packetsLost=inbound.packetsLost||0;
+        const framesDecoded=inbound.framesDecoded||0;
+        const packetsLostDelta=packetsLost-lastPacketsLost;
+        const framesDelta=framesDecoded-lastFramesDecoded;
+        // Bu ölçüm aralığında paket kaybı oldu ama kare üretimi durmadıysa
+        // (yani "bağlantı koptu" değil, "bozuk kare akıyor" durumu) —
+        // bu gerçek bozulma belirtisidir.
+        if(packetsLostDelta>3&&framesDelta>0){
+          corruptionStreak++;
+        }else{
+          corruptionStreak=0;
+        }
+        const now=Date.now();
+        if(corruptionStreak>=2&&(now-lastKeyFrameReqTs)>8000){
+          corruptionStreak=0;
+          lastKeyFrameReqTs=now;
+          if(callPeerId){
+            sigSend({type:'force-keyframe',to:callPeerId,from:myId,sessionId:currentCallSessionId}).catch(()=>{});
+          }
+        }
+        lastPacketsLost=packetsLost;
+        lastFramesDecoded=framesDecoded;
+        lastPliCount=pliCount;
       }
       if(!hasFrames){
         if(!triedRestart){
