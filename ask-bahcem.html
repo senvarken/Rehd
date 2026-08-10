@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260810-012316-6b49b28">
+<html lang="tr" data-build="askbahcem-20260810-012700-9324aa9">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -166,8 +166,14 @@
   // böylece "linkten açık bırakılmış tarayıcı sekmesi" de güncellemeyi
   // GitHub Pages'e her push'tan sonra makul bir sürede yakalar.
   setInterval(()=>{
-    if(document.visibilityState==='visible')checkForUpdate();
-    tryApplyPendingIfIdle();
+    if(document.visibilityState==='visible'){
+      checkForUpdate();
+      tryApplyPendingIfIdle();
+    }
+    // DÜZELTME (pil): tryApplyPendingIfIdle() önceden sekme arka
+    // plandayken de her CHECK_INTERVAL_MS'de bir çalışıyordu — sayfa
+    // görünür değilken bunun bir faydası yok, sadece boşuna CPU/pil
+    // harcıyordu. Artık ikisi de visible koşuluna bağlı.
   },CHECK_INTERVAL_MS);
 })();
 </script>
@@ -2292,6 +2298,12 @@ function updateFineClock(nextPeriod){
 function startCycleClock(start){
   clearInterval(ccClockTmr);
   ccClockTmr=setInterval(()=>{
+    // DÜZELTME (pil): sekme/uygulama arka plandayken bu timer'ın kendisi
+    // (1sn'de bir DOM güncellemesi + renderCycleView tüm görünümü tazeleme)
+    // hiç durmuyordu — kullanıcı kamuflaj ekranını açık bırakıp günlerce
+    // arka planda tutabiliyor, bu da boşuna sürekli pil tüketimine yol
+    // açıyordu. Artık sayfa görünür değilken hesaplama tamamen atlanıyor.
+    if(document.hidden)return;
     const nextPeriod=computeNextPeriod(start);
     updateFineClock(nextPeriod);
     // Gün sayısı değiştiyse tüm görünümü tazele (evre / ilerleme halkası dahil)
@@ -2303,7 +2315,7 @@ function startTipRotation(){
   const tipEl=document.getElementById('ccTipLive');
   let lastIdx=-1;
   function showNextTip(){
-    if(!tipEl)return;
+    if(!tipEl||document.hidden)return; // DÜZELTME (pil): arka planda ipucu döndürmeye gerek yok
     let idx;
     do{idx=Math.floor(Math.random()*CC_TIPS_POOL.length)}while(idx===lastIdx&&CC_TIPS_POOL.length>1);
     lastIdx=idx;
