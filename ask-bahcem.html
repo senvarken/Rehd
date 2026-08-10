@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260810-010525-b587106">
+<html lang="tr" data-build="askbahcem-20260810-012316-6b49b28">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -2015,9 +2015,19 @@ function startAdaptiveBitrate(pc){
       // GERÇEK ZAMANLI CPU SİNYALİ: encoder'ın kendisi "CPU'ya yetişemiyorum"
       // derse (3 ardışık ölçüm ≈12sn boyunca), süre eşiklerini beklemeden
       // hemen bir alt kademeye in.
-      if(outbound.qualityLimitationReason==='cpu'){
+      // DÜZELTME (ısındıkça karşı tarafa piksel piksel/bozuk görüntü
+      // gitmesi): Önceki eşik (3 ardışık ölçüm ≈12sn) encoder termal
+      // nedenle zaten zorlanmaya başladıktan sonra çok geç devreye
+      // giriyordu — o 12sn boyunca bozuk/parçalı kareler karşı tarafa
+      // gitmeye devam ediyordu. Eşik 2 ölçüme (≈8sn) indirildi. Ayrıca
+      // qualityLimitationReason 'cpu' DIŞINDA 'other' değeri de bazı
+      // Android WebView/Exynos encoder'larında termal kısıtlamayı
+      // raporluyor (Chromium her zaman 'cpu' olarak ayırt etmiyor) —
+      // onu da aynı şekilde sayıyoruz.
+      const cpuLimited=outbound.qualityLimitationReason==='cpu'||outbound.qualityLimitationReason==='other';
+      if(cpuLimited){
         cpuLimitedStreak++;
-        if(cpuLimitedStreak>=3&&callQualityTierIdx<CALL_QUALITY_TIERS.length-1){
+        if(cpuLimitedStreak>=2&&callQualityTierIdx<CALL_QUALITY_TIERS.length-1){
           cpuLimitedStreak=0;
           await applyQualityTier(callQualityTierIdx+1,pc);
         }
@@ -2067,7 +2077,7 @@ function startAdaptiveBitrate(pc){
         console.log('[ADAPTIVE-BR] bitrate:',target,'tier:',callQualityTierIdx,'lossRatio:',lossRatio.toFixed(3),'rtt:',rtt);
       }
     }catch(e){}
-  },4000);
+  },2500);
 }
 function stopAdaptiveBitrate(){
   clearInterval(adaptiveBrTmr);
@@ -7331,6 +7341,19 @@ function createPC(){
     // burada, video akışı gerçekten geldiği anda tekrar zorluyoruz —
     // böylece tarayıcı hangi yolla algılarsa algılasın devre dışı kalmıyor.
     try{vid.autoPictureInPicture=true;vid.disablePictureInPicture=false}catch(e){}
+    // DÜZELTME (ilk uygulama-geçişinde PiP açılmıyordu, geri dönüp tekrar
+    // geçince açılıyordu): mediaSession 'enterpictureinpicture' handler'ı
+    // önceden SADECE setCallConnectedUI() içinde (yani ICE 'connected'/
+    // 'completed' olunca) kaydediliyordu. Ama medya track'i (ontrack) ICE
+    // tam bağlanmadan ÖNCE de gelebiliyor — kullanıcı bu ara pencerede
+    // (medya var ama ICE henüz "connected" değil) uygulamayı değiştirirse
+    // handler henüz kayıtlı olmadığından Chrome otomatik PiP'i tetikleyemiyor
+    // ve sessizce başarısız oluyordu. 2. geçişte ICE artık connected
+    // olduğu ve handler kayıtlı olduğu için çalışıyormuş gibi görünüyordu.
+    // Artık handler'ı medya geldiği anda (burada) da erken kaydediyoruz —
+    // registerCallPipHandler() zaten idempotent (setActionHandler'ı tekrar
+    // çağırmak zararsız), setCallConnectedUI() içindeki çağrı da duruyor.
+    registerCallPipHandler();
     document.getElementById('remotePlaceholder').classList.add('hide');
     setTimeout(()=>{document.getElementById('remotePlaceholder')?.classList.add('hide')},50);
     setTimeout(()=>{document.getElementById('remotePlaceholder')?.classList.add('hide')},500);
