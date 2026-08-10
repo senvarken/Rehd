@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260810-012700-9324aa9">
+<html lang="tr" data-build="askbahcem-20260810-014051-9dccfb1">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -7353,19 +7353,6 @@ function createPC(){
     // burada, video akışı gerçekten geldiği anda tekrar zorluyoruz —
     // böylece tarayıcı hangi yolla algılarsa algılasın devre dışı kalmıyor.
     try{vid.autoPictureInPicture=true;vid.disablePictureInPicture=false}catch(e){}
-    // DÜZELTME (ilk uygulama-geçişinde PiP açılmıyordu, geri dönüp tekrar
-    // geçince açılıyordu): mediaSession 'enterpictureinpicture' handler'ı
-    // önceden SADECE setCallConnectedUI() içinde (yani ICE 'connected'/
-    // 'completed' olunca) kaydediliyordu. Ama medya track'i (ontrack) ICE
-    // tam bağlanmadan ÖNCE de gelebiliyor — kullanıcı bu ara pencerede
-    // (medya var ama ICE henüz "connected" değil) uygulamayı değiştirirse
-    // handler henüz kayıtlı olmadığından Chrome otomatik PiP'i tetikleyemiyor
-    // ve sessizce başarısız oluyordu. 2. geçişte ICE artık connected
-    // olduğu ve handler kayıtlı olduğu için çalışıyormuş gibi görünüyordu.
-    // Artık handler'ı medya geldiği anda (burada) da erken kaydediyoruz —
-    // registerCallPipHandler() zaten idempotent (setActionHandler'ı tekrar
-    // çağırmak zararsız), setCallConnectedUI() içindeki çağrı da duruyor.
-    registerCallPipHandler();
     document.getElementById('remotePlaceholder').classList.add('hide');
     setTimeout(()=>{document.getElementById('remotePlaceholder')?.classList.add('hide')},50);
     setTimeout(()=>{document.getElementById('remotePlaceholder')?.classList.add('hide')},500);
