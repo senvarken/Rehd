@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260810-002807-5851232">
+<html lang="tr" data-build="askbahcem-20260810-004046-c485f97">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -6967,9 +6967,24 @@ document.addEventListener('visibilitychange',()=>{
       showToast('Arka planda kalırsan görüşme geçici olarak duraklayabilir (iOS/tarayıcı kısıtı)','warn');
     }
   }
-  // Öne dönünce PiP'i elle kapatmıyoruz — Chrome zaten "picture-in-picture
-  // window is automatically closed when the page visibility becomes
-  // visible again" davranışını kendisi uyguluyor.
+  else{
+    // DÜZELTME (PiP'ten uygulamaya dönünce tam ekrana geçmiyordu): Önceden
+    // öne dönünce PiP'i elle kapatmıyorduk, Chrome'un "sayfa tekrar görünür
+    // olunca PiP penceresini kendisi otomatik kapatır" davranışına
+    // güveniliyordu. Ama bu davranış her tarayıcıda (ör. Brave) ve her
+    // senaryoda güvenilir tetiklenmiyor — PiP açık kalıp uygulama arka
+    // planda gibi küçük/minimized görünümde takılı kalabiliyordu (ekran
+    // görüntüsündeki durum tam olarak bu). Artık öne döner dönmez PiP'i
+    // KENDİMİZ elle kapatıyoruz ve görüşme ekranını tam ekrana geri
+    // döndürüyoruz — 'leavepictureinpicture' olayı zaten restoreCall()'ı
+    // tetikleyecek olsa da (attachPipRestoreListener), burada ekstra bir
+    // güvence olarak doğrudan da çağırıyoruz.
+    exitDocumentPip();
+    const ov=document.getElementById('callOverlay');
+    if(ov&&ov.classList.contains('open')&&ov.classList.contains('minimized')){
+      restoreCall();
+    }
+  }
 });
 
 async function startCall(){
@@ -7109,6 +7124,15 @@ function startVideoHealthCheck(pc){
         const framesDecoded=inbound.framesDecoded||0;
         const packetsLostDelta=packetsLost-lastPacketsLost;
         const framesDelta=framesDecoded-lastFramesDecoded;
+        // GÜVENLİK AĞI (kalıcı "Yeniden bağlanıyor" takılması): iceConnectionState/
+        // connectionState olayları bazı Android WebView'lerde hiç 'connected'e
+        // dönmeyebiliyor (yukarıdaki oniceconnectionstatechange yorumlarında
+        // anlatılan bilinen kısıt) — bu durumda banner'ı kapatacak hiçbir olay
+        // ateşlenmiyor ve banner görüşme boyunca ekranda asılı kalıyordu. Ama
+        // burada kare SAYISI gerçekten artıyorsa (framesDelta>0) bu, durum
+        // makinesi ne derse desin bağlantının fiilen ÇALIŞTIĞININ kanıtıdır —
+        // bu durumda banner'ı zorla kapatıyoruz.
+        if(framesDelta>0)hideReconnectBanner();
         // Bu ölçüm aralığında paket kaybı oldu ama kare üretimi durmadıysa
         // (yani "bağlantı koptu" değil, "bozuk kare akıyor" durumu) —
         // bu gerçek bozulma belirtisidir.
