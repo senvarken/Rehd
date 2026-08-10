@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260810-001929-544d397">
+<html lang="tr" data-build="askbahcem-20260810-002807-5851232">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -6465,28 +6465,39 @@ function listenCallSignal(){
       // bir anlığına değiştirip hemen eski değerine geri almak, tarayıcının
       // encoder'ını yeni bir keyframe üretmeye zorluyor. Bu, karşı taraftaki
       // decoder'ın bozuk referans karesini temizler ve görüntü normale döner.
-      try{
-        const sender=peerConn.getSenders().find(s=>s.track&&s.track.kind==='video');
-        if(sender){
-          const params=sender.getParameters();
-          if(params.encodings&&params.encodings.length){
-            const originalBr=params.encodings[0].maxBitrate;
-            const nudgedBr=Math.max(50000,Math.floor((originalBr||300000)*0.7));
-            params.encodings[0].maxBitrate=nudgedBr;
-            sender.setParameters(params).then(()=>{
-              setTimeout(()=>{
-                try{
-                  const p2=sender.getParameters();
-                  if(p2.encodings&&p2.encodings.length){
-                    p2.encodings[0].maxBitrate=originalBr;
-                    sender.setParameters(p2).catch(()=>{});
-                  }
-                }catch(e){}
-              },300);
-            }).catch(()=>{});
+      //
+      // DÜZELTME (reconnect ile çakışma): bağlantı zaten "disconnected"/
+      // "failed" durumundaysa veya bir offer/answer turu sürüyorsa
+      // (signalingState!=='stable'), bu ek encoder müdahalesi zaten kırılgan
+      // olan yeniden-bağlanma sürecine gereksiz bir yük daha bindiriyordu —
+      // asıl sorun bağlantının kendisiyken "görüntü bozuk" sanıp encoder'a
+      // dokunmak faydasız, hatta zararlı olabilir. Sadece bağlantı gerçekten
+      // sağlıklıyken (stable + connected/completed) bu düzeltmeyi uyguluyoruz.
+      const stOk=peerConn.iceConnectionState==='connected'||peerConn.iceConnectionState==='completed';
+      if(peerConn.signalingState==='stable'&&stOk){
+        try{
+          const sender=peerConn.getSenders().find(s=>s.track&&s.track.kind==='video');
+          if(sender){
+            const params=sender.getParameters();
+            if(params.encodings&&params.encodings.length){
+              const originalBr=params.encodings[0].maxBitrate;
+              const nudgedBr=Math.max(50000,Math.floor((originalBr||300000)*0.7));
+              params.encodings[0].maxBitrate=nudgedBr;
+              sender.setParameters(params).then(()=>{
+                setTimeout(()=>{
+                  try{
+                    const p2=sender.getParameters();
+                    if(p2.encodings&&p2.encodings.length){
+                      p2.encodings[0].maxBitrate=originalBr;
+                      sender.setParameters(p2).catch(()=>{});
+                    }
+                  }catch(e){}
+                },300);
+              }).catch(()=>{});
+            }
           }
-        }
-      }catch(e){}
+        }catch(e){}
+      }
     }
   });
 }
@@ -6827,6 +6838,7 @@ function setCallConnectedUI(){
   document.getElementById('callInfo').textContent=(activePartner?.name||'Sevgilim');
   document.getElementById('callPhStatusText').textContent='Bağlandı';
   registerCallPipHandler();
+  attachPipRestoreListener();
   // DÜZELTME (üye tarafında otomatik PiP tetiklenmiyordu): Chrome'un
   // "arka plana geçince otomatik PiP aç" davranışı, mediaSession handler'ı
   // kayıtlı olsa bile ek koşullara bağlı — kullanıcının o sitede yeterince
@@ -6903,6 +6915,26 @@ function registerCallPipHandler(){
       }catch(e){}
     });
   }catch(e){}
+}
+// DÜZELTME (PiP'ten dönünce tam ekrana geçmiyordu): PiP penceresi kapanınca
+// (kullanıcı uygulamaya geri dönerek ya da PiP penceresindeki "geri dön"
+// butonuyla çıkarak) remoteVid elementi 'leavepictureinpicture' event'i
+// fırlatır. Görüşme ekranı (callOverlay) o anda küçültülmüş (minimized —
+// uygulama-içi mini baloncuk) durumda kalmış olabilir; bu event'i dinleyip
+// tam ekran görüşme moduna otomatik geri dönüyoruz, kullanıcı elle
+// dokunmasına gerek kalmıyor.
+let _pipRestoreListenerAttached=false;
+function attachPipRestoreListener(){
+  if(_pipRestoreListenerAttached)return;
+  const remoteVid=document.getElementById('remoteVid');
+  if(!remoteVid)return;
+  remoteVid.addEventListener('leavepictureinpicture',()=>{
+    const ov=document.getElementById('callOverlay');
+    if(ov&&ov.classList.contains('open')&&ov.classList.contains('minimized')){
+      restoreCall();
+    }
+  });
+  _pipRestoreListenerAttached=true;
 }
 function unregisterCallPipHandler(){
   if(!('mediaSession' in navigator))return;
@@ -7233,6 +7265,7 @@ function createPC(){
     if(st==='connected'||st==='completed'){
       clearTimeout(neverConnectedTmr);
       clearTimeout(pc._dcTmr);
+      pc._dcTmr=null;
       clearInterval(pc._dcRetryInt);
       hideReconnectBanner();
       setCallConnectedUI();
@@ -7246,7 +7279,18 @@ function createPC(){
     if(st==='disconnected'){
       showReconnectBanner();
       try{pc.restartIce&&pc.restartIce()}catch(e){}
-      clearTimeout(pc._dcTmr);
+      // DÜZELTME (sonsuza dek "Yeniden bağlanıyor" takılması — asıl kök
+      // sebep): Zayıf bağlantıda iceConnectionState 'disconnected' ↔
+      // 'checking' arasında defalarca salınabiliyor. Önceki kod HER
+      // salınımda clearTimeout(pc._dcTmr) çağırıp SIFIRDAN yeni bir 30
+      // saniyelik sayaç kuruyordu — yani state hiç 'connected' olmadan
+      // sürekli disconnected'a "yeniden düşerse", 30sn'lik sayaç asla
+      // dolmuyor ve görüşme sonsuza dek "yeniden bağlanıyor" ekranında
+      // asılı kalıyordu (ekran görüntüsündeki tam olarak bu durum). Artık
+      // _dcTmr'yi SADECE ilk disconnected anında kuruyoruz; state tekrar
+      // tekrar disconnected'a düşse bile mevcut sayaç bozulmadan devam
+      // ediyor — böylece toplam kopukluk süresi gerçekten 30sn'yi
+      // geçtiğinde görüşme güvenilir şekilde kapanıyor.
       clearInterval(pc._dcRetryInt);
       // Tek seferlik restartIce her zaman ilk denemede tutmuyor (özellikle
       // mobil veri↔wifi geçişinde yeni arayüz hemen hazır olmuyor). Bağlantı
@@ -7263,13 +7307,19 @@ function createPC(){
       },5000);
       // Süre 18sn'den 30sn'ye çıkarıldı — periyodik yeniden deneme ile
       // birlikte ağ geçişinin toparlanması için daha fazla şans veriyor.
-      pc._dcTmr=setTimeout(()=>{
-        clearInterval(pc._dcRetryInt);
-        if(pc.iceConnectionState==='disconnected'||pc.iceConnectionState==='failed'){
-          showToast('Bağlantı koptu','warn');
-          endCallCleanup();
-        }
-      },30000);
+      // NOT: artık her disconnected tetiklenmesinde YENİDEN kurulmuyor —
+      // sadece pc._dcTmr henüz kurulmamışsa (yani gerçekten İLK kopuş
+      // anındaysak) kuruluyor.
+      if(!pc._dcTmr){
+        pc._dcTmr=setTimeout(()=>{
+          pc._dcTmr=null;
+          clearInterval(pc._dcRetryInt);
+          if(pc.iceConnectionState==='disconnected'||pc.iceConnectionState==='failed'){
+            showToast('Bağlantı koptu','warn');
+            endCallCleanup();
+          }
+        },30000);
+      }
     }
     if(st==='closed'){clearTimeout(neverConnectedTmr);clearTimeout(pc._dcTmr);clearInterval(pc._dcRetryInt)}
   };
