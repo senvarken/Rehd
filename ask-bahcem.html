@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260810-014051-9dccfb1">
+<html lang="tr" data-build="askbahcem-20260820-100033-656eb53">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -2700,11 +2700,13 @@ function buildHdMoreMenu(role){
     <button onclick="toggleHdMore();clearAppDataAndReload()"><svg class="icon icon-sm"><use href="#i-refresh"/></svg><span>Verileri Temizle (Güncelle)</span></button>`;
   if(role==='admin'){
     menu.innerHTML+=`<button id="passiveLocToggleBtn" onclick="toggleHdMore();togglePassiveLocationSharing()"><span style="font-size:1.05em;width:18px;text-align:center;flex-shrink:0">📍</span><span id="passiveLocToggleLabel">Konum Paylaşımı: Kapalı</span></button>
+    <button id="watchModeToggleBtn" onclick="toggleHdMore();toggleWatchMode()"><span style="font-size:1.05em;width:18px;text-align:center;flex-shrink:0">👁️</span><span id="watchModeToggleLabel">Anlık İzleme: Kapalı</span></button>
     <button onclick="toggleHdMore();openAdminSettings()"><svg class="icon icon-sm"><use href="#i-gear"/></svg><span>Ayarlar</span></button>
     <button onclick="toggleHdMore();confirmDeleteCurrentChat()" style="color:#ff8fa3"><svg class="icon icon-sm"><use href="#i-trash"/></svg><span>Bu Sohbeti Herkesten Sil</span></button>`;
   }
   menu.innerHTML+=`<button onclick="doLogout()" style="color:#ff8fa3"><svg class="icon icon-sm"><use href="#i-logout"/></svg><span>Oturumu Kapat</span></button>`;
   refreshPassiveLocToggleLabel();
+  refreshWatchModeToggleLabel();
   updateSoundBtnUI();
   updateVibrateBtnUI();
   updateMuteAllBtnUI();
@@ -5269,6 +5271,136 @@ function updatePassiveLocationOnce(){
   },{enableHighAccuracy:true,maximumAge:60000,timeout:30000});
 }
 
+/* ═══════════════════════════════════════
+   ANLIK İZLEME (Ebeveyn Kontrolü) — sadece admin, sadece guest tarafında
+   Google Family Link / Bark / Qustodio ile aynı ilke: GİZLİ DEĞİL, her zaman
+   ekranda sabit ve kapatılamaz "İZLENİYORSUN" göstergesiyle görünür. Guest
+   istediği an "Durdur" ile bağlantıyı kendi tarafından sonlandırabilir.
+   Mevcut WebRTC görüşme altyapısı (createPC/sigSend/flushPendingIce) aynen
+   kullanılır; sinyal 'offer' mesajına watchMode:true bayrağı eklenir ki
+   guest tarafında normal "gelen arama" zili/ekranı DEĞİL, doğrudan otomatik
+   kabul + banner akışı tetiklensin.
+═══════════════════════════════════════ */
+let watchModeActive=false;      // admin tarafında: izleme oturumu açık mı
+let watchModeAsViewed=false;    // guest tarafında: şu an izleniyor muyum
+
+function refreshWatchModeToggleLabel(){
+  const el=document.getElementById('watchModeToggleLabel');
+  if(!el)return;
+  el.textContent='Anlık İzleme: '+(watchModeActive?'Açık':'Kapalı');
+}
+
+async function toggleWatchMode(){
+  if(!isAdmin){return} // guest bu özelliği kendi başlatamaz
+  if(watchModeActive){stopWatchMode();return}
+  await startWatchMode();
+}
+
+async function startWatchMode(){
+  if(!fb||!activeRoom||!activePartner){showToast('Önce bir sohbet seç','warn');return}
+  if(peerConn){showToast('Zaten bir görüşme/izleme açık','warn');return}
+  const initTier=pickInitialQualityTier();
+  try{localStream=await navigator.mediaDevices.getUserMedia(buildInitialMediaConstraints(initTier))}
+  catch(e){showToast('Kamera/Mikrofon izni gerekli','error');return}
+  enterCallPerfMode(initTier);
+  document.getElementById('localVid').srcObject=localStream;
+  applySavedSelfVidPos();
+  currentCallSessionId='w_'+Date.now()+'_'+Math.random().toString(36).slice(2);
+  callPeerId=activePartner.id;
+  iAmCaller=true;
+  watchModeActive=true;
+  refreshWatchModeToggleLabel();
+  peerConn=createPC();
+  const offer=await peerConn.createOffer();
+  await peerConn.setLocalDescription(offer);
+  // DÜZELTME: watchMode:true bayrağı guest tarafındaki listenCallSignal'de
+  // ayrı bir dala girmesini sağlar — zil çalmaz, "gelen arama" ekranı
+  // açılmaz, doğrudan otomatik kabul edilir.
+  await sigSend({type:'offer',to:activePartner.id,from:myId,fromName:myName,fromEmoji:myEmoji,offer:{type:offer.type,sdp:offer.sdp},sessionId:currentCallSessionId,watchMode:true});
+
+  const nm=activePartner.name||'Çocuğum';
+  document.getElementById('callPhAvatar').textContent=initialOf(nm);
+  document.getElementById('callPhName').textContent=nm;
+  document.getElementById('callPhStatusText').textContent='İzleniyor…';
+  document.getElementById('remotePlaceholder').classList.remove('hide');
+  const ovStart=document.getElementById('callOverlay');
+  ovStart.classList.remove('minimized','dragging');
+  ovStart.style.left='';ovStart.style.top='';ovStart.style.right='';ovStart.style.bottom='';ovStart.style.transition='';
+  pipJustDragged=false;
+  ovStart.classList.add('open');
+  document.getElementById('callInfo').textContent=nm+' — Anlık İzleme';
+  startCallTimer();
+  showCallControls();
+  const recBtn=document.getElementById('callRecBtn');
+  if(recBtn)recBtn.style.display=isAdmin?'flex':'none';
+}
+
+function stopWatchMode(){
+  watchModeActive=false;
+  refreshWatchModeToggleLabel();
+  if(peerConn||localStream){endCall()}
+}
+
+/* Guest tarafında: watchMode offer'ı geldiğinde zil YOK, gelen arama ekranı
+   YOK — doğrudan kabul edilir ve ekranda sabit banner açılır. */
+async function autoAcceptWatchMode(d){
+  try{
+    const initTier=pickInitialQualityTier();
+    try{localStream=await navigator.mediaDevices.getUserMedia(buildInitialMediaConstraints(initTier))}
+    catch(e){showToast('İzleme için kamera/mikrofon izni gerekli','error');return}
+    enterCallPerfMode(initTier);
+    document.getElementById('localVid').srcObject=localStream;
+    applySavedSelfVidPos();
+    currentCallSessionId=d.sessionId||('w_'+Date.now());
+    callPeerId=d.from;
+    iAmCaller=false;
+    peerConn=createPC();
+    await peerConn.setRemoteDescription(new RTCSessionDescription(d.offer));
+    flushPendingIce();
+    const answer=await peerConn.createAnswer();
+    await peerConn.setLocalDescription(answer);
+    await sigSend({type:'answer',to:d.from,from:myId,answer:{type:answer.type,sdp:answer.sdp},sessionId:currentCallSessionId});
+
+    document.getElementById('remotePlaceholder').classList.add('hide');
+    const ov=document.getElementById('callOverlay');
+    ov.classList.remove('minimized','dragging');
+    ov.style.left='';ov.style.top='';ov.style.right='';ov.style.bottom='';ov.style.transition='';
+    ov.classList.add('open');
+    document.getElementById('callInfo').textContent='İzleniyorsun';
+    callConnected=true;
+    startCallTimer();
+    showCallControls();
+    const recBtn=document.getElementById('callRecBtn');
+    if(recBtn)recBtn.style.display='none'; // guest kayıt başlatamaz
+    watchModeAsViewed=true;
+    showWatchModeBanner();
+  }catch(e){console.error('autoAcceptWatchMode',e)}
+}
+
+function showWatchModeBanner(){
+  let b=document.getElementById('watchModeBanner');
+  if(!b){
+    b=document.createElement('div');
+    b.id='watchModeBanner';
+    b.style.cssText='position:absolute;top:0;left:0;right:0;z-index:400;background:#e53950;color:#fff;font-weight:700;font-size:.92rem;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;box-shadow:0 2px 10px rgba(0,0,0,.35)';
+    b.innerHTML=`<span>🔴 İZLENİYORSUN — Ebeveyn Kontrolü Aktif</span><button onclick="guestStopWatchMode()" style="background:rgba(255,255,255,.22);border:none;color:#fff;font-weight:700;padding:6px 12px;border-radius:8px">Durdur</button>`;
+    document.getElementById('callOverlay').appendChild(b);
+  }
+  b.style.display='flex';
+}
+function hideWatchModeBanner(){
+  const b=document.getElementById('watchModeBanner');
+  if(b)b.style.display='none';
+  watchModeAsViewed=false;
+}
+/* Guest her zaman kendi tarafından izlemeyi durdurabilir — gizli/zorla
+   sürdürülen bir bağlantı ASLA olmamalı. */
+function guestStopWatchMode(){
+  endCall();
+  hideWatchModeBanner();
+  showToast('İzleme durduruldu','info');
+}
+
 /* Partnerin son bilinen (pasif) konumunu header altında gösterir. */
 let unsubPassiveLoc=null;
 let passiveLocAddrCache={key:null,addr:null};
@@ -6476,6 +6608,14 @@ function listenCallSignal(){
       }
       if(peerConn){endCallCleanup()}
       pendingIce=[];
+      // DÜZELTME: watchMode offer'ı normal "gelen arama" akışına GİRMEZ —
+      // zil çalmaz, kabul/reddet ekranı açılmaz, otomatik kabul edilip
+      // ekranda sabit "İzleniyorsun" banner'ı gösterilir (gizli değil).
+      if(d.watchMode){
+        currentCallData=d;
+        autoAcceptWatchMode(d);
+        return;
+      }
       currentCallSessionId=d.sessionId||null;
       const nm=d.fromName||'Sevgilim';
       document.getElementById('icAvatar').textContent=initialOf(nm);
@@ -7668,15 +7808,28 @@ async function startCallRecording(){
     // mikrofonun (localStream). AudioContext üzerinden tek bir hedefe
     // (destination) bağlanıp oradan tek bir ses parçası elde ediyoruz.
     callRecAudioCtx=new (window.AudioContext||window.webkitAudioContext)();
+    // DÜZELTME (ses gelmiyor sorunu): AudioContext Android/Chrome'da çoğu
+    // zaman 'suspended' durumda başlar; kullanıcı etkileşimiyle (bu fonksiyon
+    // zaten bir tıklamadan tetikleniyor) resume() ÇAĞRILMAZSA createMediaStreamSource
+    // ile bağlanan track'ler destination'a hiç veri akıtmaz ve kayıtta ses
+    // tamamen sessiz çıkar. Kayda başlamadan önce garanti şekilde resume ediyoruz.
+    if(callRecAudioCtx.state==='suspended'){try{await callRecAudioCtx.resume()}catch(e){console.error('audioCtx resume',e)}}
+
     const dest=callRecAudioCtx.createMediaStreamDestination();
+    let recAudioTrackCount=0;
     if(remoteVid.srcObject&&remoteVid.srcObject.getAudioTracks().length){
       const remoteSrc=callRecAudioCtx.createMediaStreamSource(new MediaStream(remoteVid.srcObject.getAudioTracks()));
       remoteSrc.connect(dest);
+      recAudioTrackCount++;
     }
     if(localStream&&localStream.getAudioTracks().length){
       const localSrc=callRecAudioCtx.createMediaStreamSource(new MediaStream(localStream.getAudioTracks()));
       localSrc.connect(dest);
+      recAudioTrackCount++;
     }
+    // DÜZELTME: hiç ses kaynağı bağlanamadıysa (örn. remote audio track henüz
+    // gelmemiş) kullanıcıyı uyar — sessiz bir kayıt sessizce üretilmesin.
+    if(recAudioTrackCount===0){showToast('Uyarı: ses kaynağı bulunamadı, kayıt sessiz olabilir','warn')}
 
     const combined=new MediaStream([...canvasStream.getVideoTracks(),...dest.stream.getAudioTracks()]);
     // DÜZELTME (ısınma — kayıt): VP9 kalite/sıkıştırma açısından iyi ama
@@ -7724,6 +7877,9 @@ function stopCallRecording(){
 }
 
 function endCallCleanup(){
+  hideWatchModeBanner();
+  watchModeActive=false;
+  refreshWatchModeToggleLabel();
   exitDocumentPip();
   const pipBtn=document.getElementById('callPipBtn');
   if(pipBtn)pipBtn.style.display='none';
