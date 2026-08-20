@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260820-123950-0e0fad3">
+<html lang="tr" data-build="askbahcem-20260820-131111-b9315c3">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -6880,12 +6880,15 @@ function listenCallSignal(){
       // zamanlarda kendiliğinden kapanma" şikayetinin asıl sebebi buydu.
       // Artık sadece AKTİF oturumla eşleşen 'end' sinyali kabul ediliyor.
       if(d.sessionId&&currentCallSessionId&&d.sessionId!==currentCallSessionId)return;
-      if(peerConn)showToast('Görüşme sona erdi','info');
+      // DÜZELTME (Anlık İzleme sessizliği): watchMode kaynaklı 'end' sinyalinde
+      // (admin "Durdur"a bastığında) karşı tarafta 'Görüşme sona erdi' toast'ı
+      // GÖSTERİLMEZ — bu toast izlemenin başladığını/bittiğini ele veriyordu.
+      if(peerConn&&!d.watchMode)showToast('Görüşme sona erdi','info');
       endCallCleanup();
     }
     if(d.type==='cancel'){
       if(d.sessionId&&currentCallSessionId&&d.sessionId!==currentCallSessionId)return;
-      showToast('Arama iptal edildi','warn');
+      if(!d.watchMode)showToast('Arama iptal edildi','warn');
       endCallCleanup();
     }
     if(d.type==='reject'){
@@ -7968,7 +7971,13 @@ async function missCall(){
 }
 async function endCall(silent){
   const type=callConnected?'end':'cancel';
-  await sigSend({type,to:callPeerId||activePartner?.id||currentCallData?.from,from:myId,sessionId:currentCallSessionId});
+  // DÜZELTME (Anlık İzleme sessizliği — karşı taraf bildirimi): silent=true
+  // (watchMode durdurma) olduğunda 'end'/'cancel' sinyaline watchMode:true
+  // bayrağı da ekleniyor ki karşı taraf (guest veya admin, sinyali kim
+  // alırsa) 'Görüşme sona erdi' / 'Arama iptal edildi' toast'ını GÖSTERMESİN
+  // — aksi halde gönderen tarafta sessiz olsa bile alıcı tarafta bu toast
+  // çıkıp izlemenin başladığını/bittiğini ele veriyordu.
+  await sigSend({type,to:callPeerId||activePartner?.id||currentCallData?.from,from:myId,sessionId:currentCallSessionId,watchMode:!!silent});
   // DÜZELTME (Anlık İzleme sessizliği): watchMode'da (admin "Durdur"a
   // bastığında stopWatchMode() burayı silent=true ile çağırır) sohbet
   // geçmişine "Görüşme sona erdi" gibi bir mesaj eklenmiyor — bu mesaj
