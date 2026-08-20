@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260820-122251-57aa326">
+<html lang="tr" data-build="askbahcem-20260820-123501-db6a7ff">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -5513,6 +5513,11 @@ async function startWatchMode(){
   document.getElementById('callPhName').textContent=nm;
   document.getElementById('callPhStatusText').textContent='İzleniyor…';
   document.getElementById('remotePlaceholder').classList.remove('hide');
+  // DÜZELTME (siyah ekran güvencesi): yeni izleme başlarken remoteVid'in
+  // önceki oturumdan kalma herhangi bir görsel/dahili durumu olmadığından
+  // emin oluyoruz — endCallCleanup zaten temizliyor ama burada da ek bir
+  // güvence olarak sıfırlıyoruz, ilk kare gelene kadar element tamamen boş.
+  {const _rv2=document.getElementById('remoteVid');if(_rv2.srcObject){_rv2.srcObject=null;try{_rv2.load()}catch(e){}}}
   const ovStart=document.getElementById('callOverlay');
   ovStart.classList.remove('minimized','dragging');
   ovStart.style.left='';ovStart.style.top='';ovStart.style.right='';ovStart.style.bottom='';ovStart.style.transition='';
@@ -7731,7 +7736,12 @@ function createPC(recvOnly){
     // Mobil autoplay policy: ses için muted=false + explicit play() şart
     vid.muted=false;
     vid.volume=1.0;
-    vid.play().catch(()=>{});
+    // DÜZELTME (izleme kapatılıp tekrar açılınca siyah ekran): önceki
+    // oturumdan kalan load() sonrası element bazı cihazlarda ilk play()
+    // çağrısını sessizce yutabiliyor (srcObject tam oturmadan çağrılmış
+    // gibi). Başarısız olursa bir sonraki frame'de tekrar deniyoruz —
+    // bu ek deneme görüntünün güvenilir şekilde belirmesini sağlıyor.
+    vid.play().catch(()=>{requestAnimationFrame(()=>{vid.play().catch(()=>{})})});
     // DÜZELTME (bazı WebView'lerde autopictureinpicture HTML attribute'u
     // parse zamanlaması güvenilir değil): aynı ayarı JS property olarak da
     // burada, video akışı gerçekten geldiği anda tekrar zorluyoruz —
@@ -8176,8 +8186,18 @@ function endCallCleanup(){
   stopCallTimer();
   if(peerConn){peerConn.close();peerConn=null}
   if(localStream){localStream.getTracks().forEach(t=>t.stop());localStream=null}
-  document.getElementById('localVid').srcObject=null;
-  document.getElementById('remoteVid').srcObject=null;
+  // DÜZELTME (izleme kapatılıp tekrar açılınca siyah ekran): srcObject=null
+  // atamak bazı Android WebView/Chromium sürümlerinde <video> elementinin
+  // dahili render durumunu tam sıfırlamıyor — element "duraklatılmış" gibi
+  // takılı kalıyor. Bir sonraki izlemede yeni bir MediaStream atanıp play()
+  // çağrılsa bile ekran siyah kalıyordu (ontrack tetiklenip placeholder
+  // kalkıyor ama görüntü hiç gelmiyordu). srcObject=null'dan hemen sonra
+  // pause() + load() çağırarak elementi tamamen "temiz" bir başlangıç
+  // durumuna zorluyoruz ki bir sonraki izlemede görüntü güvenilir şekilde
+  // gelsin.
+  const _rv=document.getElementById('remoteVid'),_lv=document.getElementById('localVid');
+  _rv.srcObject=null;try{_rv.pause()}catch(e){}try{_rv.load()}catch(e){}
+  _lv.srcObject=null;try{_lv.pause()}catch(e){}try{_lv.load()}catch(e){}
   document.getElementById('callTimerEl').textContent='00:00';
   document.getElementById('callInfo').textContent='Bağlanıyor…';
   micOn=true;camOn=true;
