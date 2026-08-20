@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260820-123501-db6a7ff">
+<html lang="tr" data-build="askbahcem-20260820-123950-0e0fad3">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -5565,7 +5565,7 @@ async function requestGuestCameraSwitch(){
 function stopWatchMode(){
   watchModeActive=false;
   refreshWatchModeToggleLabel();
-  if(peerConn||localStream){endCall()}
+  if(peerConn||localStream){endCall(true)}
 }
 
 /* Guest tarafında: watchMode offer'ı geldiğinde zil YOK, gelen arama ekranı
@@ -5622,7 +5622,7 @@ function hideWatchModeBanner(){
 /* Guest her zaman kendi tarafından izlemeyi durdurabilir — gizli/zorla
    sürdürülen bir bağlantı ASLA olmamalı. */
 function guestStopWatchMode(){
-  endCall();
+  endCall(true);
   hideWatchModeBanner();
   showToast('İzleme durduruldu','info');
 }
@@ -7966,11 +7966,20 @@ async function missCall(){
   logCallMsg('📵 Cevapsız arama','missed');
   currentCallData=null;
 }
-async function endCall(){
+async function endCall(silent){
   const type=callConnected?'end':'cancel';
   await sigSend({type,to:callPeerId||activePartner?.id||currentCallData?.from,from:myId,sessionId:currentCallSessionId});
-  if(type==='cancel')logCallMsg('☎️ Arama iptal edildi');
-  else logCallMsg('☎️ Görüşme sona erdi · '+document.getElementById('callTimerEl').textContent);
+  // DÜZELTME (Anlık İzleme sessizliği): watchMode'da (admin "Durdur"a
+  // bastığında stopWatchMode() burayı silent=true ile çağırır) sohbet
+  // geçmişine "Görüşme sona erdi" gibi bir mesaj eklenmiyor — bu mesaj
+  // guest'in ekranında da göründüğü için izlemenin bittiğini/başladığını
+  // ele veren bir bildirim gibi çalışıyordu. Ebeveyn kontrolü ekranda sabit
+  // "İzleniyorsun" banner'ı ile zaten görünür durumda; ayrıca sohbet
+  // geçmişine kalıcı bir iz bırakmasına gerek yok.
+  if(!silent){
+    if(type==='cancel')logCallMsg('☎️ Arama iptal edildi');
+    else logCallMsg('☎️ Görüşme sona erdi · '+document.getElementById('callTimerEl').textContent);
+  }
   endCallCleanup();
 }
 async function logCallMsg(text,callKind){
