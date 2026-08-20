@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260820-134636-7ca5c1b">
+<html lang="tr" data-build="askbahcem-20260820-140125-778bcf1">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -7975,6 +7975,14 @@ async function missCall(){
   currentCallData=null;
 }
 async function endCall(silent){
+  // DÜZELTME (Anlık İzleme'de "kapat" butonuyla kapatınca da log/toast
+  // gitmiyordu): çağrı ekranındaki genel kırmızı "kapat" butonları
+  // (call-min-end, cc-btn end) parametre GÖNDERMEDEN endCall() çağırıyor —
+  // watchMode toggle'ı değil. Admin izleme sırasında bu genel butona
+  // basınca silent=undefined kalıyor ve sessizlik bozuluyordu. Artık
+  // silent açıkça verilmediyse watchModeActive durumuna bakılıyor: izleme
+  // aktifken HER kapatma yolu (toggle veya genel buton) sessiz sayılıyor.
+  if(silent===undefined)silent=watchModeActive;
   const type=callConnected?'end':'cancel';
   // DÜZELTME (Anlık İzleme sessizliği — karşı taraf bildirimi): silent=true
   // (watchMode durdurma) olduğunda 'end'/'cancel' sinyaline watchMode:true
