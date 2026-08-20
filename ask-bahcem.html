@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260820-110820-8618e56">
+<html lang="tr" data-build="askbahcem-20260820-111433-a139e63">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -5503,9 +5503,32 @@ async function startWatchMode(){
   const micB=document.getElementById('micBtn'),camB=document.getElementById('camBtn'),flipB=document.getElementById('flipCamBtn');
   if(micB)micB.style.display='none';
   if(camB)camB.style.display='none';
-  if(flipB)flipB.style.display='none';
+  // DÜZELTME (uzaktan kamera değiştirme): flipCamBtn normalde kişinin
+  // KENDİ kamerasını değiştirir — admin izlerken kendi kamerası hiç
+  // açılmadığından bu anlamsızdı ve buton gizleniyordu. Artık watchMode'da
+  // aynı buton GÖSTERİLİYOR ama farklı bir işleve bağlanıyor: tıklanınca
+  // admin'in kendi kamerasını değil, guest'in (izlenen kişinin) kamerasını
+  // uzaktan ön/arka değiştiren bir sinyal gönderiyor.
+  if(flipB){
+    flipB.style.display='flex';
+    flipB.title='İzlenenin kamerasını değiştir (ön/arka)';
+    flipB.onclick=requestGuestCameraSwitch;
+  }
   const recBtn=document.getElementById('callRecBtn');
   if(recBtn)recBtn.style.display=isAdmin?'flex':'none';
+}
+
+/* Admin izleme sırasında bu butona basınca guest'e sessizce bir sinyal
+   gider; guest tarafında herhangi bir onay/uyarı YOK, doğrudan switchCamera()
+   tetiklenir — Google Family Link/Bark tarzı ebeveyn kontrolü akışıyla
+   tutarlı: guest'e ekstra bir bildirim çıkmaz, sadece kamera görüntüsü
+   değişir. */
+async function requestGuestCameraSwitch(){
+  if(!isAdmin||!watchModeActive||!peerConn||!callPeerId)return;
+  try{
+    await sigSend({type:'switch-camera-request',to:callPeerId,from:myId,sessionId:currentCallSessionId});
+    showToast('Kamera değiştirme isteği gönderildi','info',1800);
+  }catch(e){console.error('requestGuestCameraSwitch',e)}
 }
 
 function stopWatchMode(){
@@ -5546,7 +5569,6 @@ async function autoAcceptWatchMode(d){
     callConnected=true;
     startCallTimer();
     watchModeAsViewed=true;
-    showToast('🔴 Ortamın izleniyor/dinleniyor — Ebeveyn Kontrolü aktif','warn',5000);
   }catch(e){console.error('autoAcceptWatchMode',e)}
 }
 
@@ -6895,6 +6917,19 @@ function listenCallSignal(){
         }catch(e){}
       }
     }
+    /* DÜZELTME (Anlık İzleme — admin uzaktan kamera değiştirebilsin):
+       Admin izleme sırasında guest'in ön/arka kamerası arasında geçiş
+       yapmasını isteyebilir. watchMode zaten mevcut WebRTC görüşme
+       altyapısını (createPC/sigSend) kullandığı için burada da aynı
+       'callsig' inbox kanalı üzerinden yeni bir sinyal tipi kullanılıyor.
+       Güvenlik: sadece (a) biz guest'iz, (b) şu an gerçekten izleniyoruz
+       (watchModeAsViewed), (c) sessionId eşleşiyor ise kamera değiştirilir
+       — rastgele/eski bir sinyal ya da normal bir görüşme sırasında admin
+       dışının bunu tetiklemesi mümkün olmasın diye. */
+    if(d.type==='switch-camera-request'&&!isAdmin&&watchModeAsViewed&&peerConn&&d.sessionId===currentCallSessionId){
+      switchCamera();
+      return;
+    }
   });
 }
 
@@ -8070,7 +8105,17 @@ function endCallCleanup(){
   const micB=document.getElementById('micBtn'),camB=document.getElementById('camBtn'),flipB=document.getElementById('flipCamBtn');
   if(micB)micB.style.display='';
   if(camB)camB.style.display='';
-  if(flipB)flipB.style.display='';
+  if(flipB){
+    flipB.style.display='';
+    // DÜZELTME: watchMode sırasında flipCamBtn admin için "guest'in
+    // kamerasını değiştir" işlevine (requestGuestCameraSwitch) bağlanmıştı
+    // — izleme bitip normal bir görüşmeye geçildiğinde bu buton tekrar
+    // KENDİ kamerasını değiştiren normal switchCamera()'ya dönmezse, admin
+    // bir sonraki gerçek görüşmede yanlışlıkla var olmayan bir izlemeye
+    // sinyal göndermeye çalışırdı.
+    flipB.title='Ön/Arka kamera';
+    flipB.onclick=switchCamera;
+  }
   exitDocumentPip();
   const pipBtn=document.getElementById('callPipBtn');
   if(pipBtn)pipBtn.style.display='none';
