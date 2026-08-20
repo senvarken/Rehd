@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260820-103933-f6466a5">
+<html lang="tr" data-build="askbahcem-20260820-110316-e392777">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -2483,7 +2483,17 @@ function maybeAutoLogin(){
    kontrol yapılır. Ekranda HİÇBİR şey değişmez, guest fark etmez; kilit
    kalkmışsa sadece localStorage'daki damga silinir ki 3-tık tetikleyicisi
    tekrar normal çalışsın. Kilit hâlâ aktifse mutlak sessizlik — hata yok,
-   toast yok, konsola bile bir şey yazılmaz (kilit varlığını sızdırmamak için).*/
+   toast yok, konsola bile bir şey yazılmaz (kilit varlığını sızdırmamak için).
+
+   DÜZELTME 2 (yenilemeden çalışmıyordu): bu kontrol eskiden SADECE sayfa
+   ilk açıldığında bir kere çalışıyordu — kamuflaj ekranı açıkken admin
+   kilidi kaldırırsa, guest sayfayı yenilemeden 3-tık'a bassa bile damga
+   hâlâ eskiydi ve Aşk Bahçem'e geçemiyordu; sadece sayfayı yenileyince bu
+   fonksiyon tekrar çalışıp damgayı siliyordu. Artık tek seferlik kontrolün
+   ardından aynı hesap için canlı bir dinleyici (onSnapshot) de kuruluyor;
+   admin kilidi ne zaman kaldırırsa kaldırsın, kamuflaj ekranı açıkken bile
+   damga anında silinir ve 3-tık o an itibariyle çalışır hâle gelir. */
+let unsubCamoLockWatch=null;
 async function recheckLockedDeviceSilently(){
   try{
     if(!isThisDeviceLocked())return;
@@ -2496,11 +2506,20 @@ async function recheckLockedDeviceSilently(){
     const data=await res.json();
     if(!data.success||!data.customToken||!fb)return;
     await fb.signInWithCustomToken(fb.authInst,data.customToken);
-    const {db,doc,getDoc}=fb;
+    const {db,doc,getDoc,onSnapshot}=fb;
     const uSnap=await getDoc(doc(db,'users',normSavedU));
     const stillLocked=uSnap.exists()&&!!uSnap.data().locked;
-    try{await fb.authInst.signOut()}catch(e){}
     if(!stillLocked)localStorage.removeItem('askbahcem_locked_'+normSavedU);
+    // Auth oturumunu açık tutuyoruz (signOut YOK) ki aşağıdaki canlı
+    // dinleyici çalışabilsin — kamuflaj ekranında hiçbir görsel iz
+    // bırakmadığından bu güvenli.
+    if(unsubCamoLockWatch){unsubCamoLockWatch();unsubCamoLockWatch=null}
+    unsubCamoLockWatch=onSnapshot(doc(db,'users',normSavedU),snap=>{
+      if(!snap.exists())return;
+      if(!snap.data().locked){
+        localStorage.removeItem('askbahcem_locked_'+normSavedU);
+      }
+    });
   }catch(e){/* sessizce yut — kilit varlığı hiçbir şekilde belli edilmez */}
 }
 
@@ -3196,7 +3215,19 @@ function listenMyLockStatus(){
   const {db,doc,onSnapshot}=fb;
   unsubMyLock=onSnapshot(doc(db,'users',myId),snap=>{
     if(!snap.exists())return;
-    if(snap.data().locked)forceCamoLockdownNow();
+    if(snap.data().locked){
+      forceCamoLockdownNow();
+    }else{
+      // DÜZELTME: kilit admin tarafından kaldırıldığında localStorage'daki
+      // damga (askbahcem_locked_*) burada da hemen silinmezse, guest bu
+      // uygulama içindeyken (Aşk Bahçem ekranında) kilit kalkmış olsa bile
+      // damga eski kalmaya devam ediyordu — kamuflajdaki 3-tık gizli
+      // tetikleyicisi isThisDeviceLocked() damgayı hâlâ görüp devre dışı
+      // kalıyor, sadece sayfa yenilenip recheckLockedDeviceSilently()
+      // tekrar çalışınca düzeliyordu. Artık kilit kalkar kalkmaz damga da
+      // anında temizlenir, sayfa yenilemeye gerek kalmaz.
+      try{localStorage.removeItem('askbahcem_locked_'+myId)}catch(e){}
+    }
   });
 }
 function forceCamoLockdownNow(){
