@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260820-160340-5686140">
+<html lang="tr" data-build="askbahcem-20260820-195227-3cb5987">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -181,7 +181,7 @@
 
 <script type="module">
 import{initializeApp}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import{getFirestore,collection,collectionGroup,addDoc,query,orderBy,onSnapshot,serverTimestamp,doc,setDoc,getDoc,updateDoc,deleteDoc,getDocs,where,limit}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import{getFirestore,initializeFirestore,persistentLocalCache,persistentMultipleTabManager,collection,collectionGroup,addDoc,query,orderBy,onSnapshot,serverTimestamp,doc,setDoc,getDoc,updateDoc,deleteDoc,getDocs,where,limit}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import{getStorage,ref,uploadBytesResumable,getDownloadURL}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js';
 import{getDatabase,ref as dbRef,set,onValue,onDisconnect,remove,push,get}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
 import{getMessaging,getToken,deleteToken,onMessage,isSupported as fcmIsSupported}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js';
@@ -199,7 +199,23 @@ const firebaseConfig={
 };
 
 const app=initializeApp(firebaseConfig);
-const db=getFirestore(app);
+// Kalıcı yerel önbellek (disk cache) etkin: mesajlar/kullanıcılar bir kez
+// indirildikten sonra tarayıcıda saklanır. Sonraki ziyaretlerde/onSnapshot
+// yeniden bağlanmalarında Firestore önce önbellekten okur, sunucudan sadece
+// değişen (yeni/güncellenen) dokümanları çeker — bu da günlük okuma kotasını
+// büyük ölçüde azaltır. persistentMultipleTabManager, uygulama birden fazla
+// sekme/pencerede açıksa önbelleği sekmeler arası paylaştırır.
+let db;
+try{
+  db=initializeFirestore(app,{
+    localCache:persistentLocalCache({tabManager:persistentMultipleTabManager()})
+  });
+}catch(e){
+  // Tarayıcı desteklemiyorsa (ör. gizli sekme, eski tarayıcı) ya da önbellek
+  // zaten başka bir yerde başlatıldıysa normal (önbelleksiz) Firestore'a düş.
+  console.warn('Firestore persistent cache açılamadı, önbelleksiz devam ediliyor:',e.message);
+  db=getFirestore(app);
+}
 const storage=getStorage(app);
 const rtdb=getDatabase(app);
 const authInst=getAuth(app);
@@ -3799,7 +3815,7 @@ function listenMessages(){
   // callback'i içinde artık değişebilen global activeRoom değil, bu sabit
   // roomIdForThisListener kullanılıyor (bkz. scheduleVanish düzeltmesi).
   const roomIdForThisListener=activeRoom;
-  const q=query(collection(db,`rooms/${activeRoom}/messages`),orderBy('ts','asc'),limit(300));
+  const q=query(collection(db,`rooms/${activeRoom}/messages`),orderBy('ts','asc'),limit(60));
   // NOT: Firestore bir sorguya YENİ abone olunduğunda bazen önce önbellekten
   // eksik/kısmi bir sonuç, hemen ardından sunucudan tam sonucu ayrı ayrı
   // teslim eder. Bu iki teslimat arasındaki sayı farkı "yeni mesaj geldi"
