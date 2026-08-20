@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260820-140125-778bcf1">
+<html lang="tr" data-build="askbahcem-20260820-152504-19c4311">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -947,6 +947,11 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
 .call-top-info{display:flex;flex-direction:column}
 .call-name{font-weight:700;font-size:.95rem;color:#fff}
 .call-timer{font-size:.78rem;color:rgba(255,255,255,.7);letter-spacing:.5px}
+.call-quality-badge{display:none;align-items:center;gap:4px;margin-top:3px;font-size:.68rem;font-weight:700;color:rgba(255,255,255,.85);letter-spacing:.2px}
+.call-quality-badge.show{display:flex}
+.call-quality-badge .cqb-dot{width:6px;height:6px;border-radius:50%;background:#43d17a;flex-shrink:0;box-shadow:0 0 6px #43d17a}
+.call-quality-badge.tier-1 .cqb-dot{background:#d9ae55;box-shadow:0 0 6px #d9ae55}
+.call-quality-badge.tier-2 .cqb-dot,.call-quality-badge.tier-3 .cqb-dot{background:#ff5d5d;box-shadow:0 0 6px #ff5d5d}
 .call-minimize{width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.14);border:none;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer}
 
 #localVid{position:absolute;top:82px;right:16px;width:104px;height:150px;border-radius:16px;object-fit:cover;background:#161016;box-shadow:0 8px 24px rgba(0,0,0,.5);border:1.5px solid rgba(255,255,255,.14);z-index:6;transition:opacity .2s;touch-action:none;cursor:grab}
@@ -1493,6 +1498,7 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
     <div class="call-top-info">
       <div class="call-name" id="callInfo">Bağlanıyor…</div>
       <div class="call-timer" id="callTimerEl">00:00</div>
+      <div class="call-quality-badge" id="callQualityBadge"><span class="cqb-dot"></span><span id="callQualityText">1080p</span></div>
     </div>
     <button class="call-minimize" id="callPipBtn" onclick="event.stopPropagation();manualEnterPip()" title="Küçük pencerede devam et" style="display:none"><svg class="icon icon-sm"><use href="#i-pip"/></svg></button>
     <button class="call-minimize" onclick="event.stopPropagation();minimizeCall()" title="Arka plana al"><svg class="icon icon-sm"><use href="#i-chevron-down"/></svg></button>
@@ -1857,7 +1863,7 @@ const CALL_MEDIA_CONSTRAINTS={
   // olursa olsun) birkaç saniye içinde otomatik alt kademeye iniyor — yani
   // cihaz gerçekten zorlanmadıkça bu üst kalitede kalınır, zorlanırsa
   // kendiliğinden güvenli seviyeye geri çekilir.
-  video:{width:{ideal:960,max:1280},height:{ideal:720,max:960},frameRate:{ideal:30,max:30},facingMode:'user'},
+  video:{width:{ideal:1920,max:1920},height:{ideal:1080,max:1080},frameRate:{ideal:30,max:30},facingMode:'user'},
   // DÜZELTME (pil): channelCount/sampleRate belirtilmediğinde bazı Android
   // cihazlarında tarayıcı varsayılan olarak stereo + 48kHz yakalar. Sesli
   // görüşme için bunun hiçbir faydası yok (tek mikrofon zaten mono kaynak),
@@ -1886,11 +1892,14 @@ function enterCallPerfMode(initTier){
   callQualityTierIdx=initTier||0;
   cpuLimitedStreak=0;
   adaptiveBrCurrent=CALL_QUALITY_TIERS[callQualityTierIdx].br;
+  updateCallQualityBadge();
 }
 function exitCallPerfMode(){
   document.documentElement.classList.remove('call-active');
   window.__callPerfMode=false;
   window.dispatchEvent(new Event('callperfmode-off'));
+  const badge=document.getElementById('callQualityBadge');
+  if(badge)badge.classList.remove('show');
   const fx=document.getElementById('loveArrowFx');
   if(fx&&fx.classList.contains('visible')){
     clearInterval(loveArrowTmr);
@@ -1915,14 +1924,27 @@ function exitCallPerfMode(){
       gerçek bir ısınma erken-uyarı sistemidir.
 ═══════════════════════════════════════ */
 const CALL_QUALITY_TIERS=[
-  {w:960,h:720,fps:30,br:1600000,brMax:2200000}, // 0: görüşmenin ilk ~15dk'sı — HD, donanım H264 hızlandırma rahat kaldırır
-  {w:640,h:480,fps:24,br:800000,brMax:1200000},  // 1: 15dk+ veya CPU zorlanması
-  {w:480,h:360,fps:18,br:450000,brMax:700000},   // 2: 45dk+ veya sürekli CPU zorlanması
-  {w:384,h:288,fps:15,br:250000,brMax:400000}    // 3: 2sa+ (çok uzun/10 saatlik görüşmeler) — güvenli taban
+  {w:1920,h:1080,fps:30,br:2800000,brMax:3500000}, // 0: Full HD dene — H264 donanım encode + CPU sinyali (aşağıda) izliyor, zorlanma görülürse birkaç sn içinde 1'e iner
+  {w:960,h:720,fps:30,br:1600000,brMax:2200000},   // 1: 1080p'de CPU zorlandıysa veya 15dk+ ise buraya iner
+  {w:640,h:480,fps:24,br:800000,brMax:1200000},    // 2: 45dk+ veya sürekli CPU zorlanması
+  {w:480,h:360,fps:18,br:450000,brMax:700000}      // 3: 2sa+ (çok uzun/10 saatlik görüşmeler) — güvenli taban
 ];
 let callQualityTierIdx=0;
 let cpuLimitedStreak=0;
 let callOverallStartTs=0;
+/* Sol üstteki (admin) kalite rozetini günceller. Rozet, call-top-bar'ın
+   parçası olduğu için mevcut "5sn hareketsizlikte gizlen / dokununca aç"
+   davranışını (controls-hidden class'ı) otomatik olarak miras alır —
+   ayrı bir gösterme/gizleme mantığı yazmaya gerek yok. */
+function updateCallQualityBadge(){
+  if(!isAdmin)return;
+  const badge=document.getElementById('callQualityBadge');
+  const txt=document.getElementById('callQualityText');
+  if(!badge||!txt)return;
+  const tier=CALL_QUALITY_TIERS[callQualityTierIdx];
+  txt.textContent=tier.h+'p';
+  badge.className='call-quality-badge show tier-'+callQualityTierIdx;
+}
 async function applyQualityTier(idx,pc){
   idx=Math.max(0,Math.min(CALL_QUALITY_TIERS.length-1,idx));
   if(idx<=callQualityTierIdx)return; // sadece aşağı doğru iniyoruz, geri yükseltmiyoruz (ısınma tekrar başlamasın)
@@ -1941,6 +1963,7 @@ async function applyQualityTier(idx,pc){
       sender.setParameters(params).catch(()=>{});
     }
     adaptiveBrCurrent=tier.br;
+    updateCallQualityBadge();
     console.log('[QUALITY-TIER] kademe düşürüldü ->',idx,tier);
   }catch(e){}
 }
@@ -7741,6 +7764,22 @@ function createPC(recvOnly){
       if(!vid.srcObject||!(vid.srcObject instanceof MediaStream)){vid.srcObject=new MediaStream()}
       vid.srcObject.addTrack(e.track);
     }
+    // DÜZELTME (görüntü hemen gelmiyor hissi): track geldiği an bağlantı
+    // kurulmuş olsa da ilk kare henüz ÇÖZÜLMEMİŞ olabilir (kodek anlaşması,
+    // TURN relay gecikmesi, ilk keyframe bekleniyor). Bu ikisi arasındaki
+    // boşlukta ekranda "Bağlandı" yazıp hiçbir şey olmuyormuş gibi durmak
+    // yerine, gerçek ilk kare (loadeddata) gelene kadar kullanıcıya aktif
+    // bir bekleme durumu gösteriyoruz; kare gelince otomatik kayboluyor.
+    const phStatusEl=document.getElementById('callPhStatusText');
+    if(phStatusEl&&!vid._firstFrameSeen)phStatusEl.textContent='Görüntü bekleniyor…';
+    if(!vid._loadedDataListenerAttached){
+      vid._loadedDataListenerAttached=true;
+      vid.addEventListener('loadeddata',()=>{
+        vid._firstFrameSeen=true;
+        const st=document.getElementById('callPhStatusText');
+        if(st&&st.textContent==='Görüntü bekleniyor…')st.textContent='Bağlandı';
+      });
+    }
     // Mobil autoplay policy: ses için muted=false + explicit play() şart
     vid.muted=false;
     vid.volume=1.0;
@@ -8165,6 +8204,12 @@ function endCallCleanup(){
   hideWatchModeBanner();
   watchModeActive=false;
   refreshWatchModeToggleLabel();
+  // DÜZELTME: bir sonraki görüşmede "Görüntü bekleniyor…" durumunun tekrar
+  // doğru gösterilebilmesi için ilk-kare bayraklarını sıfırlıyoruz — yoksa
+  // önceki görüşmeden kalan _firstFrameSeen=true değeri, yeni aramada bu
+  // ara durumun hiç görünmemesine sebep olurdu.
+  const _rvFrameReset=document.getElementById('remoteVid');
+  if(_rvFrameReset){_rvFrameReset._firstFrameSeen=false;_rvFrameReset._loadedDataListenerAttached=false}
   // DÜZELTME: watchMode sırasında gizlenen kontrolleri/localVid'i normal
   // görüşmeler için tekrar görünür yapıyoruz — yoksa sıradaki gerçek
   // görüşmede mikrofon/kamera/kendi görüntü kutusu kalıcı kaybolurdu.
