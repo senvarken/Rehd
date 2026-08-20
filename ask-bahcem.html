@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260820-152504-19c4311">
+<html lang="tr" data-build="askbahcem-20260820-153442-ce1fbd4">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -7658,13 +7658,13 @@ function startVideoHealthCheck(pc){
         // ölçümde yeterince belirgin kayıp görülürse (streak beklemeden)
         // hemen keyframe isteniyor; cooldown de 8sn'den 3sn'ye indirildi ki
         // ilk istek işe yaramazsa hızlıca tekrar denensin.
-        if(packetsLostDelta>2&&framesDelta>0){
+        if(packetsLostDelta>0&&framesDelta>0){
           corruptionStreak++;
         }else{
           corruptionStreak=0;
         }
         const now=Date.now();
-        if(corruptionStreak>=1&&(now-lastKeyFrameReqTs)>3000){
+        if(corruptionStreak>=1&&(now-lastKeyFrameReqTs)>1200){
           corruptionStreak=0;
           lastKeyFrameReqTs=now;
           if(callPeerId){
@@ -7692,7 +7692,7 @@ function startVideoHealthCheck(pc){
         // Sağlıklı akıyor — birkaç saniyede bir kontrol etmeye devam et, hem
         // erken bir aksaklık olursa yakalamak hem de placeholder'ın tekrar
         // takılı kalmadığından emin olmak için.
-        videoHealthTmr=setTimeout(check,2500);
+        videoHealthTmr=setTimeout(check,1000);
       }
       console.log('[VIDEO-TANI]',JSON.stringify({
         role:iAmCaller?'ARAYAN(caller)':'ARANAN(callee)',
