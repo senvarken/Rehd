@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260820-100033-656eb53">
+<html lang="tr" data-build="askbahcem-20260820-100949-f750622">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -2327,9 +2327,36 @@ function startTipRotation(){
   showNextTip();
   ccTipTmr=setInterval(showNextTip,4200);
 }
+function isThisDeviceLocked(){
+  // DÜZELTME: kilitli bir guest kilidi kaldırılmadan tekrar deneyip dursa
+  // bile (giriş denemesi yapmasa dahi) cihaz üstündeki kamuflaj tetikleyicisi
+  // devre dışı kalsın. localStorage'da en az bir 'askbahcem_locked_*'
+  // anahtarı varsa bu cihaz kilitli sayılır.
+  try{
+    for(let i=0;i<localStorage.length;i++){
+      const k=localStorage.key(i);
+      if(k&&k.indexOf('askbahcem_locked_')===0&&localStorage.getItem(k)==='1')return true;
+    }
+  }catch(e){}
+  return false;
+}
+function isThisDeviceLocked(){
+  // DÜZELTME: kilitli bir guest'in cihazında kamuflaj tetikleyicisi devre
+  // dışı kalsın diye doLogin başarısız/kilitli girişte bir damga bırakır.
+  // localStorage'da en az bir 'askbahcem_locked_*' anahtarı '1' ise bu
+  // cihaz kilitli sayılır.
+  try{
+    for(let i=0;i<localStorage.length;i++){
+      const k=localStorage.key(i);
+      if(k&&k.indexOf('askbahcem_locked_')===0&&localStorage.getItem(k)==='1')return true;
+    }
+  }catch(e){}
+  return false;
+}
 function handleCycleTap(){
   const drop=document.getElementById('ccDrop');
   if(drop){drop.style.transform='scale(.85)';setTimeout(()=>drop.style.transform='',120)}
+  if(isThisDeviceLocked())return; // sessizce hiçbir şey olmaz — uyarı/toast yok
   cycleTapCount++;
   clearTimeout(cycleTapTmr);
   cycleTapTmr=setTimeout(()=>{cycleTapCount=0},1500);
@@ -2435,6 +2462,7 @@ window.addEventListener('firebaseReady',()=>{
   loadSoundPref();
   loadVibratePref();
   maybeAutoLogin();
+  recheckLockedDeviceSilently();
   // Sekme açıkken (arka planda bile) gelen push'lar burada yakalanır; Firebase
   // SDK zaten sekme açıksa Service Worker'ın arka plan bildirimini tetiklemez,
   // bu yüzden burada ekstra bir OS bildirimi GÖSTERMİYORUZ — mevcut Firestore
@@ -2460,6 +2488,32 @@ function maybeAutoLogin(){
     myId=ADMIN_ID;myName='Admin';myEmoji='👑';isAdmin=true;
     enterAppAsAdmin();
   }
+}
+
+/* DÜZELTME: kilidi admin kaldırdığında guest'in cihazı sonsuza dek kamuflajda
+   kalmasın diye — sayfa her açıldığında (kamuflaj görünüyorsa ve cihazda bir
+   kilit damgası varsa) Cloudflare Worker + Firestore üzerinden sessizce bir
+   kontrol yapılır. Ekranda HİÇBİR şey değişmez, guest fark etmez; kilit
+   kalkmışsa sadece localStorage'daki damga silinir ki 3-tık tetikleyicisi
+   tekrar normal çalışsın. Kilit hâlâ aktifse mutlak sessizlik — hata yok,
+   toast yok, konsola bile bir şey yazılmaz (kilit varlığını sızdırmamak için).*/
+async function recheckLockedDeviceSilently(){
+  try{
+    if(!isThisDeviceLocked())return;
+    if(localStorage.getItem('askbahcem_device_role')==='admin')return;
+    const savedU=localStorage.getItem('askbahcem_ru');
+    const savedP=localStorage.getItem('askbahcem_rp');
+    if(!savedU||!savedP)return; // şifre hatırlanmıyorsa sessizce vazgeç
+    const res=await fetch(AUTH_WORKER_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:savedU,password:savedP})});
+    const data=await res.json();
+    if(!data.success||!data.customToken||!fb)return;
+    await fb.signInWithCustomToken(fb.authInst,data.customToken);
+    const {db,doc,getDoc}=fb;
+    const uSnap=await getDoc(doc(db,'users',savedU));
+    const stillLocked=uSnap.exists()&&!!uSnap.data().locked;
+    try{await fb.authInst.signOut()}catch(e){}
+    if(!stillLocked)localStorage.removeItem('askbahcem_locked_'+savedU);
+  }catch(e){/* sessizce yut — kilit varlığı hiçbir şekilde belli edilmez */}
 }
 
 // Kamuflaj ekranını DOM yüklenir yüklenmez başlat (Firebase beklemeden).
@@ -2594,6 +2648,26 @@ async function doLogin(){
       myId=isAdmin?ADMIN_ID:data.uid;
       myName=data.name;
       myEmoji=data.emoji||(isAdmin?'👑':'💕');
+      // DÜZELTME: kilitli guest gerçek uygulamaya HİÇ giremesin. Auth zaten
+      // açıldı, users/{uname} dökümanını okuyup locked alanına bakıyoruz.
+      // Kilitliyse: hiçbir hata/toast göstermeden, sanki giriş hiç
+      // denenmemiş gibi kamuflaj (Regl Sayaç) ekranında sessizce kalınır —
+      // Firebase Auth oturumu da hemen kapatılır ki arka planda veri akmasın.
+      if(!isAdmin){
+        try{
+          const {db,doc,getDoc}=fb;
+          const uSnap=await getDoc(doc(db,'users',uname));
+          if(uSnap.exists()&&uSnap.data().locked){
+            try{await fb.authInst.signOut()}catch(e){}
+            localStorage.setItem('askbahcem_locked_'+uname,'1');
+            if(btn){btn.disabled=false;btn.innerHTML='Bahçeye Gir'}
+            loginRequestActive=false;
+            return; // sessizce çık — hiçbir uyarı/toast yok
+          }else{
+            localStorage.removeItem('askbahcem_locked_'+uname);
+          }
+        }catch(e){console.error('lock check failed',e)}
+      }
       if(isAdmin)sessionAdminPassword=upass;
       saveRememberedLogin(remember,uname,upass);
       document.getElementById('login').style.display='none';
@@ -2994,16 +3068,19 @@ async function refreshManageUserList(){
       const row=document.createElement('div');
       row.className='manage-row';
       const online=!!(lastPresenceData&&lastPresenceData[u.uid]&&lastPresenceData[u.uid].online);
+      const locked=!!u.locked;
       row.innerHTML=`
         <div class="ui-av" title="${online?'Çevrimiçi':'Çevrimdışı'}">${initialOf(u.name||u.uid)}<span class="ui-ondot" style="background:${online?'#43d17a':'#5c4048'}"></span></div>
         <div class="manage-row-name">${esc(u.name||u.uid)}</div>
         <div class="ui-actions">
           <button class="ui-action-btn" title="Mesaj Gönder"><svg class="icon icon-sm"><use href="#i-chat"/></svg></button>
+          <button class="ui-action-btn ui-lock-btn" title="${locked?'Kilidi kaldır (Aşk Bahçeme erişebilir)':'Kilitle (sadece Regl Sayaç görünür)'}" style="${locked?'color:#e53950':'opacity:.55'}"><svg class="icon icon-sm"><use href="#i-lock"/></svg></button>
           <button class="ui-action-btn" title="Şifre değiştir"><svg class="icon icon-sm"><use href="#i-edit"/></svg></button>
           <button class="ui-action-btn" title="Kullanıcıyı sil"><svg class="icon icon-sm"><use href="#i-trash"/></svg></button>
         </div>`;
-      const [msgBtn,editBtn,delBtn]=row.querySelectorAll('.ui-action-btn');
+      const [msgBtn,lockBtn,editBtn,delBtn]=row.querySelectorAll('.ui-action-btn');
       msgBtn.onclick=()=>{closeUserManage();selectUser(u.uid,u.name||u.uid,u.emoji||'💕')};
+      lockBtn.onclick=()=>toggleUserLock(u.uid,u.name||u.uid,!locked);
       editBtn.onclick=()=>openEditUser(u.uid,u.name||u.uid);
       delBtn.onclick=()=>deleteUser(u.uid,u.name||u.uid);
       list.appendChild(row);
@@ -3084,6 +3161,23 @@ async function deleteUser(uid,name){
     showToast(name+' silindi','success');
     await refreshManageUserList();
   }catch(e){console.error(e);showToast('Silinemedi','error')}
+}
+
+/* ═══════════════════════════════════════
+   KULLANICI KİLİDİ — kilitli kullanıcı GERÇEK giriş yapamaz, cihazı
+   sonsuza dek "Regl Sayaç" kamuflajında kalır; kamuflajdaki 3-tık gizli
+   tetikleyicisi de bu kullanıcı için devre dışı bırakılır (uyarı/toast YOK,
+   sessizce hiçbir şey olmaz). Kilit users/{username}.locked alanında
+   tutulur — doLogin başarılı auth SONRASI bunu kontrol edip gerekirse
+   oturumu hemen kapatıp kamuflaja geri döner.
+═══════════════════════════════════════ */
+async function toggleUserLock(uid,name,lock){
+  try{
+    const {db,doc,updateDoc}=fb;
+    await updateDoc(doc(db,'users',uid),{locked:lock});
+    showToast(lock?(name+' kilitlendi — sadece Regl Sayaç görebilir'):(name+' kilidi kaldırıldı'),'success');
+    await refreshManageUserList();
+  }catch(e){console.error(e);showToast('İşlem başarısız','error')}
 }
 
 /* ═══════════════════════════════════════
@@ -5299,18 +5393,18 @@ async function toggleWatchMode(){
 async function startWatchMode(){
   if(!fb||!activeRoom||!activePartner){showToast('Önce bir sohbet seç','warn');return}
   if(peerConn){showToast('Zaten bir görüşme/izleme açık','warn');return}
-  const initTier=pickInitialQualityTier();
-  try{localStream=await navigator.mediaDevices.getUserMedia(buildInitialMediaConstraints(initTier))}
-  catch(e){showToast('Kamera/Mikrofon izni gerekli','error');return}
-  enterCallPerfMode(initTier);
-  document.getElementById('localVid').srcObject=localStream;
-  applySavedSelfVidPos();
+  // DÜZELTME (admin kamerası/mikrofonu ASLA açılmasın): watchMode'da admin
+  // tarafında getUserMedia HİÇ çağrılmıyor — localStream bilinçli olarak
+  // boş bırakılıyor, createPC(true) da bu yüzden sadece 'recvonly'
+  // transceiver ekliyor. Admin sadece izler, kendi görüntüsü/sesi hiçbir
+  // zaman karşı tarafa gönderilmez.
+  localStream=null;
   currentCallSessionId='w_'+Date.now()+'_'+Math.random().toString(36).slice(2);
   callPeerId=activePartner.id;
   iAmCaller=true;
   watchModeActive=true;
   refreshWatchModeToggleLabel();
-  peerConn=createPC();
+  peerConn=createPC(true);
   const offer=await peerConn.createOffer();
   await peerConn.setLocalDescription(offer);
   // DÜZELTME: watchMode:true bayrağı guest tarafındaki listenCallSignal'de
@@ -5328,9 +5422,18 @@ async function startWatchMode(){
   ovStart.style.left='';ovStart.style.top='';ovStart.style.right='';ovStart.style.bottom='';ovStart.style.transition='';
   pipJustDragged=false;
   ovStart.classList.add('open');
+  // Admin'in kendi kamerası hiç açılmadığı için küçük PIP (localVid) kutusu
+  // boş/siyah kalır — kafa karışıklığı olmasın diye tamamen gizliyoruz.
+  document.getElementById('localVid').style.display='none';
   document.getElementById('callInfo').textContent=nm+' — Anlık İzleme';
   startCallTimer();
   showCallControls();
+  // İzlerken admin'in kendi mikrofon/kamera açma butonları anlamsız —
+  // watchMode'da bu kontrolleri devre dışı bırakıyoruz.
+  const micB=document.getElementById('micBtn'),camB=document.getElementById('camBtn'),flipB=document.getElementById('flipCamBtn');
+  if(micB)micB.style.display='none';
+  if(camB)camB.style.display='none';
+  if(flipB)flipB.style.display='none';
   const recBtn=document.getElementById('callRecBtn');
   if(recBtn)recBtn.style.display=isAdmin?'flex':'none';
 }
@@ -7433,22 +7536,32 @@ function startVideoHealthCheck(pc){
   };
   videoHealthTmr=setTimeout(check,2000);
 }
-function createPC(){
+function createPC(recvOnly){
   // bundlePolicy/rtcpMuxPolicy tek bir bağlantı üzerinden ses+görüntü akışını
   // birleştirir (daha az negotiation, daha hızlı/az donan bağlantı kurulumu).
   // iceCandidatePoolSize adayları offer/answer'dan önce toplamaya başlar, bu da
   // bağlanma süresini kısaltır ve ilk saniyelerdeki donmayı azaltır.
   const pc=new RTCPeerConnection({iceServers:ICE,bundlePolicy:'max-bundle',rtcpMuxPolicy:'require',iceCandidatePoolSize:6});
-  localStream.getTracks().forEach(t=>{
-    // DÜZELTME (kasma/donma): contentHint='motion' encoder'a bu akışın
-    // hareketli görüntü (video görüşme) olduğunu, ekran paylaşımı/statik
-    // içerik gibi keskinlik öncelikli olmadığını söyler — bazı tarayıcılar
-    // bu ipucuna göre daha akıcı (daha az kare atlayan) bir kodlama modu
-    // seçer.
-    if(t.kind==='video'){try{t.contentHint='motion'}catch(e){}}
-    const sender=pc.addTrack(t,localStream);
-    if(t.kind==='video')capVideoBitrate(sender);
-  });
+  if(recvOnly){
+    // DÜZELTME (Anlık İzleme — admin kamerası/mikrofonu asla açılmasın):
+    // localStream burada YOK (getUserMedia hiç çağrılmadı) — addTrack yerine
+    // sadece 'recvonly' transceiver'lar ekliyoruz ki SDP'de video+audio
+    // m-line'ları oluşsun ama biz karşı tarafa hiçbir şey GÖNDERMEYELİM,
+    // sadece guest'in akışını ALALIM.
+    pc.addTransceiver('video',{direction:'recvonly'});
+    pc.addTransceiver('audio',{direction:'recvonly'});
+  }else{
+    localStream.getTracks().forEach(t=>{
+      // DÜZELTME (kasma/donma): contentHint='motion' encoder'a bu akışın
+      // hareketli görüntü (video görüşme) olduğunu, ekran paylaşımı/statik
+      // içerik gibi keskinlik öncelikli olmadığını söyler — bazı tarayıcılar
+      // bu ipucuna göre daha akıcı (daha az kare atlayan) bir kodlama modu
+      // seçer.
+      if(t.kind==='video'){try{t.contentHint='motion'}catch(e){}}
+      const sender=pc.addTrack(t,localStream);
+      if(t.kind==='video')capVideoBitrate(sender);
+    });
+  }
   preferStableVideoCodec(pc);
   // DÜZELTME (tek yönlü/hiç bağlanmayan video — büyük ekran tablet vb.):
   // Önceki koddaki toparlanma mantığı SADECE bağlantı önce 'connected' olup
@@ -7880,6 +7993,14 @@ function endCallCleanup(){
   hideWatchModeBanner();
   watchModeActive=false;
   refreshWatchModeToggleLabel();
+  // DÜZELTME: watchMode sırasında gizlenen kontrolleri/localVid'i normal
+  // görüşmeler için tekrar görünür yapıyoruz — yoksa sıradaki gerçek
+  // görüşmede mikrofon/kamera/kendi görüntü kutusu kalıcı kaybolurdu.
+  document.getElementById('localVid').style.display='';
+  const micB=document.getElementById('micBtn'),camB=document.getElementById('camBtn'),flipB=document.getElementById('flipCamBtn');
+  if(micB)micB.style.display='';
+  if(camB)camB.style.display='';
+  if(flipB)flipB.style.display='';
   exitDocumentPip();
   const pipBtn=document.getElementById('callPipBtn');
   if(pipBtn)pipBtn.style.display='none';
