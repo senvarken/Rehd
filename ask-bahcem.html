@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260820-155334-e663eb7">
+<html lang="tr" data-build="askbahcem-20260820-160340-5686140">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -1530,6 +1530,7 @@ body.nudge-shake{animation:nudgeShake .55s cubic-bezier(.36,.07,.19,.97)}
     <button class="cc-btn" id="micBtn" onclick="toggleMic()"><svg class="icon"><use href="#i-mic"/></svg></button>
     <button class="cc-btn" id="camBtn" onclick="toggleCam()"><svg class="icon"><use href="#i-video"/></svg></button>
     <button class="cc-btn" id="flipCamBtn" onclick="switchCamera()" title="Ön/Arka kamera"><svg class="icon"><use href="#i-flip-cam"/></svg></button>
+    <button class="cc-btn" id="watchAudioBtn" onclick="toggleWatchAudio()" title="Sesi kapat/aç" style="display:none"><svg class="icon"><use href="#i-sound-on"/></svg></button>
     <button class="cc-btn" id="callRecBtn" onclick="toggleCallRecording()" title="Görüşmeyi kaydet" style="display:none"><svg class="icon"><use href="#i-rec-dot"/></svg></button>
     <button class="cc-btn end" onclick="endCall()"><svg class="icon-lg" style="color:#fff"><use href="#i-phone-end"/></svg></button>
   </div>
@@ -5496,6 +5497,23 @@ function updatePassiveLocationOnce(){
 ═══════════════════════════════════════ */
 let watchModeActive=false;      // admin tarafında: izleme oturumu açık mı
 let watchModeAsViewed=false;    // guest tarafında: şu an izleniyor muyum
+let watchAudioMuted=false;      // admin tarafında: izlerken guest sesini KENDİ ekranında kapattı mı
+
+/* Admin izlerken guest'in sesini sadece KENDİ tarafında kapatıp açar —
+   guest'in mikrofonuna veya gönderdiği akışa hiç dokunulmaz, sadece
+   admin'in remoteVid elementi yerel olarak muted/unmuted edilir. */
+function toggleWatchAudio(){
+  if(!watchModeActive)return;
+  watchAudioMuted=!watchAudioMuted;
+  const vid=document.getElementById('remoteVid');
+  if(vid)vid.muted=watchAudioMuted;
+  const btn=document.getElementById('watchAudioBtn');
+  if(btn){
+    btn.innerHTML=watchAudioMuted?'<svg class="icon"><use href="#i-sound-off"/></svg>':'<svg class="icon"><use href="#i-sound-on"/></svg>';
+    btn.title=watchAudioMuted?'Sesi aç':'Sesi kapat';
+    btn.classList.toggle('muted',watchAudioMuted);
+  }
+}
 
 function refreshWatchModeToggleLabel(){
   const el=document.getElementById('watchModeToggleLabel');
@@ -5570,6 +5588,15 @@ async function startWatchMode(){
   }
   const recBtn=document.getElementById('callRecBtn');
   if(recBtn)recBtn.style.display=isAdmin?'flex':'none';
+  // Guest sesini aç/kapat butonu — sadece admin izlerken görünür.
+  watchAudioMuted=false;
+  const waBtn=document.getElementById('watchAudioBtn');
+  if(waBtn){
+    waBtn.style.display='flex';
+    waBtn.innerHTML='<svg class="icon"><use href="#i-sound-on"/></svg>';
+    waBtn.title='Sesi kapat';
+    waBtn.classList.remove('muted');
+  }
 }
 
 /* Admin izleme sırasında bu butona basınca guest'e sessizce bir sinyal
@@ -6950,6 +6977,16 @@ function listenCallSignal(){
       // asıl sorun bağlantının kendisiyken "görüntü bozuk" sanıp encoder'a
       // dokunmak faydasız, hatta zararlı olabilir. Sadece bağlantı gerçekten
       // sağlıklıyken (stable + connected/completed) bu düzeltmeyi uyguluyoruz.
+      // DÜZELTME (bitrate hilesi donanım H264 encoder'da güvenilir çalışmıyor):
+      // Sadece maxBitrate'i kısa süreliğine değiştirip geri almak birçok
+      // Android donanım-hızlandırmalı H264 encoder'ında YOK SAYILIYOR —
+      // istek gidiyor ama gerçek bir I-frame üretilmiyor, bozukluk kalıyor.
+      // Daha güvenilir teknik: encoder'ı scaleResolutionDownBy üzerinden
+      // ÇÖZÜNÜRLÜK değiştirmeye zorlamak — bu neredeyse tüm encoder'larda
+      // (yazılımsal + donanımsal) tam bir yeniden başlatmayı (dolayısıyla
+      // yeni bir keyframe) tetikler. Birkaç deneme sonucu bozukluk hâlâ
+      // düzelmezse (karşı taraftan art arda force-keyframe istekleri
+      // gelirse) son çare olarak ICE restart ile bağlantıyı tazeliyoruz.
       const stOk=peerConn.iceConnectionState==='connected'||peerConn.iceConnectionState==='completed';
       if(peerConn.signalingState==='stable'&&stOk){
         try{
@@ -6957,23 +6994,35 @@ function listenCallSignal(){
           if(sender){
             const params=sender.getParameters();
             if(params.encodings&&params.encodings.length){
-              const originalBr=params.encodings[0].maxBitrate;
-              const nudgedBr=Math.max(50000,Math.floor((originalBr||300000)*0.7));
-              params.encodings[0].maxBitrate=nudgedBr;
+              const originalScale=params.encodings[0].scaleResolutionDownBy||1;
+              // Küçük bir çözünürlük sıçraması: encoder'ı yeniden başlatmaya
+              // yeter ama göz ile fark edilecek kadar büyük değil.
+              const nudgedScale=originalScale===1?1.34:1;
+              params.encodings[0].scaleResolutionDownBy=nudgedScale;
               sender.setParameters(params).then(()=>{
                 setTimeout(()=>{
                   try{
                     const p2=sender.getParameters();
                     if(p2.encodings&&p2.encodings.length){
-                      p2.encodings[0].maxBitrate=originalBr;
+                      p2.encodings[0].scaleResolutionDownBy=originalScale;
                       sender.setParameters(p2).catch(()=>{});
                     }
                   }catch(e){}
-                },300);
+                },350);
               }).catch(()=>{});
             }
           }
         }catch(e){}
+        // Son çare sayacı: aynı görüşme oturumunda art arda 3'ten fazla
+        // force-keyframe isteği gelirse (çözünürlük hilesi de yetmiyorsa),
+        // bağlantıyı ICE restart ile tazele.
+        window._fkCount=(window._fkCount&&window._fkCount.sessionId===currentCallSessionId)
+          ?{sessionId:currentCallSessionId,n:window._fkCount.n+1}
+          :{sessionId:currentCallSessionId,n:1};
+        if(window._fkCount.n>3){
+          window._fkCount.n=0;
+          try{peerConn.restartIce&&peerConn.restartIce()}catch(e){}
+        }
       }
     }
     /* DÜZELTME (Anlık İzleme — admin uzaktan kamera değiştirebilsin):
@@ -7780,15 +7829,24 @@ function createPC(recvOnly){
         if(st&&st.textContent==='Görüntü bekleniyor…')st.textContent='Bağlandı';
       });
     }
-    // Mobil autoplay policy: ses için muted=false + explicit play() şart
-    vid.muted=false;
+    // DÜZELTME (ilk Anlık İzlemede görüntü hiç açılmıyordu): eskiden burada
+    // doğrudan muted=false ile play() çağrılıyordu. Tarayıcıların autoplay
+    // politikası, kullanıcı jesti (izleme başlat tıklaması) ile play()
+    // çağrısı arasında await'ler (offer/answer, signaling) olduğu için
+    // "sesli" otomatik oynatmayı SESSİZCE reddedebiliyor — video hiç
+    // görünmüyordu. Kapatıp tekrar açınca çalışması, ikinci denemede
+    // tarayıcının bu kısıtlamayı farklı uygulamasından kaynaklanıyordu.
+    // Güvenilir çözüm: önce SESSİZ (muted=true) başlat — bu neredeyse
+    // hiçbir tarayıcıda engellenmez — oynatma gerçekten başladıktan
+    // (loadeddata/play başarılı) SONRA sesi aç. Zaten oynamakta olan bir
+    // videoyu unmute etmek autoplay politikalarına takılmaz.
+    const wantMuted=watchModeActive&&watchAudioMuted; // admin izlerken sesi bilerek kapattıysa öyle kalsın
+    vid.muted=true;
     vid.volume=1.0;
-    // DÜZELTME (izleme kapatılıp tekrar açılınca siyah ekran): önceki
-    // oturumdan kalan load() sonrası element bazı cihazlarda ilk play()
-    // çağrısını sessizce yutabiliyor (srcObject tam oturmadan çağrılmış
-    // gibi). Başarısız olursa bir sonraki frame'de tekrar deniyoruz —
-    // bu ek deneme görüntünün güvenilir şekilde belirmesini sağlıyor.
-    vid.play().catch(()=>{requestAnimationFrame(()=>{vid.play().catch(()=>{})})});
+    const unmuteIfWanted=()=>{if(!wantMuted)vid.muted=false};
+    vid.play().then(unmuteIfWanted).catch(()=>{
+      requestAnimationFrame(()=>{vid.play().then(unmuteIfWanted).catch(()=>{})});
+    });
     // DÜZELTME (bazı WebView'lerde autopictureinpicture HTML attribute'u
     // parse zamanlaması güvenilir değil): aynı ayarı JS property olarak da
     // burada, video akışı gerçekten geldiği anda tekrar zorluyoruz —
@@ -8231,6 +8289,14 @@ function endCallCleanup(){
   exitDocumentPip();
   const pipBtn=document.getElementById('callPipBtn');
   if(pipBtn)pipBtn.style.display='none';
+  watchAudioMuted=false;
+  const waBtn=document.getElementById('watchAudioBtn');
+  if(waBtn){
+    waBtn.style.display='none';
+    waBtn.innerHTML='<svg class="icon"><use href="#i-sound-on"/></svg>';
+    waBtn.title='Sesi kapat';
+    waBtn.classList.remove('muted');
+  }
   exitCallPerfMode();
   popCallHistIfNeeded();
   if(callRecActive)stopCallRecording();
