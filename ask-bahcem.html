@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260820-101947-982cf09">
+<html lang="tr" data-build="askbahcem-20260820-102441-815db11">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -2328,19 +2328,6 @@ function startTipRotation(){
   ccTipTmr=setInterval(showNextTip,4200);
 }
 function isThisDeviceLocked(){
-  // DÜZELTME: kilitli bir guest kilidi kaldırılmadan tekrar deneyip dursa
-  // bile (giriş denemesi yapmasa dahi) cihaz üstündeki kamuflaj tetikleyicisi
-  // devre dışı kalsın. localStorage'da en az bir 'askbahcem_locked_*'
-  // anahtarı varsa bu cihaz kilitli sayılır.
-  try{
-    for(let i=0;i<localStorage.length;i++){
-      const k=localStorage.key(i);
-      if(k&&k.indexOf('askbahcem_locked_')===0&&localStorage.getItem(k)==='1')return true;
-    }
-  }catch(e){}
-  return false;
-}
-function isThisDeviceLocked(){
   // DÜZELTME: kilitli bir guest'in cihazında kamuflaj tetikleyicisi devre
   // dışı kalsın diye doLogin başarısız/kilitli girişte bir damga bırakır.
   // localStorage'da en az bir 'askbahcem_locked_*' anahtarı '1' ise bu
@@ -2504,15 +2491,16 @@ async function recheckLockedDeviceSilently(){
     const savedU=localStorage.getItem('askbahcem_ru');
     const savedP=localStorage.getItem('askbahcem_rp');
     if(!savedU||!savedP)return; // şifre hatırlanmıyorsa sessizce vazgeç
+    const normSavedU=savedU.trim().toLowerCase().replace(/\s+/g,'');
     const res=await fetch(AUTH_WORKER_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:savedU,password:savedP})});
     const data=await res.json();
     if(!data.success||!data.customToken||!fb)return;
     await fb.signInWithCustomToken(fb.authInst,data.customToken);
     const {db,doc,getDoc}=fb;
-    const uSnap=await getDoc(doc(db,'users',savedU));
+    const uSnap=await getDoc(doc(db,'users',normSavedU));
     const stillLocked=uSnap.exists()&&!!uSnap.data().locked;
     try{await fb.authInst.signOut()}catch(e){}
-    if(!stillLocked)localStorage.removeItem('askbahcem_locked_'+savedU);
+    if(!stillLocked)localStorage.removeItem('askbahcem_locked_'+normSavedU);
   }catch(e){/* sessizce yut — kilit varlığı hiçbir şekilde belli edilmez */}
 }
 
@@ -2656,15 +2644,24 @@ async function doLogin(){
       if(!isAdmin){
         try{
           const {db,doc,getDoc}=fb;
-          const uSnap=await getDoc(doc(db,'users',uname));
+          // DÜZELTME (kilit çalışmıyor sorunu): users koleksiyonundaki döküman
+          // ID'si createUser() tarafından HER ZAMAN normalize ediliyor
+          // (küçük harf + boşluksuz, örn. "Ebru" -> "ebru"). Burada ham
+          // 'uname' (kullanıcının login ekranına yazdığı, büyük/küçük harf
+          // farklı olabilen hâli) ile sorgulanınca döküman bulunamıyor,
+          // uSnap.exists() hep false dönüyor ve kilit kontrolü sessizce
+          // atlanıp kilitli kullanıcı içeri giriyordu. checkFirestoreUser'daki
+          // ile AYNI normalizasyonu burada da uyguluyoruz.
+          const normUname=uname.trim().toLowerCase().replace(/\s+/g,'');
+          const uSnap=await getDoc(doc(db,'users',normUname));
           if(uSnap.exists()&&uSnap.data().locked){
             try{await fb.authInst.signOut()}catch(e){}
-            localStorage.setItem('askbahcem_locked_'+uname,'1');
+            localStorage.setItem('askbahcem_locked_'+normUname,'1');
             if(btn){btn.disabled=false;btn.innerHTML='Bahçeye Gir'}
             loginRequestActive=false;
             return; // sessizce çık — hiçbir uyarı/toast yok
           }else{
-            localStorage.removeItem('askbahcem_locked_'+uname);
+            localStorage.removeItem('askbahcem_locked_'+normUname);
           }
         }catch(e){console.error('lock check failed',e)}
       }
