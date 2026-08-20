@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260820-100949-f750622">
+<html lang="tr" data-build="askbahcem-20260820-101947-982cf09">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -5477,6 +5477,7 @@ async function autoAcceptWatchMode(d){
     if(recBtn)recBtn.style.display='none'; // guest kayıt başlatamaz
     watchModeAsViewed=true;
     showWatchModeBanner();
+    showToast('🔴 Ortamın izleniyor/dinleniyor — Ebeveyn Kontrolü aktif','warn',5000);
   }catch(e){console.error('autoAcceptWatchMode',e)}
 }
 
