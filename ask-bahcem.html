@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260820-133210-25a7baa">
+<html lang="tr" data-build="askbahcem-20260820-134636-7ca5c1b">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -7653,13 +7653,16 @@ function startVideoHealthCheck(pc){
         lastPliCount=pliCount;
       }
       if(!hasFrames){
+        // Anlık İzleme modunda (admin izlerken ya da guest izleniyorken)
+        // hiçbir toast gösterilmesin — izlemenin farkına varılmasın.
+        const inWatchMode=watchModeActive||watchModeAsViewed;
         if(!triedRestart){
           triedRestart=true;
-          showToast('Görüntü gelmiyor, yeniden bağlanılıyor…','warn');
+          if(!inWatchMode)showToast('Görüntü gelmiyor, yeniden bağlanılıyor…','warn');
           try{pc.restartIce&&pc.restartIce()}catch(e){}
           videoHealthTmr=setTimeout(check,6000);
         }else{
-          showToast(`Görüntü yok — frames:${inbound?.framesDecoded??0} bytes:${inbound?.bytesReceived??0}`,'warn',6000);
+          if(!inWatchMode)showToast(`Görüntü yok — frames:${inbound?.framesDecoded??0} bytes:${inbound?.bytesReceived??0}`,'warn',6000);
           videoHealthTmr=setTimeout(check,6000);
         }
       }else{
