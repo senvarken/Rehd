@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260820-131111-b9315c3">
+<html lang="tr" data-build="askbahcem-20260820-133210-25a7baa">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -5624,7 +5624,9 @@ function hideWatchModeBanner(){
 function guestStopWatchMode(){
   endCall(true);
   hideWatchModeBanner();
-  showToast('İzleme durduruldu','info');
+  // DÜZELTME (Anlık İzleme sessizliği): guest'in kendi "Durdur" butonuna
+  // basması sonrası çıkan 'İzleme durduruldu' toast'ı kaldırıldı — banner
+  // zaten kapanıyor, ekstra bir bildirim/toast gerekmiyor.
 }
 
 /* Partnerin son bilinen (pasif) konumunu header altında gösterir. */
