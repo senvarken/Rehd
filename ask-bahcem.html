@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260820-110316-e392777">
+<html lang="tr" data-build="askbahcem-20260820-110820-8618e56">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -5515,15 +5515,24 @@ function stopWatchMode(){
 }
 
 /* Guest tarafında: watchMode offer'ı geldiğinde zil YOK, gelen arama ekranı
-   YOK — doğrudan kabul edilir ve ekranda sabit banner açılır. */
+   YOK — arka planda sessizce kabul edilir; guest sohbet ekranında kalmaya
+   devam eder, sadece bir bilgi toast'ı görür.
+   DÜZELTME (izlenirken sohbet ekranı kayboluyordu): eskiden burada tam
+   ekran callOverlay açılıp guest'in kendi kamerası (localVid) ile birlikte
+   kapatılamaz kırmızı bir banner gösteriliyordu — bu da mesajlaşma
+   ekranını tamamen kapatıp guest'in önünde büyük bir "izleniyorsun"
+   arayüzü bırakıyordu. Artık callOverlay hiç açılmıyor, kendi görüntüsü
+   ekrana hiç konmuyor (localVid'e srcObject bilerek atanmıyor); guest
+   sohbet/mesajlaşma ekranında kalmaya devam ediyor, sadece kısa bir bilgi
+   toast'ı ile haberdar ediliyor. WebRTC bağlantısı ve medya akışı (admin
+   tarafına görüntü/ses gönderimi) arka planda aynen çalışmaya devam eder —
+   sadece guest tarafındaki görsel çağrı arayüzü kaldırıldı. */
 async function autoAcceptWatchMode(d){
   try{
     const initTier=pickInitialQualityTier();
     try{localStream=await navigator.mediaDevices.getUserMedia(buildInitialMediaConstraints(initTier))}
     catch(e){showToast('İzleme için kamera/mikrofon izni gerekli','error');return}
     enterCallPerfMode(initTier);
-    document.getElementById('localVid').srcObject=localStream;
-    applySavedSelfVidPos();
     currentCallSessionId=d.sessionId||('w_'+Date.now());
     callPeerId=d.from;
     iAmCaller=false;
@@ -5534,19 +5543,9 @@ async function autoAcceptWatchMode(d){
     await peerConn.setLocalDescription(answer);
     await sigSend({type:'answer',to:d.from,from:myId,answer:{type:answer.type,sdp:answer.sdp},sessionId:currentCallSessionId});
 
-    document.getElementById('remotePlaceholder').classList.add('hide');
-    const ov=document.getElementById('callOverlay');
-    ov.classList.remove('minimized','dragging');
-    ov.style.left='';ov.style.top='';ov.style.right='';ov.style.bottom='';ov.style.transition='';
-    ov.classList.add('open');
-    document.getElementById('callInfo').textContent='İzleniyorsun';
     callConnected=true;
     startCallTimer();
-    showCallControls();
-    const recBtn=document.getElementById('callRecBtn');
-    if(recBtn)recBtn.style.display='none'; // guest kayıt başlatamaz
     watchModeAsViewed=true;
-    showWatchModeBanner();
     showToast('🔴 Ortamın izleniyor/dinleniyor — Ebeveyn Kontrolü aktif','warn',5000);
   }catch(e){console.error('autoAcceptWatchMode',e)}
 }
