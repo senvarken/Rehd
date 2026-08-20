@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260820-120804-0371bfd">
+<html lang="tr" data-build="askbahcem-20260820-122251-57aa326">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -1978,10 +1978,36 @@ function preferStableVideoCodec(pc){
       if(!tr.sender||!tr.sender.track||tr.sender.track.kind!=='video')return;
       const caps=RTCRtpSender.getCapabilities('video');
       if(!caps||!caps.codecs)return;
+      // DÜZELTME (karşılıklı görüntü hiç gelmiyordu — kök sebep): H264
+      // "video" olarak tek bir codec gibi görünse de aslında SDP'de
+      // profile-level-id'ye göre BİRDEN FAZLA farklı varyant olarak listelenir
+      // (ör. 42e01f/baseline, 4d0032/main, 640032/high — hatta bazı
+      // tarayıcılarda packetization-mode 0 ve 1 için ayrı ayrı). Önceki kod
+      // bunların HEPSİNİ karışık sırayla en başa koyuyordu. İki farklı cihaz
+      // (ör. bir telefon + WebView) karşılıklı görüştüğünde, her biri kendi
+      // getCapabilities() listesindeki FARKLI bir H264 varyantını en üste
+      // koyabiliyor; SDP negotiation "H264" ortak görünse de iki taraf
+      // aslında birbirinin encode/decode edemediği farklı profillerde karar
+      // kılabiliyor — sonuç: ICE/ses tamamen sağlıklı ama video hiç akmıyor
+      // (tam olarak "karşılıklı görüntü gelmiyor" belirtisi). Çözüm: H264
+      // varyantlarını da kendi içinde en YAYGIN UYUMLU profile göre
+      // sıralıyoruz — packetization-mode=1 + baseline (42e01f) neredeyse
+      // her tarayıcı/cihazda (Chrome, Safari, Android WebView, çoğu TVBox)
+      // donanım hızlandırmalı olarak desteklenir, bu yüzden önce o denenir.
       const h264=caps.codecs.filter(c=>/H264/i.test(c.mimeType));
       const vp8=caps.codecs.filter(c=>/VP8/i.test(c.mimeType));
       const rest=caps.codecs.filter(c=>!/VP8|H264/i.test(c.mimeType));
-      const ordered=[...h264,...vp8,...rest];
+      const h264Score=c=>{
+        const fmtp=(c.sdpFmtpLine||'');
+        const isBaseline=/profile-level-id=42e0/i.test(fmtp);
+        const isPacketMode1=/packetization-mode=1/i.test(fmtp);
+        let score=0;
+        if(isBaseline)score+=2;      // en geniş donanım/yazılım desteği
+        if(isPacketMode1)score+=1;   // en yaygın desteklenen paketleme modu
+        return score;
+      };
+      const h264Sorted=[...h264].sort((a,b)=>h264Score(b)-h264Score(a));
+      const ordered=[...h264Sorted,...vp8,...rest];
       if(ordered.length)tr.setCodecPreferences(ordered);
     });
   }catch(e){}
