@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260820-102441-815db11">
+<html lang="tr" data-build="askbahcem-20260820-103933-f6466a5">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -3180,6 +3180,47 @@ async function toggleUserLock(uid,name,lock){
 /* ═══════════════════════════════════════
    GUEST ENTRY
 ═══════════════════════════════════════ */
+/* DÜZELTME (anlık kilit — guest zaten içerideyken): eskiden toggleUserLock
+   sadece Firestore'a locked:true yazıyordu ama o an Aşk Bahçem içinde
+   gezinen bir guest'in ekranında BUNU dinleyen hiçbir mekanizma yoktu —
+   guest sayfayı kapatıp yeniden açana kadar (veya bir sonraki login
+   denemesine kadar) gerçek uygulamada kalmaya devam ediyordu. Artık guest
+   içeri girer girmez kendi users/{myId} dökümanını canlı dinliyor; locked
+   alanı true olduğu anda —guest hiçbir şey fark etmeden— Firebase Auth
+   oturumu kapatılır, kilit damgası bırakılır ve sayfa anında kamuflaj
+   (Regl Sayaç) ekranına döner. Hiçbir toast/uyarı gösterilmez. */
+let unsubMyLock=null;
+function listenMyLockStatus(){
+  if(!fb||!myId||isAdmin)return;
+  if(unsubMyLock){unsubMyLock();unsubMyLock=null}
+  const {db,doc,onSnapshot}=fb;
+  unsubMyLock=onSnapshot(doc(db,'users',myId),snap=>{
+    if(!snap.exists())return;
+    if(snap.data().locked)forceCamoLockdownNow();
+  });
+}
+function forceCamoLockdownNow(){
+  try{if(unsubMyLock){unsubMyLock();unsubMyLock=null}}catch(e){}
+  try{localStorage.setItem('askbahcem_locked_'+myId,'1')}catch(e){}
+  try{if(peerConn||localStream){endCall()}}catch(e){}
+  try{if(fb&&fb.authInst)fb.authInst.signOut()}catch(e){}
+  // Sessizce ve anında: header/uygulama gizlenir, kamuflaj ekranı açılır —
+  // guest'e hiçbir hata/toast görünmez, sanki uygulamaya hiç girmemiş gibi.
+  const login=document.getElementById('login');
+  const header=document.getElementById('header');
+  const camo=document.getElementById('cycleCamo');
+  if(header)header.style.display='none';
+  if(login){login.style.display='none';login.classList.remove('show')}
+  const chatWrap=document.getElementById('chatWrap');
+  const inputBar=document.getElementById('inputBar');
+  const reactionBar=document.getElementById('reactionBar');
+  if(chatWrap)chatWrap.style.display='none';
+  if(inputBar)inputBar.style.display='none';
+  if(reactionBar)reactionBar.style.display='none';
+  if(camo)camo.classList.remove('hide');
+  document.title='CycleCare';
+  initCycleCamo();
+}
 function enterAppAsGuest(){
   document.getElementById('login').style.display='none';
   document.getElementById('header').style.display='flex';
@@ -3207,6 +3248,7 @@ function enterAppAsGuest(){
   listenNudge();
   listenPartnerTyping();
   listenPartnerViewing();
+  listenMyLockStatus();
   setMyViewing(!document.hidden);
   addInstallBtn();
   initLoveArrowFx();
