@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr" data-build="askbahcem-20260820-111433-a139e63">
+<html lang="tr" data-build="askbahcem-20260820-114902-8328bd3">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
@@ -1786,14 +1786,47 @@ const FAVICON_ORIG=(document.querySelector('link[rel="icon"]')||{}).href||'';
 
 /* STUN + TURN — mobil operatör (CGNAT/simetrik NAT) arkasında P2P bağlantı
    kurulabilmesi için TURN relay şart; sadece STUN ile karşı taraf çoğu zaman
-   hiç bağlanmaz / ekranda donar. Openrelay ücretsiz genel TURN sunucusu. */
-const ICE=[
+   hiç bağlanmaz / ekranda donar. Openrelay ücretsiz genel TURN sunucusu.
+   DÜZELTME (openrelay sürekli erişilemez/kota dolu — TURN relay hiç
+   çalışmıyordu): openrelay.metered.ca herkese açık paylaşılan demo kimlik
+   bilgisi kullanıyor, kota sık dolup TURN'ü tamamen işlevsiz bırakıyordu —
+   "Bağlantı kurulamıyor, yeniden deneniyor" sonsuz döngüsünün asıl sebebi
+   buydu. Artık ICE listesi statik değil: her görüşme/izleme başlamadan
+   hemen önce fetchFreshIceServers() ile kendi Metered.ca hesabımızdaki
+   (askbahcem.metered.live) TURN kimlik bilgileri, secret key'i tarayıcıya
+   hiç göstermeyen bir Cloudflare Worker üzerinden taze olarak çekiliyor.
+   Worker'a ulaşılamazsa (ağ sorunu vb.) aşağıdaki statik liste yedek
+   olarak devrede kalır — tamamen görüntüsüz kalınmasın diye. */
+let ICE=[
   {urls:'stun:stun.l.google.com:19302'},
   {urls:'stun:stun1.l.google.com:19302'},
   {urls:'turn:openrelay.metered.ca:80',username:'openrelayproject',credential:'openrelayproject'},
   {urls:'turn:openrelay.metered.ca:443',username:'openrelayproject',credential:'openrelayproject'},
   {urls:'turn:openrelay.metered.ca:443?transport=tcp',username:'openrelayproject',credential:'openrelayproject'}
 ];
+const TURN_CRED_WORKER_URL='__TURN_CRED_WORKER_URL__';
+let lastIceFetchTs=0;
+const ICE_FETCH_MIN_INTERVAL=60000; // 1 dakikadan sık tekrar çekmeye gerek yok
+async function fetchFreshIceServers(){
+  try{
+    if(!TURN_CRED_WORKER_URL||TURN_CRED_WORKER_URL.indexOf('__')===0)return; // henüz yapılandırılmamış
+    if(Date.now()-lastIceFetchTs<ICE_FETCH_MIN_INTERVAL)return; // gereksiz sık istek atma
+    const ctrl=new AbortController();
+    const tmr=setTimeout(()=>ctrl.abort(),4000);
+    const res=await fetch(TURN_CRED_WORKER_URL,{signal:ctrl.signal});
+    clearTimeout(tmr);
+    if(!res.ok)return;
+    const data=await res.json();
+    if(Array.isArray(data)&&data.length){
+      // Kendi Metered TURN'ümüzü öne koyup, statik openrelay/STUN'ları da
+      // yedek olarak listenin sonunda tutuyoruz — biri çökerse diğeri devrede.
+      ICE=[...data,{urls:'stun:stun.l.google.com:19302'},
+        {urls:'turn:openrelay.metered.ca:80',username:'openrelayproject',credential:'openrelayproject'},
+        {urls:'turn:openrelay.metered.ca:443',username:'openrelayproject',credential:'openrelayproject'}];
+      lastIceFetchTs=Date.now();
+    }
+  }catch(e){/* sessizce yut — Worker'a ulaşılamazsa statik liste zaten devrede */}
+}
 
 /* Görüşme kalitesi/performans ayarları — mobil veri üzerinde kasma/donmayı
    azaltmak için orta çözünürlük + sınırlı bitrate kullanılır. Yüksek
@@ -5474,6 +5507,7 @@ async function startWatchMode(){
   iAmCaller=true;
   watchModeActive=true;
   refreshWatchModeToggleLabel();
+  await fetchFreshIceServers();
   peerConn=createPC(true);
   const offer=await peerConn.createOffer();
   await peerConn.setLocalDescription(offer);
@@ -5559,6 +5593,7 @@ async function autoAcceptWatchMode(d){
     currentCallSessionId=d.sessionId||('w_'+Date.now());
     callPeerId=d.from;
     iAmCaller=false;
+    await fetchFreshIceServers();
     peerConn=createPC();
     await peerConn.setRemoteDescription(new RTCSessionDescription(d.offer));
     flushPendingIce();
@@ -7448,6 +7483,7 @@ async function startCall(){
   currentCallSessionId='s_'+Date.now()+'_'+Math.random().toString(36).slice(2);
   callPeerId=activePartner.id;
   iAmCaller=true;
+  await fetchFreshIceServers();
   peerConn=createPC();
   const offer=await peerConn.createOffer();
   await peerConn.setLocalDescription(offer);
@@ -7484,6 +7520,7 @@ async function acceptCall(){
   currentCallSessionId=currentCallData.sessionId||('s_'+Date.now());
   callPeerId=currentCallData.from;
   iAmCaller=false;
+  await fetchFreshIceServers();
   peerConn=createPC();
   await peerConn.setRemoteDescription(new RTCSessionDescription(currentCallData.offer));
   flushPendingIce();
